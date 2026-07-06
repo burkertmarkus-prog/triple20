@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Triple Twenty – Dartturniere</title>
+  <link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#111827"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="apple-touch-icon" href="icon-192.png"></head>
+<body>
+  <header class="hero">
+    <div class="brand"><span class="dart">➶</span><div><strong>TRIPLE TWENTY</strong><small>Turnierleitung</small></div></div>
+    <button id="resetBtn" class="ghost">Neues Turnier</button>
+  </header>
+
+  <main>
+    <section class="intro">
+      <p class="eyebrow">DARTS. PUNKTE. SIEG.</p>
+      <h1>Dein Turnier.<br><em>Deine Bühne.</em></h1>
+      <p>Spieler eintragen, Modus wählen und loswerfen. Der Spielplan entsteht automatisch.</p>
+    </section>
+
+    <section class="setup card" id="setupSection">
+      <div class="section-title"><span>01</span><div><h2>Turnier einrichten</h2><p>Die wichtigsten Eckdaten</p></div></div>
+      <div class="grid">
+        <label>Turniername<input id="tournamentName" value="Freitag-Abend-Cup" maxlength="50"></label>
+        <label>Spielmodus<select id="mode"><option value="roundrobin">Jeder gegen jeden</option><option value="knockout">K.-o.-Turnier</option><option value="double">Doppel-K.-o.-Turnier</option></select></label>
+        <label>Legs zum Sieg<select id="legs"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select></label>
+        <label>Startpunktzahl<select id="startScore"><option selected>501</option><option>301</option></select></label>
+      </div>
+      <div id="groupOptions" class="group-options"><label>Anzahl Gruppen<select id="groupCount"><option selected>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label><label>Weiter pro Gruppe<select id="qualifiers"><option selected>1</option><option>2</option><option>3</option><option>4</option></select></label></div>
+      <div class="players-head"><div><h3>Spieler</h3><p id="playerCount">0 Spieler eingetragen</p></div></div>
+      <form id="playerForm" class="player-form"><input id="playerName" placeholder="Name des Spielers" maxlength="30" autocomplete="off"><button type="submit">+ Hinzufügen</button></form>
+      <div id="playerList" class="player-list"></div>
+      <button id="startBtn" class="primary" disabled>TURNIER STARTEN <span>→</span></button>
+    </section>
+
+    <section id="tournamentSection" class="hidden">
+      <div class="tournament-head"><div><p class="eyebrow">LIVE-TURNIER</p><h2 id="liveTitle"></h2><p id="liveMeta"></p></div><div class="progress-ring"><strong id="progressText">0%</strong><span>gespielt</span></div></div>
+      <div class="tabs"><button class="tab active" data-tab="matches">Spielplan</button><button id="bracketTab" class="tab hidden" data-tab="bracket">Turnierbaum</button><button class="tab" data-tab="table">Tabelle</button></div>
+      <div id="matchesView"><div id="matchList" class="match-list"></div></div>
+      <div id="bracketView" class="hidden"><div id="bracketGrid" class="bracket-board"></div></div>
+      <div id="tableView" class="hidden"><div class="table-wrap"><table><thead><tr><th>#</th><th>Spieler</th><th>Sp.</th><th>S</th><th>N</th><th>Legs</th><th>Pkt.</th></tr></thead><tbody id="standingsBody"></tbody></table></div></div>
+      <div id="qualificationCard" class="qualification hidden"><p>GRUPPENPHASE BEENDET</p><h2>Finalrunde starten</h2><div id="qualifiedPlayers"></div><div class="final-actions"><button data-finals="knockout">K.-O. STARTEN</button><button data-finals="double">DOPPEL-K.-O. STARTEN</button></div></div>
+      <div id="winnerCard" class="winner hidden"><span>🏆</span><p>TURNIERSIEGER</p><h2 id="winnerName"></h2><button id="finishReset" class="primary">NEUES TURNIER</button></div>
+    </section>
+  </main>
+  <footer>Triple Twenty · Lokal gespeichert · <span>Good darts!</span></footer>
+  <script src="app.js"></script>
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js');}</script></body>
+</html>
