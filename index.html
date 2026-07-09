@@ -3,20 +3,81 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TRIPLE 20 – Dartturniere</title>
+  <title>Triple20 – Dartturniere</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="hero">
-    <div class="brand"><span class="dart">☰</span><div><strong>TRIPLE <span>20</span></strong><small>Turnierleitung</small></div></div>
-    <div class="main-actions"><button id="showTournamentBtn" class="ghost">Turnier</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="resetBtn" class="ghost">Neues Turnier</button></div>
+    <div class="brand"><span class="dart">☰</span><div><strong>Triple<span>20</span></strong><small id="brandSubtitle">Turnierleitung</small></div></div>
+    <div class="main-actions"><button id="showDashboardBtn" class="ghost">Übersicht</button><button id="showTournamentBtn" class="ghost">Turnier</button><button id="showSeasonBtn" class="ghost club-only">Saison</button><button id="showPlayersBtn" class="ghost">Spieler</button><button id="showStatsBtn" class="ghost club-only">Statistiken</button><button id="showExportBtn" class="ghost tournament-only">Export</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="resetBtn" class="ghost">Neues Turnier</button></div>
   </header>
 
   <main>
+    <section id="modeGate" class="mode-gate hidden">
+      <div class="mode-card">
+        <p class="eyebrow">ERSTER START</p>
+        <h2>Wie möchtest du Triple20 nutzen?</h2>
+        <div class="mode-choice-grid">
+          <button data-start-mode="tournament"><span>🎯</span><b>Einzelturniere</b><small>Einzelne Turniere ohne Vereinsbindung.</small></button>
+          <button data-start-mode="club"><span>🏆</span><b>Vereinsmodus</b><small>Saisons, Ranglisten, Statistiken und Vereinsdaten.</small></button>
+        </div>
+      </div>
+    </section>
+
     <section class="intro">
       <p class="eyebrow">DARTS. PUNKTE. SIEG.</p>
       <h1>Dein Turnier.<br><em>Deine Bühne.</em></h1>
       <p>Spieler eintragen, Modus wählen und loswerfen. Der Spielplan entsteht automatisch.</p>
+    </section>
+
+    <section id="dashboardSection" class="dashboard-section">
+      <div class="dashboard-grid" id="dashboardCards"></div>
+      <div id="dashboardPanel"></div>
+    </section>
+
+    <section id="settingsSection" class="settings-section hidden">
+      <div class="section-title"><span>⚙</span><div><h2>Einstellungen</h2><p>App-Modus, Verein, Turnierstandards und Design</p></div></div>
+      <form id="settingsForm" class="card slim-card">
+        <h3>Allgemein</h3>
+        <div class="grid">
+          <label>App-Modus<select id="settingsMode"><option value="tournament">Einzelturniere</option><option value="club">Vereinsmodus</option></select></label>
+          <label>App-Name<input id="settingsAppName" value="Triple20"></label>
+        </div>
+        <h3>Turniere</h3>
+        <div class="grid">
+          <label>Standard-Spielmodus<select id="settingsDefaultMode"><option value="swiss">Schweizer System</option><option value="roundrobin">Jeder gegen jeden</option><option value="knockout">K.-o.-Turnier</option><option value="double">Doppel-K.-o.-Turnier</option></select></label>
+          <label>Standard-Turnierformat<select id="settingsDefaultFormat"><option value="single">Einzel</option><option value="group-finals">Gruppen + Finalrunde</option></select></label>
+          <label>Standard-Legmodus<select id="settingsDefaultLegs"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select></label>
+        </div>
+        <div class="club-settings-block">
+          <h3>Verein</h3>
+          <div class="grid">
+            <label>Vereinsname<input id="settingsClubName" placeholder="Name deines Vereins"></label>
+            <label>Logo optional<input id="settingsClubLogo" placeholder="Bild-URL oder leer lassen"></label>
+            <label>Vereinsfarbe<input id="settingsClubColor" type="color" value="#0E6BFF"></label>
+            <label>Saisonmodus<select id="settingsSeasonMode"><option value="halfyear">Halbjahr</option><option value="year">Jahr</option><option value="custom">Benutzerdefiniert</option></select></label>
+            <label>Streichergebnisse<select id="settingsDropResults"><option value="0">0</option><option value="2">2</option><option value="4">4</option><option value="6">6</option><option value="8">8</option><option value="10">10</option></select></label>
+          </div>
+          <h3>Punktesystem</h3>
+          <div class="point-grid">
+            <label>5 Siege<input id="points5" type="number" min="0"></label>
+            <label>4 Siege<input id="points4" type="number" min="0"></label>
+            <label>3 Siege<input id="points3" type="number" min="0"></label>
+            <label>2 Siege<input id="points2" type="number" min="0"></label>
+            <label>1 Sieg<input id="points1" type="number" min="0"></label>
+            <label>0 Siege<input id="points0" type="number" min="0"></label>
+          </div>
+        </div>
+        <h3>Design</h3>
+        <div class="point-grid">
+          <label>Primärfarbe<input id="themePrimary" type="color"></label>
+          <label>Hintergrund<input id="themeBackground" type="color"></label>
+          <label>Kartenfarbe<input id="themeCard" type="color"></label>
+          <label>Akzentfarbe<input id="themeAccent" type="color"></label>
+          <label>Textfarbe<input id="themeText" type="color"></label>
+        </div>
+        <button class="primary" type="submit">EINSTELLUNGEN SPEICHERN <span>→</span></button>
+      </form>
     </section>
 
     <section id="seasonSection" class="season-section hidden">
@@ -73,7 +134,7 @@
       <div id="winnerCard" class="winner hidden"><span>🏆</span><p>TURNIERSIEGER</p><h2 id="winnerName"></h2><div id="seasonImportCard" class="season-import hidden"></div><button id="finishReset" class="primary">NEUES TURNIER</button></div>
     </section>
   </main>
-  <footer>TRIPLE 20 · Lokal gespeichert · <span>Good darts!</span></footer>
+  <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="app.js"></script>
 </body>
 </html>

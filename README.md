@@ -1,6 +1,13 @@
-# TRIPLE 20
+# Triple20
 
-Eine lokale Web-App für Dartturniere. Sie unterstützt „Jeder gegen jeden“ mit optionalen Gruppen, Schweizer System, K.-o.-Turnier und Doppel-K.-o.-Turnier, Ergebnisverwaltung, Tabellen, Halbjahres-Saisonwertung und automatische lokale Speicherung.
+Eine lokale Web-App für Dartturniere. Sie unterstützt Einzelturniere ohne Vereinsbindung und einen optionalen Vereinsmodus mit Saisonwertung. Enthalten sind „Jeder gegen jeden“ mit optionalen Gruppen, Schweizer System, K.-o.-Turnier und Doppel-K.-o.-Turnier, Ergebnisverwaltung, Tabellen, Halbjahres-/Saisonwertung und automatische lokale Speicherung.
+
+## App-Modus
+
+Beim ersten Start fragt Triple20, ob die App für Einzelturniere oder im Vereinsmodus genutzt werden soll. Die Auswahl wird unter `triple20_settings` gespeichert und kann später in den Einstellungen geändert werden.
+
+- Einzelturniere: Turnier, Spieler, Export und Einstellungen.
+- Vereinsmodus: Turnier, Saison, Spieler, Statistiken und Einstellungen.
 
 ## Saisonwertung
 
