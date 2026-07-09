@@ -1,4 +1,4 @@
-# Triple Twenty
+# TRIPLE 20
 
 Eine lokale Web-App für Dartturniere. Sie unterstützt „Jeder gegen jeden“ mit optionalen Gruppen, Schweizer System, K.-o.-Turnier und Doppel-K.-o.-Turnier, Ergebnisverwaltung, Tabellen, Halbjahres-Saisonwertung und automatische lokale Speicherung.
 
