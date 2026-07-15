@@ -91,21 +91,47 @@ async function handleBackupImport(file){
   alert('Backup wurde lokal eingespielt und online gespeichert.');
 }
 window.T20Cloud={
-  client:null,session:null,user:null,isAdmin:false,online:false,syncing:false,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,
+  client:null,session:null,user:null,isAdmin:false,online:false,syncing:false,authBusy:false,loadBusy:false,pendingAuthSession:null,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,
   init(){
     if(!window.supabase||SUPABASE_PUBLISHABLE_KEY.includes('HIER_')){setSyncStatus('Offline – lokale Kopie','offline');renderReadonlyMode();renderCloudPanel();return}
     this.client=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
-    this.client.auth.getSession().then(({data})=>this.setSession(data.session||null)).finally(()=>this.loadCloud({initial:true}));
-    this.client.auth.onAuthStateChange((_event,session)=>this.setSession(session||null));
+    this.client.auth.getSession().then(({data})=>this.processSession(data.session||null,{loadCloud:true})).catch(e=>{console.warn('Session laden fehlgeschlagen',e);setSyncStatus('Nur Ansicht','view-only')});
+    this.client.auth.onAuthStateChange((_event,session)=>{this.pendingAuthSession=session||null;setTimeout(()=>this.processPendingAuthSession(),0)});
     this.startPolling();
   },
-  async setSession(session){this.session=session;this.user=session?.user||null;this.isAdmin=false;if(this.user)this.isAdmin=await this.checkAdmin(this.user.id);renderReadonlyMode();renderCloudPanel();setSyncStatus(this.isAdmin?'Online – aktuell':'Nur Ansicht',this.isAdmin?'online':'view-only')},
-  async checkAdmin(uid){try{let {data,error}=await this.client.from('triple20_admins').select('*').limit(50);if(error)throw error;const ok=(data||[]).some(r=>[r.id,r.uid,r.user_id,r.auth_uid,r.admin_id].includes(uid));if(ok)localStorage.setItem('triple20_admin_uid',uid);return ok}catch(e){console.warn('Adminprüfung fehlgeschlagen',e);return localStorage.getItem('triple20_admin_uid')===uid}},
-  async signIn(email,password){setSyncStatus('Wird angemeldet …','saving');const {error}=await this.client.auth.signInWithPassword({email,password});if(error){setSyncStatus('Nur Ansicht','view-only');alert(error.message);return}await this.loadCloud({initial:true})},
+  async processPendingAuthSession(){if(this.authBusy){setTimeout(()=>this.processPendingAuthSession(),0);return}const session=this.pendingAuthSession;this.pendingAuthSession=null;await this.processSession(session,{loadCloud:false})},
+  async processSession(session,{loadCloud=false}={}){
+    if(this.authBusy)return;
+    this.authBusy=true;
+    try{
+      this.session=session;this.user=session?.user||null;this.isAdmin=false;
+      if(this.user)this.isAdmin=await this.checkAdmin(this.user.id);
+      renderReadonlyMode();renderCloudPanel();
+      if(this.user&&!this.isAdmin){setSyncStatus('Nur Ansicht','view-only');return}
+      setSyncStatus(this.isAdmin?'Online – aktuell':'Nur Ansicht',this.isAdmin?'online':'view-only');
+      if(loadCloud)await this.loadCloud({initial:true});
+    }catch(e){console.warn('Session-Verarbeitung fehlgeschlagen',e);this.session=null;this.user=null;this.isAdmin=false;renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only');alert('Anmeldung konnte nicht vollständig geprüft werden. Bitte später erneut versuchen.')}
+    finally{this.authBusy=false}
+  },
+  async checkAdmin(uid){try{const {data,error}=await this.client.from('triple20_admins').select('user_id').eq('user_id',uid).maybeSingle();if(error)throw error;const ok=data?.user_id===uid;if(ok)localStorage.setItem('triple20_admin_uid',uid);return ok}catch(e){console.warn('Adminprüfung fehlgeschlagen',e);return localStorage.getItem('triple20_admin_uid')===uid}},
+  async signIn(email,password){
+    if(this.authBusy){setSyncStatus('Nur Ansicht','view-only');alert('Die Anmeldung wird gerade noch vorbereitet. Bitte in einem Moment erneut versuchen.');return}
+    setSyncStatus('Wird angemeldet …','saving');
+    try{
+      const {data,error}=await this.client.auth.signInWithPassword({email,password});
+      if(error)throw error;
+      await this.processSession(data.session||null,{loadCloud:false});
+      if(this.isAdmin)await this.loadCloud({initial:true});
+      else setSyncStatus('Nur Ansicht','view-only');
+    }catch(e){console.warn('Login fehlgeschlagen',e);this.session=null;this.user=null;this.isAdmin=false;renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only');alert(e?.message||'Anmeldung fehlgeschlagen. Bitte E-Mail und Passwort prüfen.')}
+    finally{if(!this.isAdmin&&$('#syncStatusText')?.textContent==='Wird angemeldet …')setSyncStatus('Nur Ansicht','view-only')}
+  },
   async signOut(){await this.client.auth.signOut();this.session=null;this.user=null;this.isAdmin=false;renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only')},
   async fetchCloud(){const {data,error}=await this.client.from('triple20_data').select('data_key,data,updated_at').in('data_key',CLOUD_DATA_KEYS);if(error)throw error;this.online=true;return data||[]},
   rowsToObject(rows){return Object.fromEntries(CLOUD_DATA_KEYS.map(k=>{const row=rows.find(r=>r.data_key===k);if(row?.updated_at)this.cloudUpdated[k]=row.updated_at;return[k,row?row.data:null]}))},
   async loadCloud({initial=false}={}){
+    if(this.loadBusy)return;
+    this.loadBusy=true;
     try{
       const rows=await this.fetchCloud(),cloud=this.rowsToObject(rows),hasCloud=rows.length&&Object.values(cloud).some(v=>v!==null&&v!==undefined);
       this.loadedCloudData=cloud;this.lastSyncAt=new Date().toISOString();localStorage.setItem('triple20_last_sync',this.lastSyncAt);
@@ -115,6 +141,7 @@ window.T20Cloud={
       if(!this.isAdmin){applyTriple20Data(cloud);setSyncStatus('Nur Ansicht','view-only');return}
       setSyncStatus('Online – aktuell','online');renderCloudPanel();
     }catch(e){console.warn('Cloud laden fehlgeschlagen',e);this.online=false;setSyncStatus('Offline – lokale Kopie','offline')}
+    finally{this.loadBusy=false}
   },
   queueSync(key){if(!this.isAdmin||!this.client)return;clearTimeout(this.syncTimer);this.syncTimer=setTimeout(()=>this.syncAll(),700)},
   async syncAll({force=false}={}){
