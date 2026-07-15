@@ -37,14 +37,7 @@ function shuffle(values){const a=[...values];for(let i=a.length-1;i>0;i--){const
 function todayIso(){return new Date().toISOString().slice(0,10)}
 function currentHalfYear(date=new Date()){const y=date.getFullYear(),h=date.getMonth()<6?'H1':'H2';return{year:y,half:h,name:`${y} ${h}`,start:`${y}-${h==='H1'?'01-01':'07-01'}`,end:`${y}-${h==='H1'?'06-30':'12-31'}`}}
 function downloadFile(name,type,content){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;document.body.appendChild(a);a.click();URL.revokeObjectURL(a.href);a.remove()}
-function initSupabaseClient(){
-  if(supabaseClient)return supabaseClient;
-  if(!window.supabase)throw new Error('Supabase JS wurde nicht geladen.');
-  if(!SUPABASE_PUBLISHABLE_KEY||SUPABASE_PUBLISHABLE_KEY.includes('HIER_'))throw new Error('Supabase Publishable Key fehlt.');
-  supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-  return supabaseClient;
-}
-function requireSupabaseClient(){if(!supabaseClient)throw new Error('Supabase-Client wurde nicht initialisiert.');return supabaseClient}
+function requireSupabaseClient(){const client=window.T20Cloud?.client||supabaseClient;if(!client)throw new Error('Supabase-Client wurde nicht initialisiert.');return client}
 function setLoginError(message=''){const box=$('#loginError');if(box){box.textContent=message;box.classList.toggle('hidden',!message)}}
 function safeJsonParse(value,fallback=null){try{return JSON.parse(value)}catch{return fallback}}
 function localValueForKey(key){const raw=localStorage.getItem(key);if(raw===null)return null;if(key==='tripleTwentySelectedSeason')return raw;return safeJsonParse(raw,raw)}
@@ -83,7 +76,7 @@ function renderReadonlyMode(){
 function renderCloudPanel(){
   const panel=$('#cloudAdminPanel');if(!panel||!window.T20Cloud)return;
   const c=T20Cloud,summary=backupPreview();
-  if(!c.session){panel.innerHTML=`<h3>Turnierleitung anmelden</h3><p class="view-note">Öffentliche Besucher sehen Ranglisten, Turniere und Ergebnisse im Nur-Ansicht-Modus.</p><p id="loginError" class="login-error hidden"></p><form id="adminLoginForm" class="cloud-login"><input id="adminEmail" type="email" placeholder="E-Mail" autocomplete="email" required><input id="adminPassword" type="password" placeholder="Passwort" autocomplete="current-password" required><button id="adminLoginBtn" class="secondary" type="submit" ${supabaseClient?'':'disabled'}>Anmelden</button></form>${supabaseClient?'':'<p class="view-note">Supabase-Client ist noch nicht bereit.</p>'}`;return}
+  if(!c.session){const ready=c.ready&&c.client;panel.innerHTML=`<h3>Turnierleitung anmelden</h3><p class="view-note">Öffentliche Besucher sehen Ranglisten, Turniere und Ergebnisse im Nur-Ansicht-Modus.</p><p id="loginError" class="login-error"></p><form id="adminLoginForm" class="cloud-login"><input id="adminEmail" type="email" placeholder="E-Mail" autocomplete="email" required ${ready?'':'disabled'}><input id="adminPassword" type="password" placeholder="Passwort" autocomplete="current-password" required ${ready?'':'disabled'}><button id="adminLoginBtn" class="secondary" type="submit" ${ready?'':'disabled'}>${ready?'Anmelden':'Verbindung wird hergestellt …'}</button></form>`;return}
   if(!c.isAdmin){panel.innerHTML=`<h3>Turnierleitung</h3><p class="view-note">Angemeldet, aber nicht als Triple20-Admin freigeschaltet.</p><button id="adminLogoutBtn" class="secondary" type="button">Abmelden</button>`;return}
   panel.innerHTML=`<h3>Online-Speicherung</h3><p class="view-note">${esc(summary)}</p><div class="cloud-actions"><button id="backupDownloadBtn" class="secondary" type="button">Backup herunterladen</button><label class="backup-file">Backup einspielen<input id="backupImportInput" type="file" accept="application/json"></label><button id="uploadLocalBtn" class="secondary" type="button">Lokale Daten in die Cloud übernehmen</button><button id="loadCloudBtn" class="secondary" type="button">Cloud-Daten laden</button><button id="forceCloudBtn" class="danger" type="button">Cloud überschreiben</button><button id="adminLogoutBtn" class="secondary" type="button">Abmelden</button></div>`;
 }
@@ -101,14 +94,40 @@ async function handleBackupImport(file){
   alert('Backup wurde lokal eingespielt und online gespeichert.');
 }
 window.T20Cloud={
-  session:null,user:null,isAdmin:false,online:false,syncing:false,authBusy:false,loginBusy:false,loadBusy:false,pendingAuthSession:null,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,
-  init(){
-    try{initSupabaseClient()}catch(e){console.warn(e);setSyncStatus('Offline – lokale Kopie','offline');renderReadonlyMode();renderCloudPanel();setLoginError(e.message);return}
-    supabaseClient.auth.getSession().then(({data})=>this.processSession(data.session||null,{loadCloud:true})).catch(e=>{console.warn('Session laden fehlgeschlagen',e);setSyncStatus('Nur Ansicht','view-only');setLoginError('Gespeicherte Sitzung konnte nicht geladen werden.')});
-    supabaseClient.auth.onAuthStateChange((_event,session)=>{this.pendingAuthSession=session||null;setTimeout(()=>{if(!this.loginBusy)this.processPendingAuthSession()},0)});
-    this.startPolling();
+  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,online:false,syncing:false,authBusy:false,loginBusy:false,loadBusy:false,pendingAuthSession:null,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,
+  async init(){
+    if(this.initPromise)return this.initPromise;
+    renderCloudPanel();
+    this.initPromise=(async()=>{
+      try{
+        if(!window.supabase?.createClient)throw new Error('Die Supabase-Bibliothek konnte nicht geladen werden.');
+        if(!SUPABASE_PUBLISHABLE_KEY||SUPABASE_PUBLISHABLE_KEY.includes('HIER_'))throw new Error('Supabase Publishable Key fehlt.');
+        if(!this.client){
+          this.client=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+          supabaseClient=this.client;
+        }
+        const {data:{session},error}=await this.client.auth.getSession();
+        if(error)throw error;
+        await this.setSession(session||null);
+        if(!this.authListenerStarted){
+          this.client.auth.onAuthStateChange((_event,session)=>{this.pendingAuthSession=session||null;setTimeout(()=>{if(!this.loginBusy)this.processPendingAuthSession()},0)});
+          this.authListenerStarted=true;
+        }
+        await this.loadCloud({initial:true});
+        this.startPolling();
+        this.ready=true;
+        renderCloudPanel();
+      }catch(error){
+        console.error('Supabase-Initialisierung fehlgeschlagen:',error);
+        this.client=null;supabaseClient=null;this.ready=false;this.initPromise=null;
+        setSyncStatus('Offline – lokale Kopie','offline');
+        renderReadonlyMode();renderCloudPanel();setLoginError(error.message);
+      }
+    })();
+    return this.initPromise;
   },
-  async processPendingAuthSession(){if(this.authBusy){setTimeout(()=>this.processPendingAuthSession(),0);return}const session=this.pendingAuthSession;this.pendingAuthSession=null;await this.processSession(session,{loadCloud:false})},
+  async processPendingAuthSession(){if(this.authBusy){setTimeout(()=>this.processPendingAuthSession(),0);return}const session=this.pendingAuthSession;this.pendingAuthSession=null;await this.setSession(session||null)},
+  async setSession(session,options={}){return this.processSession(session,options)},
   async processSession(session,{loadCloud=false}={}){
     if(this.authBusy)return;
     this.authBusy=true;
@@ -124,20 +143,24 @@ window.T20Cloud={
   },
   async checkAdmin(uid){try{const client=requireSupabaseClient();const {data,error}=await client.from('triple20_admins').select('user_id').eq('user_id',uid).maybeSingle();if(error)throw error;const ok=data?.user_id===uid;if(ok)localStorage.setItem('triple20_admin_uid',uid);return ok}catch(e){console.warn('Adminprüfung fehlgeschlagen',e);return localStorage.getItem('triple20_admin_uid')===uid}},
   async signIn(email,password){
-    if(this.authBusy){setSyncStatus('Nur Ansicht','view-only');setLoginError('Die Anmeldung wird gerade noch vorbereitet. Bitte in einem Moment erneut versuchen.');return}
-    setSyncStatus('Wird angemeldet …','saving');
+    const loginError=$('#loginError');
     this.loginBusy=true;
     try{
-      setLoginError('');
-      const client=requireSupabaseClient();
-      const {data,error}=await client.auth.signInWithPassword({email,password});
+      if(loginError)loginError.textContent='';
+      if(!this.ready||!this.client)await this.init();
+      if(!this.client)throw new Error('Supabase konnte nicht initialisiert werden.');
+      setSyncStatus('Wird angemeldet …','saving');
+      const {data,error}=await this.client.auth.signInWithPassword({email,password});
       if(error)throw error;
       if(!data?.session?.user)throw new Error('Keine gültige Sitzung erhalten.');
       this.pendingAuthSession=null;
-      await this.processSession(data.session||null,{loadCloud:false});
-      if(this.isAdmin)await this.loadCloud({initial:true});
-      else setSyncStatus('Nur Ansicht','view-only');
-    }catch(e){console.warn('Login fehlgeschlagen',e);this.session=null;this.user=null;this.isAdmin=false;renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only');setLoginError(e?.message||'Anmeldung fehlgeschlagen. Bitte E-Mail und Passwort prüfen.')}
+      await this.setSession(data.session||null);
+      await this.loadCloud({initial:true});
+    }catch(error){
+      console.error('Anmeldung fehlgeschlagen:',error);
+      this.session=null;this.user=null;this.isAdmin=false;renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only');
+      setLoginError(`Anmeldung fehlgeschlagen: ${error?.message||'Bitte E-Mail und Passwort prüfen.'}`);
+    }
     finally{this.loginBusy=false;if(!this.isAdmin&&$('#syncStatusText')?.textContent==='Wird angemeldet …')setSyncStatus('Nur Ansicht','view-only')}
   },
   async signOut(){try{await requireSupabaseClient().auth.signOut()}catch(e){console.warn('Abmeldung fehlgeschlagen',e)}this.session=null;this.user=null;this.isAdmin=false;renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only')},
@@ -157,9 +180,9 @@ window.T20Cloud={
     }catch(e){console.warn('Cloud laden fehlgeschlagen',e);this.online=false;setSyncStatus('Offline – lokale Kopie','offline')}
     finally{this.loadBusy=false}
   },
-  queueSync(key){if(!this.isAdmin||!supabaseClient)return;clearTimeout(this.syncTimer);this.syncTimer=setTimeout(()=>this.syncAll(),700)},
+  queueSync(key){if(!this.isAdmin||!this.client)return;clearTimeout(this.syncTimer);this.syncTimer=setTimeout(()=>this.syncAll(),700)},
   async syncAll({force=false}={}){
-    if(!this.isAdmin||!supabaseClient)return;
+    if(!this.isAdmin||!this.client)return;
     this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');
     setSyncStatus('Wird gespeichert …','saving');
     try{
