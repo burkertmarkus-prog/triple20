@@ -14,6 +14,7 @@ const defaultSettings={
   mode:'club',
   club:{enabled:true,name:'',logo:'',seasonMode:'halfyear',pointSystem:{5:25,4:20,3:15,2:10,1:7,0:5},dropResults:4,color:'#0E6BFF'},
   tournament:{defaultMode:'swiss',defaultFormat:'single',defaultLegs:2},
+  themeMode:'light',
   theme:{background:'#EEF5FF',card:'#FFFFFF',primary:'#0E6BFF',accent:'#55A7FF',text:'#122033'}
 };
 let appSettings=loadSettings();
@@ -32,6 +33,14 @@ function saveSettings(){localStorage.setItem(SETTINGS_KEY,JSON.stringify(appSett
 function updateSettings(patch){appSettings=mergeSettings(appSettings,patch);saveSettings();applyTheme();renderNavigation();renderSettingsForm();renderSeasonView();return appSettings}
 function setAppMode(mode){updateSettings({mode,club:{...appSettings.club,enabled:mode==='club'}})}
 function isClubMode(){return true}
+const themeModes={
+  light:{label:'Hell & freundlich',theme:{background:'#EEF5FF',card:'#FFFFFF',primary:'#0E6BFF',accent:'#55A7FF',text:'#122033'}},
+  classic:{label:'Triple20 Blau',theme:{background:'#05070A',card:'#111820',primary:'#0E6BFF',accent:'#55A7FF',text:'#F7F7F7'}},
+  midnight:{label:'Mitternacht',theme:{background:'#07111F',card:'#101B2A',primary:'#1683FF',accent:'#8FC4FF',text:'#F4F8FF'}},
+  steel:{label:'Stahlgrau',theme:{background:'#E9EEF5',card:'#F9FBFF',primary:'#245B9A',accent:'#6D93C7',text:'#172233'}},
+  warm:{label:'Warmup',theme:{background:'#FFF4E8',card:'#FFFFFF',primary:'#F97316',accent:'#FDBA74',text:'#23170F'}}
+};
+function themeModeForTheme(theme=appSettings.theme){return Object.entries(themeModes).find(([,m])=>Object.keys(m.theme).every(k=>String(m.theme[k]).toLowerCase()===String(theme?.[k]).toLowerCase()))?.[0]||appSettings.themeMode||'light'}
 function applyTheme(){const t=appSettings.theme||defaultSettings.theme,r=document.documentElement;r.style.setProperty('--cream',t.background);r.style.setProperty('--paper',`${t.card}f2`);r.style.setProperty('--blue',t.primary);r.style.setProperty('--blue-2',t.primary);r.style.setProperty('--green',t.primary);r.style.setProperty('--orange',t.primary);r.style.setProperty('--accent',t.accent);r.style.setProperty('--ink',t.text);r.style.setProperty('--line','#CAD8EA');if(document.body)document.body.style.background=`radial-gradient(circle at 15% 0%, ${t.primary}22, transparent 34%), linear-gradient(180deg, #F8FBFF 0%, ${t.background} 48%, #FFFFFF 100%)`;document.title=`${appSettings.appName||'Triple20'} – Dartturniere`;const brand=$('.brand strong');if(brand)brand.innerHTML=esc(appSettings.appName||'Triple20').replace(/20/g,'<span>20</span>');const sub=$('#brandSubtitle');if(sub)sub.textContent=isClubMode()&&appSettings.club.name?appSettings.club.name:'Turnierleitung';const footer=$('#footerAppName');if(footer)footer.textContent=appSettings.appName||'Triple20'}
 function shuffle(values){const a=[...values];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function todayIso(){return new Date().toISOString().slice(0,10)}
@@ -82,7 +91,7 @@ function renderReadonlyMode(){
   document.body.classList.toggle('view-only',!isAdmin());
   document.body.classList.toggle('admin-mode',isAdmin());
   const readonly=!isAdmin();
-  ['createCurrentSeasonBtn','toggleSeasonFormBtn','archiveSeasonBtn','deleteSeasonBtn','addToSeasonBtn'].forEach(id=>{$('#'+id)?.classList.toggle('hidden',readonly)});
+  ['seasonActionSelect','addToSeasonBtn'].forEach(id=>{$('#'+id)?.classList.toggle('hidden',readonly)});
   $('#showSettingsBtn')?.classList.toggle('hidden',readonly);
   const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=isAdmin()?'Abmelden':'Anmelden';
   renderNavigation();
@@ -512,6 +521,7 @@ function renderSeasonImport(winner){
 function renderSeasonView(){
   if(!isClubMode()){$('#seasonSection')?.classList.add('hidden');return}
   const season=selectedSeason();$('#seasonSelect').innerHTML=seasonStore.seasons.length?seasonStore.seasons.map(s=>`<option value="${esc(s.id)}" ${s.id===season?.id?'selected':''}>${esc(s.name)}${s.archived?' · Archiv':''}</option>`).join(''):'<option value="">Keine Saison vorhanden</option>';
+  if($('#seasonActionSelect'))$('#seasonActionSelect').value='';
   renderSeasonHeader(season);
   renderSeasonForm(season);
   if(!season){$('#seasonOverview').innerHTML='<div class="empty-card">Noch keine Saison vorhanden. Erstelle die aktuelle Halbjahreswertung mit einem Klick.</div>';['seasonStandings','seasonMembers','seasonTournaments','seasonStats','seasonHonors','seasonPlayerDetail'].forEach(id=>$('#'+id).innerHTML='');renderMemberSuggestions();return}
@@ -590,9 +600,13 @@ function showLogin(){hideMainSections();$('#authSection')?.classList.remove('hid
 function showSettings(){if(!isAdmin()){showLogin();return}hideMainSections();$('#settingsSection').classList.remove('hidden');renderSettingsForm();renderNavigation()}
 function renderSettingsForm(){
   $('#settingsMode').value='club';$('#settingsDefaultMode').value=appSettings.tournament.defaultMode||'swiss';$('#settingsDefaultFormat').value=appSettings.tournament.defaultFormat||'single';$('#settingsDefaultLegs').value=String(appSettings.tournament.defaultLegs||2);
-  $('#settingsClubName').value=appSettings.club.name||'';$('#settingsClubLogo').value=appSettings.club.logo||'';$('#settingsClubColor').value=appSettings.club.color||appSettings.theme.primary;$('#settingsSeasonMode').value=appSettings.club.seasonMode||'halfyear';$('#settingsDropResults').value=String(appSettings.club.dropResults??4);
+  $('#settingsClubName').value=appSettings.club.name||'';$('#settingsClubLogo').value=appSettings.club.logo||'';$('#settingsClubColor').value=appSettings.club.color||appSettings.theme.primary;$('#settingsSeasonMode').value=appSettings.club.seasonMode||'halfyear';
   [5,4,3,2,1,0].forEach(n=>{$(`#points${n}`).value=appSettings.club.pointSystem[n]});
-  $('#themePrimary').value=appSettings.theme.primary;$('#themeBackground').value=appSettings.theme.background;$('#themeCard').value=appSettings.theme.card;$('#themeAccent').value=appSettings.theme.accent;$('#themeText').value=appSettings.theme.text;renderNavigation();renderReadonlyMode();
+  const mode=themeModeForTheme();$('#themeMode').value=mode;renderThemePreview(mode);renderNavigation();renderReadonlyMode();
+}
+function renderThemePreview(mode=$('#themeMode')?.value||themeModeForTheme()){
+  const box=$('#themePreview'),preset=themeModes[mode]||themeModes.light;if(!box)return;
+  box.innerHTML=Object.entries(preset.theme).map(([key,value])=>`<span title="${esc(key)}" style="background:${esc(value)}"></span>`).join('')+`<small>${esc(preset.label)}</small>`;
 }
 function applyTournamentDefaults(){if($('#mode'))$('#mode').value=appSettings.tournament.defaultMode||'swiss';if($('#legs'))$('#legs').value=String(appSettings.tournament.defaultLegs||2);toggleModeOptions()}
 function renderModeGate(){}
@@ -655,7 +669,7 @@ function closeMenu(){const hero=$('.hero'),btn=$('#menuToggle');hero?.classList.
 document.addEventListener('submit',e=>{if(!isAdmin()&&e.target.closest('#settingsForm,#seasonForm,#memberForm,#manualTournamentForm')){e.preventDefault();assertAdminAction()}},true);
 document.addEventListener('click',e=>{
   if(isAdmin())return;
-  const blocked=e.target.closest('#addToSeasonBtn,#createCurrentSeasonBtn,#toggleSeasonFormBtn,#archiveSeasonBtn,#deleteSeasonBtn,[data-remove-member],[data-delete-tournament],#toggleManualTournament');
+  const blocked=e.target.closest('#addToSeasonBtn,#seasonActionSelect,[data-remove-member],[data-delete-tournament],#toggleManualTournament');
   if(blocked){e.preventDefault();e.stopPropagation();assertAdminAction()}
 },true);
 $('#menuToggle')?.addEventListener('click',e=>{e.stopPropagation();const hero=$('.hero'),open=!hero.classList.contains('nav-open');hero.classList.toggle('nav-open',open);e.currentTarget.setAttribute('aria-expanded',String(open))});
@@ -674,13 +688,12 @@ $('#showTournamentBtn').addEventListener('click',showTournament);
 $('#showSeasonBtn').addEventListener('click',showSeason);
 $('#showSettingsBtn').addEventListener('click',showSettings);
 $('#showLoginBtn').addEventListener('click',()=>isAdmin()?T20Cloud.signOut():showLogin());
-$('#settingsForm').addEventListener('submit',e=>{e.preventDefault();updateSettings({appName:'Triple20',mode:$('#settingsMode').value,club:{enabled:$('#settingsMode').value==='club',name:$('#settingsClubName').value.trim(),logo:$('#settingsClubLogo').value.trim(),color:$('#settingsClubColor').value,seasonMode:$('#settingsSeasonMode').value,dropResults:+$('#settingsDropResults').value,pointSystem:{5:+$('#points5').value,4:+$('#points4').value,3:+$('#points3').value,2:+$('#points2').value,1:+$('#points1').value,0:+$('#points0').value}},tournament:{defaultMode:$('#settingsDefaultMode').value,defaultFormat:$('#settingsDefaultFormat').value,defaultLegs:+$('#settingsDefaultLegs').value},theme:{primary:$('#themePrimary').value,background:$('#themeBackground').value,card:$('#themeCard').value,accent:$('#themeAccent').value,text:$('#themeText').value}});applyTournamentDefaults();showDashboard()});
-$('#createCurrentSeasonBtn').addEventListener('click',()=>{const h=currentHalfYear(),existing=seasonStore.seasons.find(s=>s.name===h.name);seasonFormOpen=false;if(existing){selectedSeasonId=existing.id;persistSeasons();renderSeasonView();return}createSeason({name:h.name,startDate:h.start,endDate:h.end,dropCount:+$('#seasonDrops').value||0})});
-$('#toggleSeasonFormBtn').addEventListener('click',()=>{seasonFormOpen=!seasonFormOpen;renderSeasonView()});
+$('#themeMode').addEventListener('change',e=>renderThemePreview(e.target.value));
+$('#settingsForm').addEventListener('submit',e=>{e.preventDefault();const themeMode=$('#themeMode').value,preset=themeModes[themeMode]||themeModes.light;updateSettings({appName:'Triple20',mode:$('#settingsMode').value,themeMode,club:{enabled:$('#settingsMode').value==='club',name:$('#settingsClubName').value.trim(),logo:$('#settingsClubLogo').value.trim(),color:$('#settingsClubColor').value,seasonMode:$('#settingsSeasonMode').value,dropResults:appSettings.club.dropResults,pointSystem:{5:+$('#points5').value,4:+$('#points4').value,3:+$('#points3').value,2:+$('#points2').value,1:+$('#points1').value,0:+$('#points0').value}},tournament:{defaultMode:$('#settingsDefaultMode').value,defaultFormat:$('#settingsDefaultFormat').value,defaultLegs:+$('#settingsDefaultLegs').value},theme:{...preset.theme}});applyTournamentDefaults();showDashboard()});
+function createCurrentSeasonFromAction(){const h=currentHalfYear(),existing=seasonStore.seasons.find(s=>s.name===h.name);seasonFormOpen=false;if(existing){selectedSeasonId=existing.id;persistSeasons();renderSeasonView();return}createSeason({name:h.name,startDate:h.start,endDate:h.end,dropCount:+$('#seasonDrops').value||0})}
+$('#seasonActionSelect').addEventListener('change',e=>{const action=e.target.value;e.target.value='';if(!action)return;if(action==='edit'){seasonFormOpen=!seasonFormOpen;renderSeasonView();return}if(action==='current'){createCurrentSeasonFromAction();return}const season=selectedSeason();if(!season)return;if(action==='archive'){if(!confirm(`${season.name} archivieren?`))return;season.archived=true;saveSeason(season);return}if(action==='delete'){if(!confirm(`Saison „${season.name}“ wirklich endgültig löschen? Alle Spieltage und Saisonpunkte dieser Saison werden entfernt.`))return;deleteSeason(season.id)}});
 $('#seasonForm').addEventListener('submit',e=>{e.preventDefault();updateSeasonFromForm()});
 $('#seasonSelect').addEventListener('change',e=>{selectedSeasonId=e.target.value;seasonFormOpen=false;manualTournamentOpen=false;persistSeasons();renderSeasonView()});
-$('#archiveSeasonBtn').addEventListener('click',()=>{const season=selectedSeason();if(!season)return;if(!confirm(`${season.name} archivieren?`))return;season.archived=true;saveSeason(season)});
-$('#deleteSeasonBtn').addEventListener('click',()=>{const season=selectedSeason();if(!season)return;if(!confirm(`Saison „${season.name}“ wirklich endgültig löschen? Alle Spieltage und Saisonpunkte dieser Saison werden entfernt.`))return;deleteSeason(season.id)});
 document.querySelectorAll('.season-tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.season-tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');['standings','members','tournaments','stats','honors'].forEach(tab=>$('#season'+tab[0].toUpperCase()+tab.slice(1)).classList.toggle('hidden',b.dataset.seasonTab!==tab))}));
 $('#seasonStandings').addEventListener('click',e=>{const el=e.target.closest('[data-season-player]');if(el)renderPlayerSeasonDetail(el.dataset.seasonPlayer)});
 $('#seasonMembers').addEventListener('submit',e=>{if(e.target.id!=='memberForm')return;e.preventDefault();addSeasonMember($('#memberName').value);$('#memberName').value=''});

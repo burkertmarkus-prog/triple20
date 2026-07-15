@@ -40,7 +40,6 @@
             <label>Logo optional<input id="settingsClubLogo" placeholder="Bild-URL oder leer lassen"></label>
             <label>Vereinsfarbe<input id="settingsClubColor" type="color" value="#0E6BFF"></label>
             <label>Saisonmodus<select id="settingsSeasonMode"><option value="halfyear">Halbjahr</option><option value="year">Jahr</option><option value="custom">Benutzerdefiniert</option></select></label>
-            <label>Streichergebnisse<select id="settingsDropResults"><option value="0">0</option><option value="2">2</option><option value="4">4</option><option value="6">6</option><option value="8">8</option><option value="10">10</option></select></label>
           </div>
           <h3>Punktesystem</h3>
           <div class="point-grid">
@@ -53,12 +52,9 @@
           </div>
         </div>
         <h3>Design</h3>
-        <div class="point-grid">
-          <label>Primärfarbe<input id="themePrimary" type="color"></label>
-          <label>Hintergrund<input id="themeBackground" type="color"></label>
-          <label>Kartenfarbe<input id="themeCard" type="color"></label>
-          <label>Akzentfarbe<input id="themeAccent" type="color"></label>
-          <label>Textfarbe<input id="themeText" type="color"></label>
+        <div class="theme-mode-grid">
+          <label>Farbmodus<select id="themeMode"><option value="light">Hell & freundlich</option><option value="classic">Triple20 Blau</option><option value="midnight">Mitternacht</option><option value="steel">Stahlgrau</option><option value="warm">Warmup</option></select></label>
+          <div id="themePreview" class="theme-preview"></div>
         </div>
         <button class="primary" type="submit">EINSTELLUNGEN SPEICHERN <span>→</span></button>
       </form>
@@ -77,10 +73,7 @@
       <div class="season-toolbar card slim-card">
         <div id="seasonCurrentSummary" class="season-current-summary"></div>
         <label>Saison laden<select id="seasonSelect"></select></label>
-        <button id="toggleSeasonFormBtn" class="secondary">Saison bearbeiten</button>
-        <button id="createCurrentSeasonBtn" class="secondary">Aktuelle Saison erstellen</button>
-        <button id="archiveSeasonBtn" class="secondary">Saison archivieren</button>
-        <button id="deleteSeasonBtn" class="danger">Saison löschen</button>
+        <label>Aktion<select id="seasonActionSelect"><option value="">Aktion wählen</option><option value="edit">Saison bearbeiten</option><option value="current">Aktuelle Saison erstellen</option><option value="archive">Saison archivieren</option><option value="delete">Saison löschen</option></select></label>
       </div>
       <form id="seasonForm" class="card slim-card hidden">
         <h3 id="seasonFormTitle">Saison erstellen / bearbeiten</h3>
