@@ -9,7 +9,7 @@
 <body>
   <header class="hero">
     <div class="brand"><button id="menuToggle" class="menu-toggle" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><div><strong>Triple<span>20</span></strong><small id="brandSubtitle">Turnierleitung</small></div></div>
-    <div class="main-actions"><button id="showTournamentBtn" class="ghost">Turnier</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="resetBtn" class="ghost">Neues Turnier</button></div>
+    <div class="main-actions"><button id="showTournamentBtn" class="ghost">Turnier</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="showLoginBtn" class="ghost">Anmelden</button><button id="resetBtn" class="ghost">Neues Turnier</button></div>
   </header>
   <div id="syncStatusBar" class="sync-status view-only"><span id="syncStatusText">Nur Ansicht</span><small id="syncLastSaved">Noch nicht synchronisiert</small></div>
 
@@ -19,9 +19,13 @@
       <p>Spieler eintragen, Modus wählen und loswerfen. Der Spielplan entsteht automatisch.</p>
     </section>
 
+    <section id="authSection" class="settings-section hidden">
+      <div class="section-title"><span>🔐</span><div><h2>Turnierleitung</h2><p>Anmelden, Abmelden und Online-Speicherung verwalten</p></div></div>
+      <div id="cloudAdminPanel" class="cloud-panel card slim-card"></div>
+    </section>
+
     <section id="settingsSection" class="settings-section hidden">
       <div class="section-title"><span>⚙</span><div><h2>Einstellungen</h2><p>Turnierstandards, Saison/Verein und Design</p></div></div>
-      <div id="cloudAdminPanel" class="cloud-panel card slim-card"></div>
       <form id="settingsForm" class="card slim-card">
         <input id="settingsMode" type="hidden" value="club">
         <h3>Turniere</h3>
