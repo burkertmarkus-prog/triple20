@@ -1,6 +1,14 @@
 const $=s=>document.querySelector(s);
 const SETTINGS_KEY='triple20_settings';
 const TOURNAMENT_HISTORY_KEY='triple20_tournaments';
+const SUPABASE_URL='https://hidjvylnxmtlvtiomktu.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_IzH5CLw7baFsaU005Bqh7w_lRMlrMLo';
+const CLOUD_DATA_KEYS=['dartTournament','tripleTwentySeasons','tripleTwentySelectedSeason','triple20_settings','triple20_tournaments'];
+let supabaseClient=null;
+let T20_SUPPRESS_SYNC=false;
+const nativeSetItem=localStorage.setItem.bind(localStorage),nativeRemoveItem=localStorage.removeItem.bind(localStorage);
+localStorage.setItem=(key,value)=>{nativeSetItem(key,value);if(!T20_SUPPRESS_SYNC&&CLOUD_DATA_KEYS.includes(key)&&window.T20Cloud)window.T20Cloud.queueSync(key)};
+localStorage.removeItem=key=>{nativeRemoveItem(key);if(!T20_SUPPRESS_SYNC&&CLOUD_DATA_KEYS.includes(key)&&window.T20Cloud)window.T20Cloud.queueSync(key)};
 const defaultSettings={
   appName:'Triple20',
   mode:'club',
@@ -29,6 +37,179 @@ function shuffle(values){const a=[...values];for(let i=a.length-1;i>0;i--){const
 function todayIso(){return new Date().toISOString().slice(0,10)}
 function currentHalfYear(date=new Date()){const y=date.getFullYear(),h=date.getMonth()<6?'H1':'H2';return{year:y,half:h,name:`${y} ${h}`,start:`${y}-${h==='H1'?'01-01':'07-01'}`,end:`${y}-${h==='H1'?'06-30':'12-31'}`}}
 function downloadFile(name,type,content){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;document.body.appendChild(a);a.click();URL.revokeObjectURL(a.href);a.remove()}
+function requireSupabaseClient(){const client=window.T20Cloud?.client||supabaseClient;if(!client)throw new Error('Supabase-Client wurde nicht initialisiert.');return client}
+function setLoginError(message=''){const box=$('#loginError');if(box){box.textContent=message;box.classList.toggle('hidden',!message)}}
+function safeJsonParse(value,fallback=null){try{return JSON.parse(value)}catch{return fallback}}
+function localValueForKey(key){const raw=localStorage.getItem(key);if(raw===null)return null;if(key==='tripleTwentySelectedSeason')return raw;return safeJsonParse(raw,raw)}
+function hasMeaningfulLocalData(){return !!(state.players?.length||state.matches?.length||seasonStore.seasons?.length||loadTournamentHistory().length)}
+function collectTriple20Data(){return Object.fromEntries(CLOUD_DATA_KEYS.map(k=>[k,localValueForKey(k)]))}
+function backupTriple20Data(prefix='triple20_backup'){const data={createdAt:new Date().toISOString(),app:'Triple20',data:collectTriple20Data()};downloadFile(`${prefix}_${new Date().toISOString().slice(0,19).replaceAll(':','-')}.json`,'application/json',JSON.stringify(data,null,2));return data}
+function applyTriple20Data(data){
+  if(!data)return;
+  T20_SUPPRESS_SYNC=true;
+  try{
+    for(const key of CLOUD_DATA_KEYS){
+      if(!(key in data))continue;
+      const value=data[key];
+      if(value===null||value===undefined)localStorage.removeItem(key);
+      else localStorage.setItem(key,typeof value==='string'?value:JSON.stringify(value));
+    }
+  }finally{T20_SUPPRESS_SYNC=false}
+  const incomingState=safeJsonParse(localStorage.getItem('dartTournament')||'null')||{players:[],started:false,matches:[],settings:{}};
+  Object.keys(state).forEach(k=>delete state[k]);Object.assign(state,incomingState);
+  const seasons=loadSeasons();seasonStore.seasons=seasons.seasons||[];
+  selectedSeasonId=localStorage.getItem('tripleTwentySelectedSeason')||'';
+  appSettings=loadSettings();
+  applyTheme();applyTournamentDefaults();renderPlayers();renderSettingsForm();renderSeasonView();renderTournament();
+}
+function backupPreview(data=collectTriple20Data()){const seasons=data.tripleTwentySeasons?.seasons||[],tournaments=data.triple20_tournaments||[],current=data.dartTournament||{};return `${seasons.length} Saison(en), ${tournaments.length} gespeicherte Turnier(e), aktuelles Turnier: ${current.started?'läuft':'nicht gestartet'}${current.players?.length?`, ${current.players.length} Spieler`:''}`;}
+function setSyncStatus(text,cls='view-only'){const bar=$('#syncStatusBar'),label=$('#syncStatusText');if(!bar||!label)return;bar.className=`sync-status ${cls}`;label.textContent=text;const last=$('#syncLastSaved');if(last)last.textContent=T20Cloud?.lastSyncAt?`Letzte Synchronisierung: ${new Date(T20Cloud.lastSyncAt).toLocaleString('de-AT')}`:'Noch nicht synchronisiert'}
+function isAdmin(){return !!window.T20Cloud?.isAdmin}
+function assertAdminAction(){if(isAdmin())return true;alert('Nur die Turnierleitung darf Daten ändern. Du bist aktuell im Nur-Ansicht-Modus.');return false}
+function renderReadonlyMode(){
+  document.body.classList.toggle('view-only',!isAdmin());
+  document.body.classList.toggle('admin-mode',isAdmin());
+  const readonly=!isAdmin();
+  ['resetBtn','startBtn','finishReset','createCurrentSeasonBtn','toggleSeasonFormBtn','archiveSeasonBtn','deleteSeasonBtn','addToSeasonBtn'].forEach(id=>{$('#'+id)?.classList.toggle('hidden',readonly)});
+  if(readonly&&state.started){$('#setupSection')?.classList.add('hidden');$('#tournamentSection')?.classList.remove('hidden')}
+}
+function renderCloudPanel(){
+  const panel=$('#cloudAdminPanel');if(!panel||!window.T20Cloud)return;
+  const c=T20Cloud,summary=backupPreview();
+  if(!c.session){const ready=c.ready&&c.client;panel.innerHTML=`<h3>Turnierleitung anmelden</h3><p class="view-note">Öffentliche Besucher sehen Ranglisten, Turniere und Ergebnisse im Nur-Ansicht-Modus.</p><p id="loginError" class="login-error"></p><form id="adminLoginForm" class="cloud-login"><input id="adminEmail" type="email" placeholder="E-Mail" autocomplete="email" required ${ready?'':'disabled'}><input id="adminPassword" type="password" placeholder="Passwort" autocomplete="current-password" required ${ready?'':'disabled'}><button id="adminLoginBtn" class="secondary" type="submit" ${ready?'':'disabled'}>${ready?'Anmelden':'Verbindung wird hergestellt …'}</button></form>`;return}
+  if(!c.isAdmin){panel.innerHTML=`<h3>Turnierleitung</h3><p class="view-note">Angemeldet, aber nicht als Triple20-Admin freigeschaltet.</p><button id="adminLogoutBtn" class="secondary" type="button">Abmelden</button>`;return}
+  panel.innerHTML=`<h3>Online-Speicherung</h3><p class="view-note">${esc(summary)}</p><div class="cloud-actions"><button id="backupDownloadBtn" class="secondary" type="button">Backup herunterladen</button><label class="backup-file">Backup einspielen<input id="backupImportInput" type="file" accept="application/json"></label><button id="uploadLocalBtn" class="secondary" type="button">Lokale Daten in die Cloud übernehmen</button><button id="loadCloudBtn" class="secondary" type="button">Cloud-Daten laden</button><button id="forceCloudBtn" class="danger" type="button">Cloud überschreiben</button><button id="adminLogoutBtn" class="secondary" type="button">Abmelden</button></div>`;
+}
+async function handleBackupImport(file){
+  if(!file||!isAdmin())return;
+  const text=await file.text();let parsed;
+  try{parsed=JSON.parse(text)}catch{alert('Die Backup-Datei ist kein gültiges JSON.');return}
+  const data=parsed.data||parsed;
+  if(!data||!CLOUD_DATA_KEYS.some(k=>k in data)){alert('Das Backup enthält keine erkennbaren Triple20-Daten.');return}
+  const preview=backupPreview(data);
+  backupTriple20Data('triple20_vor_import');
+  if(!confirm(`Backup einspielen?\n\nInhalt: ${preview}\n\nDie aktuellen lokalen Daten wurden vorher als JSON gesichert.`))return;
+  applyTriple20Data(data);
+  await T20Cloud.syncAll({force:true});
+  alert('Backup wurde lokal eingespielt und online gespeichert.');
+}
+window.T20Cloud={
+  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,online:false,syncing:false,authBusy:false,loginBusy:false,loadBusy:false,pendingAuthSession:null,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,
+  async init(){
+    if(this.initPromise)return this.initPromise;
+    renderCloudPanel();
+    this.initPromise=(async()=>{
+      try{
+        if(!window.supabase?.createClient)throw new Error('Die Supabase-Bibliothek konnte nicht geladen werden.');
+        if(!SUPABASE_PUBLISHABLE_KEY||SUPABASE_PUBLISHABLE_KEY.includes('HIER_'))throw new Error('Supabase Publishable Key fehlt.');
+        if(!this.client){
+          this.client=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+          supabaseClient=this.client;
+        }
+        const {data:{session},error}=await this.client.auth.getSession();
+        if(error)throw error;
+        if(!this.authListenerStarted){
+          this.client.auth.onAuthStateChange((_event,session)=>{this.pendingAuthSession=session||null;setTimeout(()=>{if(!this.loginBusy)this.processPendingAuthSession()},0)});
+          this.authListenerStarted=true;
+        }
+        this.ready=true;
+        renderCloudPanel();
+        await this.setSession(session||null);
+        renderCloudPanel();
+        this.loadCloud({initial:true}).catch(e=>console.warn('Cloud-Startladen fehlgeschlagen',e));
+        this.startPolling();
+      }catch(error){
+        console.error('Supabase-Initialisierung fehlgeschlagen:',error);
+        this.client=null;supabaseClient=null;this.ready=false;this.initPromise=null;
+        setSyncStatus('Offline – lokale Kopie','offline');
+        renderReadonlyMode();renderCloudPanel();setLoginError(error.message);
+      }
+    })();
+    return this.initPromise;
+  },
+  async processPendingAuthSession(){if(this.authBusy){setTimeout(()=>this.processPendingAuthSession(),0);return}const session=this.pendingAuthSession;this.pendingAuthSession=null;await this.setSession(session||null)},
+  async setSession(session,options={}){return this.processSession(session,options)},
+  async processSession(session,{loadCloud=false}={}){
+    if(this.authBusy)return;
+    this.authBusy=true;
+    try{
+      this.session=session;this.user=session?.user||null;this.isAdmin=false;
+      if(this.user)this.isAdmin=await this.checkAdmin(this.user.id);
+      renderReadonlyMode();renderCloudPanel();
+      if(this.user&&!this.isAdmin){setSyncStatus('Nur Ansicht','view-only');return}
+      setSyncStatus(this.isAdmin?'Online – aktuell':'Nur Ansicht',this.isAdmin?'online':'view-only');
+      if(loadCloud)await this.loadCloud({initial:true});
+    }catch(e){console.warn('Session-Verarbeitung fehlgeschlagen',e);this.session=null;this.user=null;this.isAdmin=false;renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only');setLoginError('Anmeldung konnte nicht vollständig geprüft werden. Bitte später erneut versuchen.')}
+    finally{this.authBusy=false}
+  },
+  async checkAdmin(uid){try{const client=requireSupabaseClient();const {data,error}=await client.from('triple20_admins').select('user_id').eq('user_id',uid).maybeSingle();if(error)throw error;const ok=data?.user_id===uid;if(ok)localStorage.setItem('triple20_admin_uid',uid);return ok}catch(e){console.warn('Adminprüfung fehlgeschlagen',e);return localStorage.getItem('triple20_admin_uid')===uid}},
+  async signIn(email,password){
+    const loginError=$('#loginError');
+    this.loginBusy=true;
+    try{
+      if(loginError)loginError.textContent='';
+      if(!this.ready||!this.client)await this.init();
+      if(!this.client)throw new Error('Supabase konnte nicht initialisiert werden.');
+      setSyncStatus('Wird angemeldet …','saving');
+      const {data,error}=await this.client.auth.signInWithPassword({email,password});
+      if(error)throw error;
+      if(!data?.session?.user)throw new Error('Keine gültige Sitzung erhalten.');
+      this.pendingAuthSession=null;
+      await this.setSession(data.session||null);
+      await this.loadCloud({initial:true});
+    }catch(error){
+      console.error('Anmeldung fehlgeschlagen:',error);
+      this.session=null;this.user=null;this.isAdmin=false;renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only');
+      setLoginError(`Anmeldung fehlgeschlagen: ${error?.message||'Bitte E-Mail und Passwort prüfen.'}`);
+    }
+    finally{this.loginBusy=false;if(!this.isAdmin&&$('#syncStatusText')?.textContent==='Wird angemeldet …')setSyncStatus('Nur Ansicht','view-only')}
+  },
+  async signOut(){try{await requireSupabaseClient().auth.signOut()}catch(e){console.warn('Abmeldung fehlgeschlagen',e)}this.session=null;this.user=null;this.isAdmin=false;renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only')},
+  async fetchCloud(){const client=requireSupabaseClient();const {data,error}=await client.from('triple20_data').select('data_key,data,updated_at').in('data_key',CLOUD_DATA_KEYS);if(error)throw error;this.online=true;return data||[]},
+  rowsToObject(rows){return Object.fromEntries(CLOUD_DATA_KEYS.map(k=>{const row=rows.find(r=>r.data_key===k);if(row?.updated_at)this.cloudUpdated[k]=row.updated_at;return[k,row?row.data:null]}))},
+  async loadCloud({initial=false}={}){
+    if(this.loadBusy)return;
+    this.loadBusy=true;
+    try{
+      const rows=await this.fetchCloud(),cloud=this.rowsToObject(rows),hasCloud=rows.length&&Object.values(cloud).some(v=>v!==null&&v!==undefined);
+      this.loadedCloudData=cloud;this.lastSyncAt=new Date().toISOString();localStorage.setItem('triple20_last_sync',this.lastSyncAt);
+      if(this.isAdmin&&this.pendingSync){await this.syncAll();return}
+      if(!hasCloud){setSyncStatus(this.isAdmin&&hasMeaningfulLocalData()?'Online – Cloud leer, lokale Daten vorhanden':'Online – aktuell','online');renderCloudPanel();return}
+      if(initial&&!hasMeaningfulLocalData()){applyTriple20Data(cloud);setSyncStatus(this.isAdmin?'Online – aktuell':'Nur Ansicht',this.isAdmin?'online':'view-only');return}
+      if(!this.isAdmin){applyTriple20Data(cloud);setSyncStatus('Nur Ansicht','view-only');return}
+      setSyncStatus('Online – aktuell','online');renderCloudPanel();
+    }catch(e){console.warn('Cloud laden fehlgeschlagen',e);this.online=false;setSyncStatus('Offline – lokale Kopie','offline')}
+    finally{this.loadBusy=false}
+  },
+  queueSync(key){if(!this.isAdmin||!this.client)return;clearTimeout(this.syncTimer);this.syncTimer=setTimeout(()=>this.syncAll(),700)},
+  async syncAll({force=false}={}){
+    if(!this.isAdmin||!this.client)return;
+    this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');
+    setSyncStatus('Wird gespeichert …','saving');
+    try{
+      const rows=await this.fetchCloud();
+      if(!force){
+        const changed=rows.some(r=>this.cloudUpdated[r.data_key]&&r.updated_at&&r.updated_at!==this.cloudUpdated[r.data_key]);
+        if(changed){
+          setSyncStatus('Konflikt erkannt','conflict');
+          const choice=prompt('Die Online-Daten wurden zwischenzeitlich auf einem anderen Gerät geändert.\n\n1 = Online-Version laden\n2 = lokale Version als JSON sichern\n3 = lokale Version trotzdem überschreiben','1');
+          if(choice==='1'){await this.loadCloudConfirmed();return}
+          if(choice==='2'){backupTriple20Data('triple20_konflikt_lokal');return}
+          if(choice!=='3'||!confirm('Lokale Version wirklich trotzdem in der Cloud überschreiben?'))return;
+          backupTriple20Data('triple20_konflikt_lokal');
+        }
+      }
+      const payload=CLOUD_DATA_KEYS.map(k=>({data_key:k,data:localValueForKey(k)}));
+      const client=requireSupabaseClient();
+      const {data,error}=await client.from('triple20_data').upsert(payload,{onConflict:'data_key'}).select('data_key,updated_at');
+      if(error)throw error;(data||[]).forEach(r=>this.cloudUpdated[r.data_key]=r.updated_at);
+      this.pendingSync=false;localStorage.removeItem('triple20_pending_sync');this.lastSyncAt=new Date().toISOString();localStorage.setItem('triple20_last_sync',this.lastSyncAt);setSyncStatus('Online gespeichert','saved');renderCloudPanel();
+    }catch(e){console.warn('Cloud speichern fehlgeschlagen',e);this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');setSyncStatus('Offline – lokale Kopie','offline')}
+  },
+  async uploadLocalWithBackup(){if(!isAdmin())return;const summary=backupPreview();backupTriple20Data('triple20_vor_cloud_upload');if(!confirm(`Lokale Triple20-Daten in die Cloud übernehmen?\n\n${summary}\n\nEin JSON-Backup wurde heruntergeladen.`))return;await this.syncAll({force:true})},
+  async loadCloudConfirmed(){if(!this.loadedCloudData)await this.loadCloud();if(!this.loadedCloudData)return;backupTriple20Data('triple20_vor_cloud_laden');if(!confirm('Cloud-Daten laden? Die aktuelle lokale Version wurde vorher als Backup gesichert.'))return;applyTriple20Data(this.loadedCloudData);setSyncStatus('Online – aktuell','online')},
+  startPolling(){clearInterval(this.pollTimer);this.pollTimer=setInterval(()=>this.loadCloud(),15000)}
+};
 function currentSeasonWinsMap(){const rows=calculateSeasonStandings(selectedSeason());return Object.fromEntries(rows.map(r=>[r.name,r.wins||0]))}
 function sortBySeasonWins(players){const wins=currentSeasonWinsMap();return [...players].sort((a,b)=>(wins[b]||0)-(wins[a]||0)||a.localeCompare(b,'de'))}
 
@@ -96,14 +277,14 @@ function champion(){
   return active.length===1&&state.matches.every(m=>m.sa!==null)?active[0]:'';
 }
 function renderTournament(){
-  if(!state.started){$('#setupSection').classList.remove('hidden');$('#tournamentSection').classList.add('hidden');return}
+  if(!state.started){$('#setupSection').classList.remove('hidden');$('#tournamentSection').classList.add('hidden');renderReadonlyMode();return}
   const noBracket=state.settings.mode==='roundrobin'||state.settings.mode==='swiss';
   $('#setupSection').classList.add('hidden');$('#tournamentSection').classList.remove('hidden');$('#bracketTab').classList.toggle('hidden',noBracket);
   if(noBracket&&$('#bracketTab').classList.contains('active')){document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelector('[data-tab="matches"]').classList.add('active');$('#matchesView').classList.remove('hidden');$('#bracketView').classList.add('hidden');$('#tableView').classList.add('hidden')}
   $('#liveTitle').textContent=state.settings.name;$('#liveMeta').textContent=`${state.players.length} Spieler · ${modeName()} · ${state.settings.start}`;
   const done=state.matches.filter(m=>m.sa!==null).length;$('#progressText').textContent=Math.round(done/state.matches.length*100)+'%';
   $('#matchList').innerHTML=state.matches.map((m,i)=>`<article class="match ${m.sa!==null?'done':''}"><div class="match-no">${m.group!==undefined?'Gruppe '+String.fromCharCode(65+m.group)+' · ':''}Runde ${m.round} · ${m.bracket==='lower'?'Verlierer':m.bracket==='grand'?'Finale':'Spiel'} ${String(i+1).padStart(2,'0')}</div><div class="players-match"><span class="${m.sa>m.sb?'winner-player':''}">${esc(m.a)}</span><b>${m.sa===null?'VS':m.sa+' : '+m.sb}</b><span class="${m.sb>m.sa?'winner-player':''}">${esc(m.b)}</span></div><div class="score-controls">${m.b==='Freilos'?'Weiter':`<select data-sa="${i}">${options(m.sa)}</select><span>:</span><select data-sb="${i}">${options(m.sb)}</select><button data-save="${i}">✓</button>`}</div></article>`).join('');
-  renderTable();renderBracket();renderQualification();renderWithdrawCard();const winner=champion();$('#winnerCard').classList.toggle('hidden',!winner);if(winner){$('#winnerName').textContent=winner;saveTournamentToHistory()}renderSeasonImport(winner);save();
+  renderTable();renderBracket();renderQualification();renderWithdrawCard();const winner=champion();$('#winnerCard').classList.toggle('hidden',!winner);if(winner){$('#winnerName').textContent=winner;saveTournamentToHistory()}renderSeasonImport(winner);save();renderReadonlyMode();
 }
 function options(current){let s='<option value="">–</option>';for(let i=0;i<=state.settings.legs;i++)s+=`<option ${current===i?'selected':''}>${i}</option>`;return s}
 function renderWithdrawCard(){
@@ -373,7 +554,7 @@ function renderSettingsForm(){
   $('#settingsMode').value='club';$('#settingsDefaultMode').value=appSettings.tournament.defaultMode||'swiss';$('#settingsDefaultFormat').value=appSettings.tournament.defaultFormat||'single';$('#settingsDefaultLegs').value=String(appSettings.tournament.defaultLegs||2);
   $('#settingsClubName').value=appSettings.club.name||'';$('#settingsClubLogo').value=appSettings.club.logo||'';$('#settingsClubColor').value=appSettings.club.color||appSettings.theme.primary;$('#settingsSeasonMode').value=appSettings.club.seasonMode||'halfyear';$('#settingsDropResults').value=String(appSettings.club.dropResults??4);
   [5,4,3,2,1,0].forEach(n=>{$(`#points${n}`).value=appSettings.club.pointSystem[n]});
-  $('#themePrimary').value=appSettings.theme.primary;$('#themeBackground').value=appSettings.theme.background;$('#themeCard').value=appSettings.theme.card;$('#themeAccent').value=appSettings.theme.accent;$('#themeText').value=appSettings.theme.text;renderNavigation();
+  $('#themePrimary').value=appSettings.theme.primary;$('#themeBackground').value=appSettings.theme.background;$('#themeCard').value=appSettings.theme.card;$('#themeAccent').value=appSettings.theme.accent;$('#themeText').value=appSettings.theme.text;renderNavigation();renderCloudPanel();renderReadonlyMode();
 }
 function applyTournamentDefaults(){if($('#mode'))$('#mode').value=appSettings.tournament.defaultMode||'swiss';if($('#legs'))$('#legs').value=String(appSettings.tournament.defaultLegs||2);toggleModeOptions()}
 function renderModeGate(){}
@@ -433,9 +614,24 @@ function showTournament(){hideMainSections();renderTournament();if(!state.starte
 function showSeason(){if(!isClubMode()){showDashboard();return}hideMainSections();$('#seasonSection').classList.remove('hidden');renderSeasonView();renderNavigation()}
 function fillSeasonForm(){const h=currentHalfYear();$('#seasonName').value=h.name;$('#seasonStart').value=h.start;$('#seasonEnd').value=h.end;$('#seasonDrops').value='0'}
 function closeMenu(){const hero=$('.hero'),btn=$('#menuToggle');hero?.classList.remove('nav-open');if(btn)btn.setAttribute('aria-expanded','false')}
+document.addEventListener('submit',e=>{if(!isAdmin()&&e.target.closest('#settingsForm,#seasonForm,#playerForm,#memberForm,#manualTournamentForm')){e.preventDefault();assertAdminAction()}},true);
+document.addEventListener('click',e=>{
+  if(isAdmin())return;
+  const blocked=e.target.closest('#resetBtn,#finishReset,#startBtn,#playerList button,#withdrawCard button,#matchList button,#qualificationCard button,#addToSeasonBtn,#createCurrentSeasonBtn,#toggleSeasonFormBtn,#archiveSeasonBtn,#deleteSeasonBtn,[data-remove-member],[data-delete-tournament],#toggleManualTournament');
+  if(blocked){e.preventDefault();e.stopPropagation();assertAdminAction()}
+},true);
 $('#menuToggle')?.addEventListener('click',e=>{e.stopPropagation();const hero=$('.hero'),open=!hero.classList.contains('nav-open');hero.classList.toggle('nav-open',open);e.currentTarget.setAttribute('aria-expanded',String(open))});
 document.addEventListener('click',e=>{if(!e.target.closest('.hero'))closeMenu()});
 $('.main-actions')?.addEventListener('click',e=>{if(e.target.closest('button'))closeMenu()});
+$('#cloudAdminPanel').addEventListener('submit',e=>{if(e.target.id!=='adminLoginForm')return;e.preventDefault();T20Cloud.signIn($('#adminEmail').value.trim(),$('#adminPassword').value)});
+$('#cloudAdminPanel').addEventListener('click',e=>{
+  if(e.target.id==='adminLogoutBtn')T20Cloud.signOut();
+  if(e.target.id==='backupDownloadBtn')backupTriple20Data();
+  if(e.target.id==='uploadLocalBtn')T20Cloud.uploadLocalWithBackup();
+  if(e.target.id==='loadCloudBtn')T20Cloud.loadCloudConfirmed();
+  if(e.target.id==='forceCloudBtn'){if(confirm('Lokale Daten wirklich in der Cloud überschreiben?'))T20Cloud.syncAll({force:true})}
+});
+$('#cloudAdminPanel').addEventListener('change',e=>{if(e.target.id==='backupImportInput')handleBackupImport(e.target.files?.[0])});
 $('#showTournamentBtn').addEventListener('click',showTournament);
 $('#showSeasonBtn').addEventListener('click',showSeason);
 $('#showSettingsBtn').addEventListener('click',showSettings);
@@ -462,4 +658,4 @@ $('#winnerCard').addEventListener('click',e=>{if(e.target.id==='exportCurrentTou
 $('#exportSeasonJsonBtn').addEventListener('click',exportSeasonJson);
 $('#exportStandingsCsvBtn').addEventListener('click',exportStandingsCsv);
 function reset(){if(state.started&&!confirm('Das aktuelle Turnier wirklich löschen?'))return;Object.assign(state,{players:[],started:false,matches:[],settings:{}});delete state.seasonImportedTo;delete state.savedToHistory;save();location.reload()}
-$('#resetBtn').onclick=reset;$('#finishReset').onclick=reset;applyTheme();applyTournamentDefaults();fillSeasonForm();renderPlayers();renderSettingsForm();renderNavigation();renderSeasonView();showTournament();
+$('#resetBtn').onclick=reset;$('#finishReset').onclick=reset;applyTheme();applyTournamentDefaults();fillSeasonForm();renderPlayers();renderSettingsForm();renderNavigation();renderSeasonView();showTournament();T20Cloud.init();

@@ -14,6 +14,12 @@ Die Hauptreiter sind bewusst schlank gehalten:
 
 Im Hauptreiter „Saison“ kann eine Halbjahreswertung angelegt werden, z. B. `2026 H1` oder `2026 H2`. Fertige Turniere können anschließend über „In Saisonwertung übernehmen“ gespeichert werden. Die Saisonwertung nutzt das Punktesystem 25/20/15/10/7/5 für 5 bis 0 Siege und unterstützt Streichergebnisse. Export als JSON und CSV ist möglich.
 
+## Online-Speicherung und Nur-Ansicht
+
+Triple20 speichert weiterhin lokal im Browser und synchronisiert die bestehenden Speicherbereiche zusätzlich mit Supabase, sobald eine angemeldete Turnierleitung als Admin erkannt wurde. Besucher ohne Anmeldung sehen Ranglisten, Spieltage, Ergebnisse und laufende Turniere im Modus „Nur Ansicht“ und können keine Daten ändern.
+
+Unter „Einstellungen“ befindet sich der Bereich „Turnierleitung anmelden“. Dort können Admins sich anmelden, Backups herunterladen, Backups einspielen, Cloud-Daten laden oder lokale Daten bewusst in die Cloud übernehmen.
+
 ## Mitglieder und Setzliste
 
 Unter „Saison → Mitglieder“ können Vereinsmitglieder gepflegt werden. Beim nächsten Schweizer Turnier werden eingetragene Teilnehmer automatisch nach ihren aktuellen Saison-Siegen gereiht. Diese Reihung wird für die erste Schweizer Runde als Setzliste verwendet.
