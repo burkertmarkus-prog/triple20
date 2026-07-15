@@ -66,6 +66,7 @@ function hasMeaningfulLocalData(){return !!(state.players?.length||state.matches
 function collectTriple20Data(){return Object.fromEntries(CLOUD_DATA_KEYS.map(k=>[k,localValueForKey(k)]))}
 function backupTriple20Data(prefix='triple20_backup'){const data={createdAt:new Date().toISOString(),app:'Triple20',data:collectTriple20Data()};downloadFile(`${prefix}_${new Date().toISOString().slice(0,19).replaceAll(':','-')}.json`,'application/json',JSON.stringify(data,null,2));return data}
 function applyTriple20Data(data){
+  const visibleSection=['authSection','settingsSection','seasonSection','setupSection','tournamentSection'].find(id=>!$('#'+id)?.classList.contains('hidden'))||'';
   if(!data)return;
   T20_SUPPRESS_SYNC=true;
   try{
@@ -82,6 +83,10 @@ function applyTriple20Data(data){
   selectedSeasonId=localStorage.getItem('tripleTwentySelectedSeason')||'';
   appSettings=loadSettings();
   applyTheme();applyTournamentDefaults();renderPlayers();renderSettingsForm();renderSeasonView();renderTournament();
+  if(visibleSection==='authSection')showLogin();
+  else if(visibleSection==='settingsSection')showSettings();
+  else if(visibleSection==='seasonSection')showSeason();
+  else if(visibleSection==='tournamentSection'||visibleSection==='setupSection')showTournament();
 }
 function backupPreview(data=collectTriple20Data()){const seasons=data.tripleTwentySeasons?.seasons||[],tournaments=data.triple20_tournaments||[],current=data.dartTournament||{};return `${seasons.length} Saison(en), ${tournaments.length} gespeicherte Turnier(e), aktuelles Turnier: ${current.started?'läuft':'nicht gestartet'}${current.players?.length?`, ${current.players.length} Spieler`:''}`;}
 function setSyncStatus(text,cls='view-only'){const bar=$('#syncStatusBar'),label=$('#syncStatusText');if(!bar||!label)return;bar.className=`sync-status ${cls}`;label.textContent=text;const last=$('#syncLastSaved');if(last)last.textContent=T20Cloud?.lastSyncAt?`Letzte Synchronisierung: ${new Date(T20Cloud.lastSyncAt).toLocaleString('de-AT')}`:'Noch nicht synchronisiert'}
@@ -102,7 +107,7 @@ function renderCloudPanel(){
   const c=T20Cloud,summary=backupPreview();
   if(!c.session){panel.innerHTML=`<h3>Turnierleitung anmelden</h3><p class="view-note">Öffentliche Besucher sehen Ranglisten, Turniere und Ergebnisse im Nur-Ansicht-Modus.</p><p id="loginError" class="login-error"></p><form id="adminLoginForm" class="cloud-login"><input id="adminEmail" type="email" placeholder="E-Mail" autocomplete="email" required><input id="adminPassword" type="password" placeholder="Passwort" autocomplete="current-password" required><button id="adminLoginBtn" class="secondary" type="submit">${c.loginBusy?'Wird angemeldet …':'Anmelden'}</button></form><p class="view-note cloud-hint">Falls die Verbindung noch nicht bereit ist, wird sie beim Klick auf „Anmelden“ automatisch aufgebaut.</p>`;return}
   if(!c.isAdmin){panel.innerHTML=`<h3>Turnierleitung</h3><p class="view-note">Angemeldet, aber nicht als Triple20-Admin freigeschaltet.</p><button id="adminLogoutBtn" class="secondary" type="button">Abmelden</button>`;return}
-  panel.innerHTML=`<h3>Online-Speicherung</h3><p class="view-note">${esc(summary)}</p><div class="cloud-actions"><button id="backupDownloadBtn" class="secondary" type="button">Backup herunterladen</button><label class="backup-file">Backup einspielen<input id="backupImportInput" type="file" accept="application/json"></label><button id="uploadLocalBtn" class="secondary" type="button">Lokale Daten in die Cloud übernehmen</button><button id="loadCloudBtn" class="secondary" type="button">Cloud-Daten laden</button><button id="forceCloudBtn" class="danger" type="button">Cloud überschreiben</button><button id="adminLogoutBtn" class="secondary" type="button">Abmelden</button></div>`;
+  panel.innerHTML=`<h3>Online-Speicherung</h3><p class="view-note">${esc(summary)}</p><div class="cloud-actions"><button id="backupDownloadBtn" class="cloud-action-btn" type="button">Backup herunterladen</button><label class="cloud-action-btn backup-file">Backup einspielen<input id="backupImportInput" type="file" accept="application/json"></label><button id="uploadLocalBtn" class="cloud-action-btn" type="button">Lokale Daten in die Cloud übernehmen</button><button id="loadCloudBtn" class="cloud-action-btn" type="button">Cloud-Daten laden</button><button id="forceCloudBtn" class="cloud-action-btn danger-cloud" type="button">Cloud überschreiben</button><button id="adminLogoutBtn" class="cloud-action-btn" type="button">Abmelden</button></div>`;
 }
 async function handleBackupImport(file){
   if(!file||!isAdmin())return;
