@@ -9,7 +9,7 @@
 <body>
   <header class="hero">
     <div class="brand"><button id="menuToggle" class="menu-toggle" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><div><strong>Triple<span>20</span></strong><small id="brandSubtitle">Turnierleitung</small></div></div>
-    <div class="main-actions"><button id="showTournamentBtn" class="ghost">Turnier</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="showLoginBtn" class="ghost">Anmelden</button><button id="resetBtn" class="ghost">Neues Turnier</button></div>
+    <div class="main-actions"><button id="showTournamentBtn" class="ghost">Turnier</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="showLoginBtn" class="ghost">Anmelden</button></div>
   </header>
   <div id="syncStatusBar" class="sync-status view-only"><span id="syncStatusText">Nur Ansicht</span><small id="syncLastSaved">Noch nicht synchronisiert</small></div>
 
@@ -98,6 +98,7 @@
 
     <section class="setup card" id="setupSection">
       <div class="section-title"><span>01</span><div><h2>Turnier einrichten</h2><p>Die wichtigsten Eckdaten</p></div></div>
+      <div class="tournament-actions"><button id="resetBtn" class="secondary" type="button">Neues Turnier</button><p>Offline spielbar: Einzelturniere bleiben lokal auf diesem Gerät und werden nicht automatisch in eine Saison übernommen.</p></div>
       <div class="grid">
         <label>Turniername<input id="tournamentName" value="Freitag-Abend-Cup" maxlength="50"></label>
         <label>Spielmodus<select id="mode"><option value="roundrobin">Jeder gegen jeden</option><option value="swiss">Schweizer System</option><option value="knockout">K.-o.-Turnier</option><option value="double">Doppel-K.-o.-Turnier</option></select></label>
@@ -113,7 +114,7 @@
     </section>
 
     <section id="tournamentSection" class="hidden">
-      <div class="tournament-head"><div><p class="eyebrow">LIVE-TURNIER</p><h2 id="liveTitle"></h2><p id="liveMeta"></p></div><div class="progress-ring"><strong id="progressText">0%</strong><span>gespielt</span></div></div>
+      <div class="tournament-head"><div><p class="eyebrow">LIVE-TURNIER</p><h2 id="liveTitle"></h2><p id="liveMeta"></p><button id="liveResetBtn" class="secondary" type="button">Neues Turnier</button></div><div class="progress-ring"><strong id="progressText">0%</strong><span>gespielt</span></div></div>
       <div id="withdrawCard" class="withdraw-card hidden"></div>
       <div class="tabs"><button class="tab active" data-tab="matches">Spielplan</button><button id="bracketTab" class="tab hidden" data-tab="bracket">Turnierbaum</button><button class="tab" data-tab="table">Tabelle</button></div>
       <div id="matchesView"><div id="matchList" class="match-list"></div></div>
