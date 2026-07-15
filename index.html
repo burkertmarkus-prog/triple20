@@ -16,16 +16,15 @@
   <main>
     <section class="intro">
       <h1>Dein Turnier.<br><em>Deine Bühne.</em></h1>
-      <p>Spieler eintragen, Modus wählen und loswerfen. Der Spielplan entsteht automatisch.</p>
     </section>
 
     <section id="authSection" class="settings-section hidden">
-      <div class="section-title"><span>🔐</span><div><h2>Turnierleitung</h2><p>Anmelden, Abmelden und Online-Speicherung verwalten</p></div></div>
+      <div class="section-title"><div><h2>Turnierleitung</h2><p>Anmelden, Abmelden und Online-Speicherung verwalten</p></div></div>
       <div id="cloudAdminPanel" class="cloud-panel card slim-card"></div>
     </section>
 
     <section id="settingsSection" class="settings-section hidden">
-      <div class="section-title"><span>⚙</span><div><h2>Einstellungen</h2><p>Turnierstandards, Saison/Verein und Design</p></div></div>
+      <div class="section-title"><div><h2>Einstellungen</h2><p>Turnierstandards, Saison/Verein und Design</p></div></div>
       <form id="settingsForm" class="card slim-card">
         <input id="settingsMode" type="hidden" value="club">
         <h3>Turniere</h3>
@@ -66,7 +65,7 @@
     </section>
 
     <section id="seasonSection" class="season-section hidden">
-      <div class="section-title"><span>🏅</span><div><h2>Saisonwertung</h2><p>Halbjahreswertung für den Dartverein</p></div></div>
+      <div class="section-title"><div><h2>Saisonwertung</h2><p>Halbjahreswertung für den Dartverein</p></div></div>
       <div id="seasonOverview" class="season-overview"></div>
       <div class="tabs season-tabs"><button class="season-tab active" data-season-tab="standings">Rangliste</button><button class="season-tab" data-season-tab="members">Mitglieder</button><button class="season-tab" data-season-tab="tournaments">Spieltage</button><button class="season-tab" data-season-tab="stats">Statistiken</button><button class="season-tab" data-season-tab="honors">Ehrungen</button></div>
       <div id="seasonStandings"></div>
@@ -97,7 +96,7 @@
     </section>
 
     <section class="setup card" id="setupSection">
-      <div class="section-title"><span>01</span><div><h2>Turnier einrichten</h2><p>Die wichtigsten Eckdaten</p></div></div>
+      <div class="section-title"><div><h2>Turnier einrichten</h2><p>Die wichtigsten Eckdaten</p></div></div>
       <div class="tournament-actions"><button id="resetBtn" class="secondary" type="button">Neues Turnier</button><p>Offline spielbar: Einzelturniere bleiben lokal auf diesem Gerät und werden nicht automatisch in eine Saison übernommen.</p></div>
       <div class="grid">
         <label>Turniername<input id="tournamentName" value="Freitag-Abend-Cup" maxlength="50"></label>
