@@ -39,6 +39,7 @@ function currentHalfYear(date=new Date()){const y=date.getFullYear(),h=date.getM
 function downloadFile(name,type,content){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;document.body.appendChild(a);a.click();URL.revokeObjectURL(a.href);a.remove()}
 function requireSupabaseClient(){const client=window.T20Cloud?.client||supabaseClient;if(!client)throw new Error('Supabase-Client wurde nicht initialisiert.');return client}
 function setLoginError(message=''){const box=$('#loginError');if(box){box.textContent=message;box.classList.toggle('hidden',!message)}}
+function withTimeout(promise,ms,message){return Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(new Error(message)),ms))])}
 function safeJsonParse(value,fallback=null){try{return JSON.parse(value)}catch{return fallback}}
 function localValueForKey(key){const raw=localStorage.getItem(key);if(raw===null)return null;if(key==='tripleTwentySelectedSeason')return raw;return safeJsonParse(raw,raw)}
 function hasMeaningfulLocalData(){return !!(state.players?.length||state.matches?.length||seasonStore.seasons?.length||loadTournamentHistory().length)}
@@ -106,17 +107,13 @@ window.T20Cloud={
           this.client=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
           supabaseClient=this.client;
         }
-        const {data:{session},error}=await this.client.auth.getSession();
-        if(error)throw error;
         if(!this.authListenerStarted){
           this.client.auth.onAuthStateChange((_event,session)=>{this.pendingAuthSession=session||null;setTimeout(()=>{if(!this.loginBusy)this.processPendingAuthSession()},0)});
           this.authListenerStarted=true;
         }
         this.ready=true;
         renderCloudPanel();
-        await this.setSession(session||null);
-        renderCloudPanel();
-        this.loadCloud({initial:true}).catch(e=>console.warn('Cloud-Startladen fehlgeschlagen',e));
+        this.restoreSessionAfterInit();
         this.startPolling();
       }catch(error){
         console.error('Supabase-Initialisierung fehlgeschlagen:',error);
@@ -126,6 +123,19 @@ window.T20Cloud={
       }
     })();
     return this.initPromise;
+  },
+  async restoreSessionAfterInit(){
+    try{
+      const {data:{session},error}=await withTimeout(this.client.auth.getSession(),5000,'Gespeicherte Sitzung konnte nicht rechtzeitig geladen werden.');
+      if(error)throw error;
+      await this.setSession(session||null);
+      renderCloudPanel();
+      this.loadCloud({initial:true}).catch(e=>console.warn('Cloud-Startladen fehlgeschlagen',e));
+    }catch(error){
+      console.warn('Session nach Start konnte nicht geladen werden:',error);
+      setSyncStatus('Nur Ansicht','view-only');
+      renderCloudPanel();
+    }
   },
   async processPendingAuthSession(){if(this.authBusy){setTimeout(()=>this.processPendingAuthSession(),0);return}const session=this.pendingAuthSession;this.pendingAuthSession=null;await this.setSession(session||null)},
   async setSession(session,options={}){return this.processSession(session,options)},
