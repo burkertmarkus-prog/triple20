@@ -108,15 +108,16 @@ window.T20Cloud={
         }
         const {data:{session},error}=await this.client.auth.getSession();
         if(error)throw error;
-        await this.setSession(session||null);
         if(!this.authListenerStarted){
           this.client.auth.onAuthStateChange((_event,session)=>{this.pendingAuthSession=session||null;setTimeout(()=>{if(!this.loginBusy)this.processPendingAuthSession()},0)});
           this.authListenerStarted=true;
         }
-        await this.loadCloud({initial:true});
-        this.startPolling();
         this.ready=true;
         renderCloudPanel();
+        await this.setSession(session||null);
+        renderCloudPanel();
+        this.loadCloud({initial:true}).catch(e=>console.warn('Cloud-Startladen fehlgeschlagen',e));
+        this.startPolling();
       }catch(error){
         console.error('Supabase-Initialisierung fehlgeschlagen:',error);
         this.client=null;supabaseClient=null;this.ready=false;this.initPromise=null;
