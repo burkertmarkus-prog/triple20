@@ -259,7 +259,7 @@ window.T20Cloud={
     const cleanName=displayName.trim().replace(/\s+/g,' ');
     if(cleanName.split(' ').length<2){this.authError='Bitte Vor- und Zunamen vollständig eintragen.';this.authMessage='';renderCloudPanel();return}
     this.profileBusy=true;this.authMessage='';this.authError='';renderCloudPanel();
-    try{const client=requireSupabaseClient();const {data,error}=await client.from('triple20_profiles').update({display_name:cleanName,nickname:null}).eq('id',this.user.id).select('id,display_name,nickname,avatar_url,updated_at').single();if(error)throw error;this.profile=data;this.authMessage='Name wurde gespeichert.'}
+    try{const client=requireSupabaseClient();const {data,error}=await client.from('triple20_profiles').update({display_name:cleanName,nickname:''}).eq('id',this.user.id).select('id,display_name,nickname,avatar_url,updated_at').single();if(error)throw error;this.profile=data;this.authMessage='Name wurde gespeichert.'}
     catch(error){console.error('Profil speichern fehlgeschlagen:',error);this.authMessage='';this.authError=`Profil konnte nicht gespeichert werden: ${error?.message||'Bitte später erneut versuchen.'}`}
     finally{this.profileBusy=false;renderCloudPanel()}
   },
