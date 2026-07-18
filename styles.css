@@ -112,7 +112,7 @@ main{padding-top:34px}
 .backup-file{margin:0}
 @media(max-width:700px){main{padding-top:24px}.cloud-actions{display:grid;grid-template-columns:1fr}.cloud-action-btn{width:100%}}
 
-.admin-member-card.admin-account{border-color:#8fb8ee;background:#eef6ff}
+.auth-handoff{text-align:center;padding:24px 10px}.auth-handoff>span{display:grid;place-items:center;width:70px;height:70px;margin:0 auto 18px;border-radius:50%;background:#e9f8ef;color:#1c9b4d;font-size:38px;font-weight:900}.auth-handoff h3{font-size:28px!important;margin:0 0 10px!important}.auth-handoff p{color:#65758b;font-weight:750;line-height:1.5}.auth-handoff>div{display:flex;justify-content:center;gap:12px;margin-top:22px}.auth-handoff .primary{width:auto;margin:0}.auth-handoff .secondary{margin:0}.admin-member-card.admin-account{border-color:#8fb8ee;background:#eef6ff}
 @media(max-width:700px){
   body{overflow-x:hidden}
   main{width:calc(100% - 24px);padding-top:18px}
@@ -128,7 +128,7 @@ main{padding-top:34px}
   .match{padding:14px;gap:14px}.players-match{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:8px;text-align:center}.players-match span{overflow-wrap:anywhere}
   .score-controls{display:grid;grid-template-columns:1fr auto 1fr auto;gap:7px}.score-controls select{width:100%}.score-controls button{min-width:42px}
   .winner,.qualification{padding:24px 16px}.winner h2,.qualification h2{font-size:30px;overflow-wrap:anywhere}
-  .final-actions,.export-actions,.cloud-actions,.avatar-actions{display:grid;grid-template-columns:1fr;width:100%}.final-actions button,.export-actions button,.cloud-action-btn,.avatar-actions button,.avatar-upload{width:100%}
+  .auth-handoff>div,.final-actions,.export-actions,.cloud-actions,.avatar-actions{display:grid;grid-template-columns:1fr;width:100%}.auth-handoff button,.final-actions button,.export-actions button,.cloud-action-btn,.avatar-actions button,.avatar-upload{width:100%}
   .profile-heading{display:grid;grid-template-columns:1fr;gap:18px}.profile-heading>div{min-width:0}.profile-heading>button{width:100%}
   .profile-heading h3,.profile-heading p{overflow-wrap:anywhere}
   .profile-form{grid-template-columns:1fr!important}.profile-form .primary{margin-top:0}

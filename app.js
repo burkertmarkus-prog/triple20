@@ -154,6 +154,7 @@ function renderAdminMembers(){
 function renderCloudPanel(){
   const panel=$('#cloudAdminPanel');if(!panel||!window.T20Cloud)return;
   const c=T20Cloud,summary=backupPreview();
+  if(c.authHandoffActive){panel.innerHTML=`<section class="auth-handoff"><span>✓</span><h3>Anmeldung erfolgreich</h3><p>Triple20 ist bereits in einem anderen Tab geöffnet. Dieser Tab wird geschlossen.</p><div><button id="closeAuthTabBtn" class="primary" type="button">DIESES FENSTER SCHLIESSEN</button><button id="continueAuthTabBtn" class="secondary" type="button">HIER WEITER</button></div></section>`;return}
   if(!c.session){replaceCloudPanelHtml(panel,`<div class="account-grid"><section><h3>Mitglieder-Anmeldung</h3><p class="view-note">Mit deiner beim Verein hinterlegten E-Mail-Adresse erhältst du einen einmaligen Anmeldelink.</p><p id="loginError" class="login-error">${esc(c.authError||'')}</p><p class="login-success ${c.authMessage?'':'hidden'}">${esc(c.authMessage||'')}</p><form id="memberLoginForm" class="member-login"><input id="memberEmail" type="email" placeholder="E-Mail-Adresse" autocomplete="email" required><button class="primary" type="submit">${c.magicLinkBusy?'Link wird gesendet …':'ANMELDELINK SENDEN'}</button></form></section><section><h3>Turnierleitung</h3><p class="view-note">Administratoren melden sich weiterhin mit Passwort an.</p><form id="adminLoginForm" class="cloud-login"><input id="adminEmail" type="email" placeholder="Admin-E-Mail" autocomplete="email" required><input id="adminPassword" type="password" placeholder="Passwort" autocomplete="current-password" required><button id="adminLoginBtn" class="secondary" type="submit">${c.loginBusy?'Wird angemeldet …':'Anmelden'}</button></form></section></div>`);return}
   if(!c.isAdmin){const p=c.profile||{},initial=esc((p.nickname||p.display_name||c.user?.email||'?').trim().charAt(0).toUpperCase()||'?'),avatar=c.avatarSignedUrl?`<img src="${esc(c.avatarSignedUrl)}" alt="Profilfoto">`:initial,nickname=p.nickname||'Spitzname noch nicht eingetragen';replaceCloudPanelHtml(panel,`<section class="member-profile"><div class="profile-heading"><div><span class="profile-avatar">${avatar}</span><div><h3>${esc(nickname)}</h3><p class="view-note">${esc(p.display_name||'Vor- und Zuname fehlen')} · ${esc(c.user?.email||'')}</p></div></div><button id="memberLogoutBtn" class="secondary" type="button">Abmelden</button></div><div class="avatar-actions"><label class="secondary avatar-upload">${c.avatarBusy?'Bild wird verarbeitet …':'Profilfoto auswählen'}<input id="profileAvatarInput" type="file" accept="image/jpeg,image/png,image/webp" ${c.avatarBusy?'disabled':''}></label>${p.avatar_url?`<button id="removeAvatarBtn" class="danger" type="button" ${c.avatarBusy?'disabled':''}>Foto entfernen</button>`:''}<small>JPEG, PNG oder WebP · wird auf 512 × 512 Pixel verkleinert · maximal 1 MB</small></div><p id="loginError" class="login-error">${esc(c.authError||'')}</p><p class="login-success ${c.authMessage?'':'hidden'}">${esc(c.authMessage||'')}</p><form id="memberProfileForm" class="profile-form"><label>Spitzname<input id="profileNickname" maxlength="30" value="${esc(p.nickname||'')}" placeholder="Öffentlicher Spielname" required></label><label>Vor- und Zuname<input id="profileDisplayName" maxlength="60" value="${esc(p.display_name||'')}" placeholder="z. B. Markus Mustermann" autocomplete="name" required></label><button class="primary" type="submit">${c.profileBusy?'Wird gespeichert …':'PROFIL SPEICHERN'}</button></form><p class="view-note">Der Spitzname wird bei Turnieren und Ranglisten angezeigt. Der vollständige Name bleibt im geschützten Profil.</p></section>`);return}
   panel.innerHTML=`${renderAdminMembers()}${renderAccessStats()}<h3>Online-Speicherung</h3><p class="view-note">${esc(summary)}</p><div class="cloud-actions"><button id="backupDownloadBtn" class="cloud-action-btn" type="button">Backup herunterladen</button><label class="cloud-action-btn backup-file">Backup einspielen<input id="backupImportInput" type="file" accept="application/json"></label><button id="uploadLocalBtn" class="cloud-action-btn" type="button">Lokale Daten in die Cloud übernehmen</button><button id="loadCloudBtn" class="cloud-action-btn" type="button">Cloud-Daten laden</button><button id="forceCloudBtn" class="cloud-action-btn danger-cloud" type="button">Cloud überschreiben</button><button id="adminLogoutBtn" class="cloud-action-btn" type="button">Abmelden</button></div>`;
@@ -171,8 +172,27 @@ async function handleBackupImport(file){
   await T20Cloud.syncAll({force:true});
   alert('Backup wurde lokal eingespielt und online gespeichert.');
 }
+const T20TabCoord={
+  id:globalThis.crypto?.randomUUID?.()||`tab-${Date.now()}-${Math.random()}`,channel:null,pendingResolve:null,pendingTimer:null,
+  init(){
+    if(typeof BroadcastChannel==='undefined')return;
+    this.channel=new BroadcastChannel('triple20-auth-tabs');
+    this.channel.onmessage=event=>{const message=event.data||{};if(message.id===this.id)return;if(message.type==='probe')this.channel.postMessage({type:'alive',id:this.id});if(message.type==='alive'&&this.pendingResolve){clearTimeout(this.pendingTimer);const resolve=this.pendingResolve;this.pendingResolve=null;resolve(true)}};
+  },
+  hasOtherTab(){
+    if(!this.channel)return Promise.resolve(false);
+    return new Promise(resolve=>{this.pendingResolve=resolve;this.channel.postMessage({type:'probe',id:this.id});this.pendingTimer=setTimeout(()=>{if(this.pendingResolve===resolve)this.pendingResolve=null;resolve(false)},700)});
+  }
+};
+T20TabCoord.init();
 window.T20Cloud={
-  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,loginBusy:false,magicLinkBusy:false,profileBusy:false,avatarBusy:false,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),authMessage:'',authError:'',loadBusy:false,pendingAuthSession:null,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token)=/.test(location.href),
+  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,loginBusy:false,magicLinkBusy:false,profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),authMessage:'',authError:'',loadBusy:false,pendingAuthSession:null,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token)=/.test(location.href),
+  async finishAuthRedirect(){
+    const otherTab=await T20TabCoord.hasOtherTab();
+    if(!otherTab){showLogin();return}
+    this.authHandoffActive=true;showLogin();renderCloudPanel();
+    clearTimeout(this.authHandoffCloseTimer);this.authHandoffCloseTimer=setTimeout(()=>{try{window.close()}catch{}},900);
+  },
   async init(){
     if(this.initPromise)return this.initPromise;
     this.initPromise=(async()=>{
@@ -237,7 +257,7 @@ window.T20Cloud={
       if(this.user&&!this.isAdmin)this.profile=await this.loadProfile();
       if(this.user)this.startPresence();
       renderReadonlyMode();renderCloudPanel();
-      if(this.user&&!this.isAdmin){setSyncStatus('Angemeldet – Mitglied','view-only');if(this.authRedirectPending){this.authRedirectPending=false;showLogin()}return}
+      if(this.user&&!this.isAdmin){setSyncStatus('Angemeldet – Mitglied','view-only');if(this.authRedirectPending){this.authRedirectPending=false;await this.finishAuthRedirect()}return}
       setSyncStatus(this.isAdmin?'Online – aktuell':'Nur Ansicht',this.isAdmin?'online':'view-only');
       if(loadCloud)await this.loadCloud({initial:true});
     }catch(e){console.warn('Session-Verarbeitung fehlgeschlagen',e);this.session=null;this.user=null;this.isAdmin=false;renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only');setLoginError('Anmeldung konnte nicht vollständig geprüft werden. Bitte später erneut versuchen.')}
@@ -886,6 +906,8 @@ $('#cloudAdminPanel').addEventListener('click',e=>{
   if(e.target.id==='adminLogoutBtn'||e.target.id==='memberLogoutBtn')T20Cloud.signOut();
   if(e.target.id==='removeAvatarBtn')T20Cloud.removeAvatar();
   if(e.target.id==='refreshMembersBtn')T20Cloud.refreshAdminProfiles();
+  if(e.target.id==='closeAuthTabBtn'){try{window.close()}catch{}}
+  if(e.target.id==='continueAuthTabBtn'){clearTimeout(T20Cloud.authHandoffCloseTimer);T20Cloud.authHandoffActive=false;showLogin()}
   if(e.target.id==='backupDownloadBtn')backupTriple20Data();
   if(e.target.id==='uploadLocalBtn')T20Cloud.uploadLocalWithBackup();
   if(e.target.id==='loadCloudBtn')T20Cloud.loadCloudConfirmed();
