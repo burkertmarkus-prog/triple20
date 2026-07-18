@@ -143,9 +143,9 @@ function replaceCloudPanelHtml(panel,html){
 function renderAdminMembers(){
   const c=T20Cloud,profiles=c.adminProfiles||[];
   const cards=profiles.map(profile=>{
-    const name=profile.display_name||'Name noch nicht eingetragen',initial=esc(name.trim().charAt(0).toUpperCase()||'?'),photo=c.adminProfileAvatars?.[profile.id],avatar=photo?`<img src="${esc(photo)}" alt="">`:initial;
+    const name=profile.display_name||'Name noch nicht eingetragen',nickname=profile.nickname||'Spitzname fehlt',initial=esc((profile.nickname||profile.display_name||'?').trim().charAt(0).toUpperCase()||'?'),photo=c.adminProfileAvatars?.[profile.id],avatar=photo?`<img src="${esc(photo)}" alt="">`:initial;
     const joined=profile.created_at?new Date(profile.created_at).toLocaleDateString('de-AT'):'–';
-    return `<article class="admin-member-card"><span class="profile-avatar">${avatar}</span><div><strong>${esc(name)}</strong><small>Registriert seit ${esc(joined)}</small></div></article>`;
+    return `<article class="admin-member-card"><span class="profile-avatar">${avatar}</span><div><strong>${esc(nickname)}</strong><span>${esc(name)}</span><small>Registriert seit ${esc(joined)}</small></div></article>`;
   }).join('');
   return `<section class="admin-members"><div class="admin-section-heading"><div><h3>Registrierte Mitglieder</h3><p class="view-note">${profiles.length} Profil${profiles.length===1?'':'e'} vorhanden</p></div><button id="refreshMembersBtn" class="secondary" type="button" ${c.adminProfilesBusy?'disabled':''}>${c.adminProfilesBusy?'Wird geladen …':'Aktualisieren'}</button></div><div class="admin-member-grid">${cards||'<p class="view-note">Noch keine Mitgliederprofile vorhanden.</p>'}</div></section>`;
 }
@@ -153,7 +153,7 @@ function renderCloudPanel(){
   const panel=$('#cloudAdminPanel');if(!panel||!window.T20Cloud)return;
   const c=T20Cloud,summary=backupPreview();
   if(!c.session){replaceCloudPanelHtml(panel,`<div class="account-grid"><section><h3>Mitglieder-Anmeldung</h3><p class="view-note">Mit deiner beim Verein hinterlegten E-Mail-Adresse erhältst du einen einmaligen Anmeldelink.</p><p id="loginError" class="login-error">${esc(c.authError||'')}</p><p class="login-success ${c.authMessage?'':'hidden'}">${esc(c.authMessage||'')}</p><form id="memberLoginForm" class="member-login"><input id="memberEmail" type="email" placeholder="E-Mail-Adresse" autocomplete="email" required><button class="primary" type="submit">${c.magicLinkBusy?'Link wird gesendet …':'ANMELDELINK SENDEN'}</button></form></section><section><h3>Turnierleitung</h3><p class="view-note">Administratoren melden sich weiterhin mit Passwort an.</p><form id="adminLoginForm" class="cloud-login"><input id="adminEmail" type="email" placeholder="Admin-E-Mail" autocomplete="email" required><input id="adminPassword" type="password" placeholder="Passwort" autocomplete="current-password" required><button id="adminLoginBtn" class="secondary" type="submit">${c.loginBusy?'Wird angemeldet …':'Anmelden'}</button></form></section></div>`);return}
-  if(!c.isAdmin){const p=c.profile||{},initial=esc((p.display_name||c.user?.email||'?').trim().charAt(0).toUpperCase()||'?'),avatar=c.avatarSignedUrl?`<img src="${esc(c.avatarSignedUrl)}" alt="Profilfoto">`:initial,name=p.display_name||'Name noch nicht eingetragen';replaceCloudPanelHtml(panel,`<section class="member-profile"><div class="profile-heading"><div><span class="profile-avatar">${avatar}</span><div><h3>${esc(name)}</h3><p class="view-note">${esc(c.user?.email||'')}</p></div></div><button id="memberLogoutBtn" class="secondary" type="button">Abmelden</button></div><div class="avatar-actions"><label class="secondary avatar-upload">${c.avatarBusy?'Bild wird verarbeitet …':'Profilfoto auswählen'}<input id="profileAvatarInput" type="file" accept="image/jpeg,image/png,image/webp" ${c.avatarBusy?'disabled':''}></label>${p.avatar_url?`<button id="removeAvatarBtn" class="danger" type="button" ${c.avatarBusy?'disabled':''}>Foto entfernen</button>`:''}<small>JPEG, PNG oder WebP · wird auf 512 × 512 Pixel verkleinert · maximal 1 MB</small></div><p id="loginError" class="login-error">${esc(c.authError||'')}</p><p class="login-success ${c.authMessage?'':'hidden'}">${esc(c.authMessage||'')}</p><form id="memberProfileForm" class="profile-form"><label>Vor- und Zuname<input id="profileDisplayName" maxlength="60" value="${esc(p.display_name||'')}" placeholder="z. B. Markus Mustermann" autocomplete="name" required></label><button class="primary" type="submit">${c.profileBusy?'Wird gespeichert …':'PROFIL SPEICHERN'}</button></form><p class="view-note">Bitte den vollständigen Vor- und Zunamen eintragen. Turnier- und Saisondaten sind für Mitglieder weiterhin schreibgeschützt.</p></section>`);return}
+  if(!c.isAdmin){const p=c.profile||{},initial=esc((p.nickname||p.display_name||c.user?.email||'?').trim().charAt(0).toUpperCase()||'?'),avatar=c.avatarSignedUrl?`<img src="${esc(c.avatarSignedUrl)}" alt="Profilfoto">`:initial,nickname=p.nickname||'Spitzname noch nicht eingetragen';replaceCloudPanelHtml(panel,`<section class="member-profile"><div class="profile-heading"><div><span class="profile-avatar">${avatar}</span><div><h3>${esc(nickname)}</h3><p class="view-note">${esc(p.display_name||'Vor- und Zuname fehlen')} · ${esc(c.user?.email||'')}</p></div></div><button id="memberLogoutBtn" class="secondary" type="button">Abmelden</button></div><div class="avatar-actions"><label class="secondary avatar-upload">${c.avatarBusy?'Bild wird verarbeitet …':'Profilfoto auswählen'}<input id="profileAvatarInput" type="file" accept="image/jpeg,image/png,image/webp" ${c.avatarBusy?'disabled':''}></label>${p.avatar_url?`<button id="removeAvatarBtn" class="danger" type="button" ${c.avatarBusy?'disabled':''}>Foto entfernen</button>`:''}<small>JPEG, PNG oder WebP · wird auf 512 × 512 Pixel verkleinert · maximal 1 MB</small></div><p id="loginError" class="login-error">${esc(c.authError||'')}</p><p class="login-success ${c.authMessage?'':'hidden'}">${esc(c.authMessage||'')}</p><form id="memberProfileForm" class="profile-form"><label>Spitzname<input id="profileNickname" maxlength="30" value="${esc(p.nickname||'')}" placeholder="Öffentlicher Spielname" required></label><label>Vor- und Zuname<input id="profileDisplayName" maxlength="60" value="${esc(p.display_name||'')}" placeholder="z. B. Markus Mustermann" autocomplete="name" required></label><button class="primary" type="submit">${c.profileBusy?'Wird gespeichert …':'PROFIL SPEICHERN'}</button></form><p class="view-note">Der Spitzname wird bei Turnieren und Ranglisten angezeigt. Der vollständige Name bleibt im geschützten Profil.</p></section>`);return}
   panel.innerHTML=`${renderAdminMembers()}${renderAccessStats()}<h3>Online-Speicherung</h3><p class="view-note">${esc(summary)}</p><div class="cloud-actions"><button id="backupDownloadBtn" class="cloud-action-btn" type="button">Backup herunterladen</button><label class="cloud-action-btn backup-file">Backup einspielen<input id="backupImportInput" type="file" accept="application/json"></label><button id="uploadLocalBtn" class="cloud-action-btn" type="button">Lokale Daten in die Cloud übernehmen</button><button id="loadCloudBtn" class="cloud-action-btn" type="button">Cloud-Daten laden</button><button id="forceCloudBtn" class="cloud-action-btn danger-cloud" type="button">Cloud überschreiben</button><button id="adminLogoutBtn" class="cloud-action-btn" type="button">Abmelden</button></div>`;
 }
 async function handleBackupImport(file){
@@ -240,13 +240,14 @@ window.T20Cloud={
   async checkAdmin(uid){try{const client=requireSupabaseClient();const {data,error}=await withTimeout(client.from('triple20_admins').select('user_id').eq('user_id',uid).maybeSingle(),10000,'Adminprüfung dauert zu lange.');if(error)throw error;const ok=data?.user_id===uid;if(ok)localStorage.setItem('triple20_admin_uid',uid);return ok}catch(e){console.warn('Adminprüfung fehlgeschlagen',e);return localStorage.getItem('triple20_admin_uid')===uid}},
   async loadAdminProfiles(){
     if(!this.isAdmin||!this.user)return[];
-    const client=requireSupabaseClient(),{data,error}=await client.from('triple20_profiles').select('id,display_name,avatar_url,created_at').order('display_name',{ascending:true,nullsFirst:false});
+    const client=requireSupabaseClient(),{data,error}=await client.from('triple20_profiles').select('id,display_name,nickname,avatar_url,created_at').order('nickname',{ascending:true,nullsFirst:false});
     if(error)throw error;
     this.adminProfiles=data||[];this.adminProfileAvatars={};
     await Promise.all(this.adminProfiles.filter(profile=>profile.avatar_url).map(async profile=>{
       const {data:signed,error:signedError}=await client.storage.from('triple20-avatars').createSignedUrl(profile.avatar_url,3600);
       if(!signedError&&signed?.signedUrl)this.adminProfileAvatars[profile.id]=signed.signedUrl;
     }));
+    renderMemberSuggestions();renderRegisteredPlayerChoices();
     return this.adminProfiles;
   },
   async refreshAdminProfiles(){
@@ -281,13 +282,14 @@ window.T20Cloud={
     catch(error){console.error('Mitglieder-Anmeldelink fehlgeschlagen:',error);this.authMessage='';this.authError=`Anmeldelink konnte nicht gesendet werden: ${error?.message||'Bitte später erneut versuchen.'}`}
     finally{this.magicLinkBusy=false;renderCloudPanel()}
   },
-  async saveProfile(displayName){
+  async saveProfile(displayName,nickname){
     if(!this.user||this.isAdmin||this.profileBusy)return;
-    const cleanName=displayName.trim().replace(/\s+/g,' ');
+    const cleanName=displayName.trim().replace(/\s+/g,' '),cleanNickname=nickname.trim().replace(/\s+/g,' ');
+    if(!cleanNickname){this.authError='Bitte einen Spitznamen eintragen.';this.authMessage='';renderCloudPanel();return}
     if(cleanName.split(' ').length<2){this.authError='Bitte Vor- und Zunamen vollständig eintragen.';this.authMessage='';renderCloudPanel();return}
     this.profileBusy=true;this.authMessage='';this.authError='';renderCloudPanel();
-    try{const client=requireSupabaseClient();const {data,error}=await client.from('triple20_profiles').update({display_name:cleanName,nickname:''}).eq('id',this.user.id).select('id,display_name,nickname,avatar_url,updated_at').single();if(error)throw error;this.profile=data;this.authMessage='Name wurde gespeichert.'}
-    catch(error){console.error('Profil speichern fehlgeschlagen:',error);this.authMessage='';this.authError=`Profil konnte nicht gespeichert werden: ${error?.message||'Bitte später erneut versuchen.'}`}
+    try{const client=requireSupabaseClient();const {data,error}=await client.from('triple20_profiles').update({display_name:cleanName,nickname:cleanNickname}).eq('id',this.user.id).select('id,display_name,nickname,avatar_url,updated_at').single();if(error)throw error;this.profile=data;this.authMessage='Profil wurde gespeichert.'}
+    catch(error){console.error('Profil speichern fehlgeschlagen:',error);this.authMessage='';this.authError=error?.code==='23505'?'Dieser Spitzname wird bereits verwendet. Bitte wähle einen anderen.':`Profil konnte nicht gespeichert werden: ${error?.message||'Bitte später erneut versuchen.'}`}
     finally{this.profileBusy=false;renderCloudPanel()}
   },
   async signIn(email,password){
@@ -370,15 +372,36 @@ window.T20Cloud={
 function currentSeasonWinsMap(){const rows=calculateSeasonStandings(selectedSeason());return Object.fromEntries(rows.map(r=>[r.name,r.wins||0]))}
 function sortBySeasonWins(players){if(!isAdmin())return [...players];const wins=currentSeasonWinsMap();return [...players].sort((a,b)=>(wins[b]||0)-(wins[a]||0)||a.localeCompare(b,'de'))}
 
+function registeredMemberProfiles(){
+  return isAdmin()?(T20Cloud.adminProfiles||[]).filter(profile=>profile.nickname?.trim()):[];
+}
+function addTournamentPlayer(name){
+  name=(name||'').trim().replace(/\s+/g,' ');
+  if(!name)return false;
+  if(state.players.some(player=>player.toLowerCase()===name.toLowerCase())){alert('Dieser Spieler ist bereits eingetragen.');return false}
+  state.players.push(name);renderPlayers();return true;
+}
+function renderRegisteredPlayerChoices(){
+  const form=$('#playerForm');if(!form)return;
+  let box=$('#registeredPlayerChoices');
+  if(!box){box=document.createElement('div');box.id='registeredPlayerChoices';form.insertAdjacentElement('afterend',box)}
+  if(!isAdmin()){box.innerHTML='';box.classList.add('hidden');return}
+  const entered=new Set(state.players.map(player=>player.toLowerCase()));
+  const profiles=registeredMemberProfiles().filter(profile=>!entered.has(profile.nickname.trim().toLowerCase()));
+  box.className=`registered-player-choices ${profiles.length?'':'hidden'}`;
+  box.innerHTML=profiles.length?`<div class="registered-player-title"><strong>Registrierte Mitglieder</strong><small>Zum Hinzufügen anklicken</small></div><div class="registered-player-grid">${profiles.map(profile=>{const name=profile.nickname.trim(),photo=T20Cloud.adminProfileAvatars?.[profile.id],avatar=photo?`<img src="${esc(photo)}" alt="">`:esc(name.charAt(0).toUpperCase());return `<button type="button" class="registered-player" data-add-profile="${esc(name)}"><span class="profile-avatar">${avatar}</span><span>${esc(name)}</span><b>+</b></button>`}).join('')}</div>`:'';
+}
 function renderPlayers(){
   if(!state.started)state.players=sortBySeasonWins(state.players);
   $('#playerList').innerHTML=state.players.map((p,i)=>`<div class="player"><b><span>${i+1}</span>${esc(p)}</b><button data-remove="${i}" aria-label="${esc(p)} entfernen">×</button></div>`).join('');
   $('#playerCount').textContent=`${state.players.length} Spieler eingetragen`;
   renderMemberSuggestions();
+  renderRegisteredPlayerChoices();
   $('#startBtn').disabled=state.players.length<2;save();
 }
-$('#playerForm').addEventListener('submit',e=>{e.preventDefault();const input=$('#playerName'),name=input.value.trim();if(!name)return;if(state.players.some(p=>p.toLowerCase()===name.toLowerCase())){alert('Dieser Spieler ist bereits eingetragen.');return}state.players.push(name);input.value='';renderPlayers();input.focus()});
+$('#playerForm').addEventListener('submit',e=>{e.preventDefault();const input=$('#playerName');if(addTournamentPlayer(input.value)){input.value='';input.focus()}});
 $('#playerList').addEventListener('click',e=>{const i=e.target.dataset.remove;if(i!==undefined){state.players.splice(+i,1);renderPlayers()}});
+$('#setupSection').addEventListener('click',e=>{const button=e.target.closest('[data-add-profile]');if(button)addTournamentPlayer(button.dataset.addProfile)});
 function toggleModeOptions(){const mode=$('#mode').value;$('#groupOptions').classList.toggle('hidden',mode!=='roundrobin');$('#swissOptions').classList.toggle('hidden',mode!=='swiss')}
 $('#mode').addEventListener('change',toggleModeOptions);toggleModeOptions();
 
@@ -561,7 +584,7 @@ function saveTournamentToHistory(){
 function exportCurrentTournamentJson(){const record=state.savedToHistory?loadTournamentHistory().find(t=>t.id===state.savedToHistory)||buildCurrentTournamentRecord():buildCurrentTournamentRecord();downloadFile(`${(record.name||'Turnier').replaceAll(' ','_')}.json`,'application/json',JSON.stringify(record,null,2))}
 function seasonMembers(season=selectedSeason()){return [...new Set((season?.members!==undefined?season.members:season?.players)||[])].sort((a,b)=>a.localeCompare(b,'de'))}
 function saveSeasonMembers(season,names){season.members=[...new Set(names.map(n=>n.trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));season.players=[...new Set([...(season.tournaments||[]).flatMap(t=>t.players||[]),...season.members])].sort((a,b)=>a.localeCompare(b,'de'));saveSeason(season)}
-function renderMemberSuggestions(){const list=$('#memberSuggestions'),season=selectedSeason();if(!list)return;const entered=new Set(state.players.map(p=>p.toLowerCase()));list.innerHTML=seasonMembers(season).filter(p=>!entered.has(p.toLowerCase())).map(p=>`<option value="${esc(p)}"></option>`).join('')}
+function renderMemberSuggestions(){const list=$('#memberSuggestions'),season=selectedSeason();if(!list)return;const entered=new Set(state.players.map(p=>p.toLowerCase())),names=[...seasonMembers(season),...registeredMemberProfiles().map(profile=>profile.nickname.trim())],unique=[...new Map(names.filter(Boolean).map(name=>[name.toLowerCase(),name])).values()];list.innerHTML=unique.filter(name=>!entered.has(name.toLowerCase())).map(name=>`<option value="${esc(name)}"></option>`).join('')}
 function addSeasonMember(name){const season=selectedSeason();if(!season||!name.trim())return;const members=seasonMembers(season);if(members.some(p=>p.toLowerCase()===name.trim().toLowerCase())){alert('Dieses Mitglied ist bereits eingetragen.');return}saveSeasonMembers(season,[...members,name.trim()]);renderMemberSuggestions()}
 function removeSeasonMember(name){const season=selectedSeason();if(!season)return;if(!confirm(`${name} aus der Mitgliederliste entfernen? Bereits gespeicherte Spieltage bleiben erhalten.`))return;saveSeasonMembers(season,seasonMembers(season).filter(p=>p!==name));renderMemberSuggestions()}
 function addTournamentToSeason(seasonId,tournament){
@@ -793,7 +816,7 @@ $('#cloudAdminPanel').addEventListener('submit',e=>{
   e.preventDefault();
   if(e.target.id==='adminLoginForm')T20Cloud.signIn($('#adminEmail').value.trim(),$('#adminPassword').value);
   if(e.target.id==='memberLoginForm')T20Cloud.sendMagicLink($('#memberEmail').value.trim());
-  if(e.target.id==='memberProfileForm')T20Cloud.saveProfile($('#profileDisplayName').value);
+  if(e.target.id==='memberProfileForm')T20Cloud.saveProfile($('#profileDisplayName').value,$('#profileNickname').value);
 });
 $('#cloudAdminPanel').addEventListener('click',e=>{
   if(e.target.id==='adminLogoutBtn'||e.target.id==='memberLogoutBtn')T20Cloud.signOut();
