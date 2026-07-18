@@ -111,6 +111,7 @@ function applyTriple20Data(data){
   const seasons=loadSeasons();seasonStore.seasons=seasons.seasons||[];
   selectedSeasonId=localStorage.getItem('tripleTwentySelectedSeason')||'';
   appSettings=loadSettings();
+  linkKnownMemberIds();
   applyTheme();applyTournamentDefaults();renderPlayers();renderSettingsForm();renderSeasonView();renderTournament();
   if(visibleSection==='authSection')showLogin();
   else if(visibleSection==='settingsSection')showSettings();
@@ -170,7 +171,7 @@ async function handleBackupImport(file){
   alert('Backup wurde lokal eingespielt und online gespeichert.');
 }
 window.T20Cloud={
-  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,loginBusy:false,magicLinkBusy:false,profileBusy:false,avatarBusy:false,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},authMessage:'',authError:'',loadBusy:false,pendingAuthSession:null,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token)=/.test(location.href),
+  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,loginBusy:false,magicLinkBusy:false,profileBusy:false,avatarBusy:false,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],authMessage:'',authError:'',loadBusy:false,pendingAuthSession:null,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token)=/.test(location.href),
   async init(){
     if(this.initPromise)return this.initPromise;
     this.initPromise=(async()=>{
@@ -186,6 +187,7 @@ window.T20Cloud={
           this.authListenerStarted=true;
         }
         this.ready=true;
+        await this.loadPublicMembers();
         renderCloudPanel();
         await this.restoreSessionAfterInit();
         this.startPolling();
@@ -228,6 +230,7 @@ window.T20Cloud={
     try{
       this.session=session;this.user=session?.user||null;this.isAdmin=false;this.profile=null;this.avatarSignedUrl='';
       if(this.user)this.isAdmin=await this.checkAdmin(this.user.id);
+      if(this.isAdmin&&localStorage.getItem('triple20_identity_pending')==='1'){this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');localStorage.removeItem('triple20_identity_pending')}
       if(this.user&&this.isAdmin)await this.loadAdminProfiles();
       if(this.user&&!this.isAdmin)this.profile=await this.loadProfile();
       renderReadonlyMode();renderCloudPanel();
@@ -238,6 +241,14 @@ window.T20Cloud={
     finally{this.authBusy=false}
   },
   async checkAdmin(uid){try{const client=requireSupabaseClient();const {data,error}=await withTimeout(client.from('triple20_admins').select('user_id').eq('user_id',uid).maybeSingle(),10000,'Adminprüfung dauert zu lange.');if(error)throw error;const ok=data?.user_id===uid;if(ok)localStorage.setItem('triple20_admin_uid',uid);return ok}catch(e){console.warn('Adminprüfung fehlgeschlagen',e);return localStorage.getItem('triple20_admin_uid')===uid}},
+  async loadPublicMembers(){
+    if(!this.client)return[];
+    const {data,error}=await this.client.rpc('triple20_public_members');
+    if(error)throw error;
+    this.publicMembers=(data||[]).filter(member=>member.id&&member.nickname);
+    linkKnownMemberIds();
+    return this.publicMembers;
+  },
   async loadAdminProfiles(){
     if(!this.isAdmin||!this.user)return[];
     const client=requireSupabaseClient(),{data,error}=await client.from('triple20_profiles').select('id,display_name,nickname,avatar_url,created_at').order('nickname',{ascending:true,nullsFirst:false});
@@ -288,7 +299,7 @@ window.T20Cloud={
     if(!cleanNickname){this.authError='Bitte einen Spitznamen eintragen.';this.authMessage='';renderCloudPanel();return}
     if(cleanName.split(' ').length<2){this.authError='Bitte Vor- und Zunamen vollständig eintragen.';this.authMessage='';renderCloudPanel();return}
     this.profileBusy=true;this.authMessage='';this.authError='';renderCloudPanel();
-    try{const client=requireSupabaseClient();const {data,error}=await client.from('triple20_profiles').update({display_name:cleanName,nickname:cleanNickname}).eq('id',this.user.id).select('id,display_name,nickname,avatar_url,updated_at').single();if(error)throw error;this.profile=data;this.authMessage='Profil wurde gespeichert.'}
+    try{const client=requireSupabaseClient();const {data,error}=await client.from('triple20_profiles').update({display_name:cleanName,nickname:cleanNickname}).eq('id',this.user.id).select('id,display_name,nickname,avatar_url,updated_at').single();if(error)throw error;this.profile=data;await this.loadPublicMembers();this.authMessage='Profil wurde gespeichert.'}
     catch(error){console.error('Profil speichern fehlgeschlagen:',error);this.authMessage='';this.authError=error?.code==='23505'?'Dieser Spitzname wird bereits verwendet. Bitte wähle einen anderen.':`Profil konnte nicht gespeichert werden: ${error?.message||'Bitte später erneut versuchen.'}`}
     finally{this.profileBusy=false;renderCloudPanel()}
   },
@@ -367,19 +378,44 @@ window.T20Cloud={
   },
   async uploadLocalWithBackup(){if(!isAdmin())return;const summary=backupPreview();backupTriple20Data('triple20_vor_cloud_upload');if(!confirm(`Lokale Triple20-Daten in die Cloud übernehmen?\n\n${summary}\n\nEin JSON-Backup wurde heruntergeladen.`))return;await this.syncAll({force:true})},
   async loadCloudConfirmed(){if(!this.loadedCloudData)await this.loadCloud();if(!this.loadedCloudData)return;backupTriple20Data('triple20_vor_cloud_laden');if(!confirm('Cloud-Daten laden? Die aktuelle lokale Version wurde vorher als Backup gesichert.'))return;applyTriple20Data(this.loadedCloudData);setSyncStatus('Online – aktuell','online')},
-  startPolling(){clearInterval(this.pollTimer);this.pollTimer=setInterval(()=>this.loadCloud(),15000)}
+  startPolling(){clearInterval(this.pollTimer);clearInterval(this.memberPollTimer);this.pollTimer=setInterval(()=>this.loadCloud(),15000);this.memberPollTimer=setInterval(()=>this.loadPublicMembers().then(()=>{if(!$('#seasonSection')?.classList.contains('hidden'))renderSeasonView()}).catch(error=>console.warn('Mitgliedsnamen konnten nicht aktualisiert werden',error)),60000)}
 };
+function memberIdForName(name){
+  const normalized=(name||'').trim().toLowerCase();
+  return (T20Cloud.publicMembers||[]).find(member=>member.nickname.trim().toLowerCase()===normalized)?.id||'';
+}
+function currentMemberNickname(id,fallback=''){
+  return (T20Cloud.publicMembers||[]).find(member=>member.id===id)?.nickname||fallback;
+}
+function resultIdentity(name,id=''){return id?`id:${id}`:`name:${(name||'').trim().toLowerCase()}`}
+function linkKnownMemberIds(){
+  if(!T20Cloud.publicMembers?.length)return false;
+  let changed=false;
+  state.playerProfileIds=state.playerProfileIds||{};
+  (state.players||[]).forEach(name=>{const id=state.playerProfileIds[name]||memberIdForName(name);if(id&&!state.playerProfileIds[name]){state.playerProfileIds[name]=id;changed=true}});
+  for(const season of seasonStore.seasons||[]){
+    season.memberProfileIds=season.memberProfileIds||{};
+    for(const name of season.members||season.players||[]){const id=season.memberProfileIds[name]||memberIdForName(name);if(id&&!season.memberProfileIds[name]){season.memberProfileIds[name]=id;changed=true}}
+    for(const tournament of season.tournaments||[]){
+      tournament.playerProfileIds=tournament.playerProfileIds||{};
+      for(const name of tournament.players||[]){const id=tournament.playerProfileIds[name]||memberIdForName(name);if(id&&!tournament.playerProfileIds[name]){tournament.playerProfileIds[name]=id;changed=true}}
+      for(const result of tournament.results||[]){const id=result.profileId||tournament.playerProfileIds[result.name]||memberIdForName(result.name);if(id&&!result.profileId){result.profileId=id;changed=true}}
+    }
+  }
+  if(changed){localStorage.setItem('dartTournament',JSON.stringify(state));localStorage.setItem(SEASON_KEY,JSON.stringify(seasonStore));localStorage.setItem('triple20_identity_pending','1');if(isAdmin())T20Cloud.queueSync(SEASON_KEY)}
+  return changed;
+}
 function currentSeasonWinsMap(){const rows=calculateSeasonStandings(selectedSeason());return Object.fromEntries(rows.map(r=>[r.name,r.wins||0]))}
 function sortBySeasonWins(players){if(!isAdmin())return [...players];const wins=currentSeasonWinsMap();return [...players].sort((a,b)=>(wins[b]||0)-(wins[a]||0)||a.localeCompare(b,'de'))}
 
 function registeredMemberProfiles(){
   return isAdmin()?(T20Cloud.adminProfiles||[]).filter(profile=>profile.nickname?.trim()):[];
 }
-function addTournamentPlayer(name){
+function addTournamentPlayer(name,profileId=''){
   name=(name||'').trim().replace(/\s+/g,' ');
   if(!name)return false;
   if(state.players.some(player=>player.toLowerCase()===name.toLowerCase())){alert('Dieser Spieler ist bereits eingetragen.');return false}
-  state.players.push(name);renderPlayers();return true;
+  state.players.push(name);state.playerProfileIds=state.playerProfileIds||{};const id=profileId||memberIdForName(name);if(id)state.playerProfileIds[name]=id;renderPlayers();return true;
 }
 function renderRegisteredPlayerChoices(){
   const form=$('#playerForm');if(!form)return;
@@ -389,7 +425,7 @@ function renderRegisteredPlayerChoices(){
   const entered=new Set(state.players.map(player=>player.toLowerCase()));
   const profiles=registeredMemberProfiles().filter(profile=>!entered.has(profile.nickname.trim().toLowerCase()));
   box.className=`registered-player-choices ${profiles.length?'':'hidden'}`;
-  box.innerHTML=profiles.length?`<div class="registered-player-title"><strong>Registrierte Mitglieder</strong><small>Zum Hinzufügen anklicken</small></div><div class="registered-player-grid">${profiles.map(profile=>{const name=profile.nickname.trim(),photo=T20Cloud.adminProfileAvatars?.[profile.id],avatar=photo?`<img src="${esc(photo)}" alt="">`:esc(name.charAt(0).toUpperCase());return `<button type="button" class="registered-player" data-add-profile="${esc(name)}"><span class="profile-avatar">${avatar}</span><span>${esc(name)}</span><b>+</b></button>`}).join('')}</div>`:'';
+  box.innerHTML=profiles.length?`<div class="registered-player-title"><strong>Registrierte Mitglieder</strong><small>Zum Hinzufügen anklicken</small></div><div class="registered-player-grid">${profiles.map(profile=>{const name=profile.nickname.trim(),photo=T20Cloud.adminProfileAvatars?.[profile.id],avatar=photo?`<img src="${esc(photo)}" alt="">`:esc(name.charAt(0).toUpperCase());return `<button type="button" class="registered-player" data-add-profile="${esc(name)}" data-profile-id="${esc(profile.id)}"><span class="profile-avatar">${avatar}</span><span>${esc(name)}</span><b>+</b></button>`}).join('')}</div>`:'';
 }
 function renderPlayers(){
   if(!state.started)state.players=sortBySeasonWins(state.players);
@@ -401,7 +437,7 @@ function renderPlayers(){
 }
 $('#playerForm').addEventListener('submit',e=>{e.preventDefault();const input=$('#playerName');if(addTournamentPlayer(input.value)){input.value='';input.focus()}});
 $('#playerList').addEventListener('click',e=>{const i=e.target.dataset.remove;if(i!==undefined){state.players.splice(+i,1);renderPlayers()}});
-$('#setupSection').addEventListener('click',e=>{const button=e.target.closest('[data-add-profile]');if(button)addTournamentPlayer(button.dataset.addProfile)});
+$('#setupSection').addEventListener('click',e=>{const button=e.target.closest('[data-add-profile]');if(button)addTournamentPlayer(button.dataset.addProfile,button.dataset.profileId)});
 function toggleModeOptions(){const mode=$('#mode').value;$('#groupOptions').classList.toggle('hidden',mode!=='roundrobin');$('#swissOptions').classList.toggle('hidden',mode!=='swiss')}
 $('#mode').addEventListener('change',toggleModeOptions);toggleModeOptions();
 
@@ -499,7 +535,7 @@ function joinSwissPlayer(name){
   const status=canRebuildSwissRound();if(!status)return;
   const {round,roundStarted}=status,targetRound=roundStarted?round+1:round;
   if(targetRound>(state.settings.swissRounds||4)){alert('Es gibt keine weitere Schweizer Runde mehr, in die der Spieler einsteigen kann.');return}
-  state.players.push(name);state.players=sortBySeasonWins(state.players);
+  state.players.push(name);state.playerProfileIds=state.playerProfileIds||{};const profileId=memberIdForName(name);if(profileId)state.playerProfileIds[name]=profileId;state.players=sortBySeasonWins(state.players);
   const season=selectedSeason();if(season&&!seasonMembers(season).some(p=>p.toLowerCase()===name.toLowerCase()))saveSeasonMembers(season,[...seasonMembers(season),name]);
   rebuildSwissRound(targetRound);
   save();renderTournament();
@@ -573,8 +609,9 @@ function pointsForWins(wins,pointSystem=defaultPointSystem()){return pointSystem
 function buildCurrentTournamentRecord(){
   const rows=standings(),pointSystem=defaultPointSystem(),date=$('#seasonTournamentDate')?.value||todayIso(),stats={};
   document.querySelectorAll('[data-stat-player]').forEach(row=>{const p=row.dataset.statPlayer;stats[p]={max180:+(row.querySelector('[data-stat-180]')?.value||0),checkout:+(row.querySelector('[data-stat-checkout]')?.value||0)}});
-  const results=state.players.map(name=>{const wins=tournamentWins(name,state.matches),losses=tournamentLosses(name,state.matches),row=rows.find(r=>r.name===name)||{};return{name,wins,losses,rank:(rows.findIndex(r=>r.name===name)+1)||0,legsFor:row.lf||0,legsAgainst:row.la||0,points:pointsForWins(wins,pointSystem),max180:stats[name]?.max180||0,checkout:stats[name]?.checkout||0}});
-  return{id:`tournament-${Date.now()}`,name:state.settings.name||'Turnier',date,mode:state.settings.mode,players:[...state.players],participantCount:state.players.length,winner:rows[0]?.name||'',top3:rows.slice(0,3).map(r=>r.name),settings:{...state.settings},matches:state.matches.map(m=>({...m})),results,createdAt:new Date().toISOString()};
+  const playerProfileIds=Object.fromEntries(state.players.map(name=>[name,state.playerProfileIds?.[name]||memberIdForName(name)]).filter(([,id])=>id));
+  const results=state.players.map(name=>{const wins=tournamentWins(name,state.matches),losses=tournamentLosses(name,state.matches),row=rows.find(r=>r.name===name)||{},profileId=playerProfileIds[name]||'';return{name,profileId,wins,losses,rank:(rows.findIndex(r=>r.name===name)+1)||0,legsFor:row.lf||0,legsAgainst:row.la||0,points:pointsForWins(wins,pointSystem),max180:stats[name]?.max180||0,checkout:stats[name]?.checkout||0}});
+  return{id:`tournament-${Date.now()}`,name:state.settings.name||'Turnier',date,mode:state.settings.mode,players:[...state.players],participantCount:state.players.length,winner:rows[0]?.name||'',top3:rows.slice(0,3).map(r=>r.name),playerProfileIds,settings:{...state.settings},matches:state.matches.map(m=>({...m})),results,createdAt:new Date().toISOString()};
 }
 function loadTournamentHistory(){try{const data=JSON.parse(localStorage.getItem(TOURNAMENT_HISTORY_KEY)||'[]');return Array.isArray(data)?data:[]}catch{return[]}}
 function saveTournamentToHistory(){
@@ -583,13 +620,14 @@ function saveTournamentToHistory(){
 }
 function exportCurrentTournamentJson(){const record=state.savedToHistory?loadTournamentHistory().find(t=>t.id===state.savedToHistory)||buildCurrentTournamentRecord():buildCurrentTournamentRecord();downloadFile(`${(record.name||'Turnier').replaceAll(' ','_')}.json`,'application/json',JSON.stringify(record,null,2))}
 function seasonMembers(season=selectedSeason()){return [...new Set((season?.members!==undefined?season.members:season?.players)||[])].sort((a,b)=>a.localeCompare(b,'de'))}
-function saveSeasonMembers(season,names){season.members=[...new Set(names.map(n=>n.trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));season.players=[...new Set([...(season.tournaments||[]).flatMap(t=>t.players||[]),...season.members])].sort((a,b)=>a.localeCompare(b,'de'));saveSeason(season)}
+function saveSeasonMembers(season,names){season.members=[...new Set(names.map(n=>n.trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));season.memberProfileIds=season.memberProfileIds||{};season.members.forEach(name=>{const id=season.memberProfileIds[name]||memberIdForName(name);if(id)season.memberProfileIds[name]=id});season.players=[...new Set([...(season.tournaments||[]).flatMap(t=>t.players||[]),...season.members])].sort((a,b)=>a.localeCompare(b,'de'));saveSeason(season)}
 function renderMemberSuggestions(){const list=$('#memberSuggestions'),season=selectedSeason();if(!list)return;const entered=new Set(state.players.map(p=>p.toLowerCase())),names=[...seasonMembers(season),...registeredMemberProfiles().map(profile=>profile.nickname.trim())],unique=[...new Map(names.filter(Boolean).map(name=>[name.toLowerCase(),name])).values()];list.innerHTML=unique.filter(name=>!entered.has(name.toLowerCase())).map(name=>`<option value="${esc(name)}"></option>`).join('')}
 function addSeasonMember(name){const season=selectedSeason();if(!season||!name.trim())return;const members=seasonMembers(season);if(members.some(p=>p.toLowerCase()===name.trim().toLowerCase())){alert('Dieses Mitglied ist bereits eingetragen.');return}saveSeasonMembers(season,[...members,name.trim()]);renderMemberSuggestions()}
 function removeSeasonMember(name){const season=selectedSeason();if(!season)return;if(!confirm(`${name} aus der Mitgliederliste entfernen? Bereits gespeicherte Spieltage bleiben erhalten.`))return;saveSeasonMembers(season,seasonMembers(season).filter(p=>p!==name));renderMemberSuggestions()}
 function addTournamentToSeason(seasonId,tournament){
   if(!isClubMode())return null;
   const season=seasonStore.seasons.find(s=>s.id===seasonId);if(!season)return null;
+  season.memberProfileIds={...(season.memberProfileIds||{}),...(tournament.playerProfileIds||{})};
   season.tournaments=season.tournaments||[];season.members=[...new Set([...(season.members||season.players||[]),...(tournament.players||[])])].sort((a,b)=>a.localeCompare(b,'de'));season.players=[...new Set([...(season.players||[]),...(season.members||[]),...(tournament.players||[])])].sort((a,b)=>a.localeCompare(b,'de'));
   season.tournaments.push(tournament);season.tournaments.sort((a,b)=>a.date.localeCompare(b.date));season.stats=calculateSeasonStatisticsSummary(season);saveSeason(season);return season;
 }
@@ -612,13 +650,14 @@ function renderManualTournamentForm(season=selectedSeason()){
   return button+`<form id="manualTournamentForm" class="card slim-card manual-tournament-card"><h3>Spieltag manuell nachtragen</h3><p>Für bereits gespielte Schweizer Turniere: Teilnehmer markieren und pro Spieler Siege, Niederlagen, 180er und höchstes Checkout eintragen. Die Saisonpunkte werden automatisch berechnet.</p><div class="grid"><label>Datum<input id="manualTournamentDate" type="date" value="${todayIso()}" required></label><label>Turniername<input id="manualTournamentName" value="Dienstagsturnier" maxlength="50"></label></div><div class="table-wrap manual-entry-table"><table><thead><tr><th>Dabei</th><th>Spieler</th><th>Siege</th><th>Niederlagen</th><th>180er</th><th>Checkout</th></tr></thead><tbody>${players.map(p=>`<tr data-manual-player="${esc(p)}"><td><input type="checkbox" data-manual-present checked></td><td><b>${esc(p)}</b></td><td><input type="number" min="0" max="20" value="0" data-manual-wins></td><td><input type="number" min="0" max="20" value="0" data-manual-losses></td><td><input type="number" min="0" max="99" value="0" data-manual-180></td><td><input type="number" min="0" max="170" value="0" data-manual-checkout></td></tr>`).join('')}</tbody></table></div><button class="primary" type="submit">SPIELTAG IN SAISON SPEICHERN <span>→</span></button></form>`;
 }
 function buildManualTournamentRecord(){
-  const pointSystem=defaultPointSystem(),date=$('#manualTournamentDate')?.value||todayIso(),name=$('#manualTournamentName')?.value.trim()||'Dienstagsturnier';
+  const season=selectedSeason(),pointSystem=defaultPointSystem(),date=$('#manualTournamentDate')?.value||todayIso(),name=$('#manualTournamentName')?.value.trim()||'Dienstagsturnier';
   const results=[...document.querySelectorAll('[data-manual-player]')].filter(row=>row.querySelector('[data-manual-present]')?.checked).map(row=>{
     const player=row.dataset.manualPlayer,wins=+(row.querySelector('[data-manual-wins]')?.value||0),losses=+(row.querySelector('[data-manual-losses]')?.value||0),max180=+(row.querySelector('[data-manual-180]')?.value||0),checkout=+(row.querySelector('[data-manual-checkout]')?.value||0);
-    return{name:player,wins,losses,max180,checkout,points:pointsForWins(wins,pointSystem),rank:0,legsFor:0,legsAgainst:0};
+    return{name:player,profileId:season?.memberProfileIds?.[player]||memberIdForName(player),wins,losses,max180,checkout,points:pointsForWins(wins,pointSystem),rank:0,legsFor:0,legsAgainst:0};
   }).sort((a,b)=>b.wins-a.wins||a.losses-b.losses||b.max180-a.max180||b.checkout-a.checkout||a.name.localeCompare(b.name,'de'));
   results.forEach((r,i)=>r.rank=i+1);
-  return{id:`manual-tournament-${Date.now()}`,name,date,mode:'swiss',manual:true,players:results.map(r=>r.name),participantCount:results.length,winner:results[0]?.name||'',top3:results.slice(0,3).map(r=>r.name),settings:{mode:'swiss',name,manual:true},matches:[],results,createdAt:new Date().toISOString()};
+  const playerProfileIds=Object.fromEntries(results.filter(r=>r.profileId).map(r=>[r.name,r.profileId]));
+  return{id:`manual-tournament-${Date.now()}`,name,date,mode:'swiss',manual:true,players:results.map(r=>r.name),playerProfileIds,participantCount:results.length,winner:results[0]?.name||'',top3:results.slice(0,3).map(r=>r.name),settings:{mode:'swiss',name,manual:true},matches:[],results,createdAt:new Date().toISOString()};
 }
 function addManualTournamentFromForm(){
   const season=selectedSeason();if(!season)return;
@@ -634,12 +673,18 @@ function calculateDropResults(entries,dropCount=0){
 }
 function calculateSeasonStandings(season=selectedSeason()){
   if(!isClubMode()||!season)return[];
-  const tournaments=season.tournaments||[],players=[...new Set([...(season.members||[]),...(season.players||[]),...tournaments.flatMap(t=>t.players||[])])].sort((a,b)=>a.localeCompare(b,'de'));
-  return players.map(name=>{
-    const entries=tournaments.map(t=>{const r=(t.results||[]).find(x=>x.name===name);return r?{tournamentId:t.id,date:t.date,name:t.name,present:true,points:r.points||0,wins:r.wins||0,losses:r.losses||0,max180:r.max180||0,checkout:r.checkout||0,rank:r.rank||0}:{tournamentId:t.id,date:t.date,name:t.name,present:false,points:0,wins:0,losses:0,max180:0,checkout:0,rank:0}});
-    const dropped=calculateDropResults(entries,season.dropCount||0),used=dropped.filter(e=>!e.dropped);
-    const played=entries.filter(e=>e.present),wins=entries.reduce((s,e)=>s+e.wins,0),losses=entries.reduce((s,e)=>s+e.losses,0),max180=entries.reduce((s,e)=>s+e.max180,0),checkout=Math.max(0,...entries.map(e=>e.checkout||0));
-    return{name,totalPoints:entries.reduce((s,e)=>s+e.points,0),cleanPoints:used.reduce((s,e)=>s+e.points,0),played:played.length,wins,losses,max180,checkout,dropResults:dropped.filter(e=>e.dropped),entries:dropped,participation:tournaments.length?played.length/tournaments.length:0,winRate:wins+losses?wins/(wins+losses):0};
+  const tournaments=season.tournaments||[],players=new Map();
+  const addPlayer=(name,id='')=>{const key=resultIdentity(name,id),display=id?currentMemberNickname(id,name):name;if(!players.has(key))players.set(key,{key,name:display,profileId:id})};
+  for(const name of season.members||[])addPlayer(name,season.memberProfileIds?.[name]||memberIdForName(name));
+  for(const name of season.players||[])addPlayer(name,season.memberProfileIds?.[name]||memberIdForName(name));
+  for(const tournament of tournaments){
+    for(const name of tournament.players||[])addPlayer(name,tournament.playerProfileIds?.[name]||memberIdForName(name));
+    for(const result of tournament.results||[])addPlayer(result.name,result.profileId||tournament.playerProfileIds?.[result.name]||memberIdForName(result.name));
+  }
+  return [...players.values()].map(player=>{
+    const entries=tournaments.map(t=>{const r=(t.results||[]).find(x=>resultIdentity(x.name,x.profileId||t.playerProfileIds?.[x.name]||memberIdForName(x.name))===player.key);return r?{tournamentId:t.id,date:t.date,name:t.name,present:true,points:r.points||0,wins:r.wins||0,losses:r.losses||0,max180:r.max180||0,checkout:r.checkout||0,rank:r.rank||0}:{tournamentId:t.id,date:t.date,name:t.name,present:false,points:0,wins:0,losses:0,max180:0,checkout:0,rank:0}});
+    const dropped=calculateDropResults(entries,season.dropCount||0),used=dropped.filter(e=>!e.dropped),played=entries.filter(e=>e.present),wins=entries.reduce((sum,e)=>sum+e.wins,0),losses=entries.reduce((sum,e)=>sum+e.losses,0),max180=entries.reduce((sum,e)=>sum+e.max180,0),checkout=Math.max(0,...entries.map(e=>e.checkout||0));
+    return{name:player.name,profileId:player.profileId,totalPoints:entries.reduce((sum,e)=>sum+e.points,0),cleanPoints:used.reduce((sum,e)=>sum+e.points,0),played:played.length,wins,losses,max180,checkout,dropResults:dropped.filter(e=>e.dropped),entries:dropped,participation:tournaments.length?played.length/tournaments.length:0,winRate:wins+losses?wins/(wins+losses):0};
   }).sort((a,b)=>b.cleanPoints-a.cleanPoints||b.wins-a.wins||b.played-a.played||a.name.localeCompare(b.name,'de'));
 }
 function seasonStats(season=selectedSeason()){const rows=calculateSeasonStandings(season);return{max180:[...rows].sort((a,b)=>b.max180-a.max180)[0],checkout:[...rows].sort((a,b)=>b.checkout-a.checkout)[0],played:[...rows].sort((a,b)=>b.played-a.played)[0],participation:[...rows].sort((a,b)=>b.participation-a.participation||b.played-a.played)[0],wins:[...rows].sort((a,b)=>b.wins-a.wins)[0],winRate:[...rows].filter(r=>r.wins+r.losses>0).sort((a,b)=>b.winRate-a.winRate||b.wins-a.wins)[0]}}
@@ -683,11 +728,15 @@ function renderSeasonStandings(season=selectedSeason(),rows=calculateSeasonStand
   $('#seasonStandings').innerHTML=`<div class="table-wrap"><table><thead><tr><th>#</th><th>Spieler</th><th>Gesamt</th><th>Bereinigt</th><th>Turniere</th><th>Siege</th><th>Niederl.</th><th>180er</th><th>High Finish</th><th>Streicher</th></tr></thead><tbody>${rows.map((r,i)=>`<tr data-season-player="${esc(r.name)}"><td>${i+1}</td><td><button class="link-btn" data-season-player="${esc(r.name)}">${esc(r.name)}</button></td><td>${r.totalPoints}</td><td><b>${r.cleanPoints}</b></td><td>${r.played}</td><td>${r.wins}</td><td>${r.losses}</td><td>${r.max180}</td><td>${r.checkout}</td><td>${r.dropResults.map(e=>`<span class="drop-pill">${e.present?e.points:0}</span>`).join(' ')||'–'}</td></tr>`).join('')}</tbody></table></div>`;
 }
 function renderSeasonMembers(season=selectedSeason(),rows=calculateSeasonStandings(season)){
-  const wins=Object.fromEntries(rows.map(r=>[r.name,r.wins||0])),members=seasonMembers(season).sort((a,b)=>(wins[b]||0)-(wins[a]||0)||a.localeCompare(b,'de'));
-  $('#seasonMembers').innerHTML=`<div class="card slim-card"><h3>Mitglieder</h3><p>Diese Liste wird für neue Dienstagsturniere als Setzliste verwendet: mehr Saison-Siege = weiter oben.</p><form id="memberForm" class="player-form"><input id="memberName" placeholder="Mitgliedsname" maxlength="30" autocomplete="off"><button type="submit">+ Mitglied</button></form><div class="member-list">${members.map((p,i)=>`<div class="member-row"><b><span>${i+1}</span>${esc(p)}</b><small>${wins[p]||0} Saison-Siege</small><button class="danger" data-remove-member="${esc(p)}">Entfernen</button></div>`).join('')||'<p class="empty-line">Noch keine Mitglieder eingetragen.</p>'}</div></div>`;
+  const wins=Object.fromEntries(rows.map(r=>[r.name,r.wins||0])),members=seasonMembers(season).map(storedName=>({storedName,name:currentMemberNickname(season.memberProfileIds?.[storedName],storedName)})).sort((a,b)=>(wins[b.name]||0)-(wins[a.name]||0)||a.name.localeCompare(b.name,'de'));
+  $('#seasonMembers').innerHTML=`<div class="card slim-card"><h3>Mitglieder</h3><p>Diese Liste wird für neue Dienstagsturniere als Setzliste verwendet: mehr Saison-Siege = weiter oben.</p><form id="memberForm" class="player-form"><input id="memberName" placeholder="Mitgliedsname" maxlength="30" autocomplete="off"><button type="submit">+ Mitglied</button></form><div class="member-list">${members.map((p,i)=>`<div class="member-row"><b><span>${i+1}</span>${esc(p.name)}</b><small>${wins[p.name]||0} Saison-Siege</small><button class="danger" data-remove-member="${esc(p.storedName)}">Entfernen</button></div>`).join('')||'<p class="empty-line">Noch keine Mitglieder eingetragen.</p>'}</div></div>`;
+}
+function tournamentPlayerName(tournament,name){
+  const id=tournament.playerProfileIds?.[name]||(tournament.results||[]).find(result=>result.name===name)?.profileId||'';
+  return currentMemberNickname(id,name);
 }
 function renderSeasonTournaments(season=selectedSeason()){
-  const tournaments=season?.tournaments||[],list=tournaments.length?`<div class="match-list">${tournaments.map(t=>`<article class="match season-match"><div class="match-no">${esc(t.date)} · ${t.participantCount} Teilnehmer${t.manual?' · Manuell':''}</div><div><b>${esc(t.name)}</b><p>Sieger: ${esc(t.winner||'–')} · Top 3: ${(t.top3||[]).map(esc).join(', ')||'–'}</p><div class="season-detail hidden" id="details-${esc(t.id)}">${(t.results||[]).sort((a,b)=>a.rank-b.rank).map(r=>`<span>${r.rank}. ${esc(r.name)} · ${r.wins}S/${r.losses}N · ${r.points} Pkt.${r.max180?` · ${r.max180}x180`:''}${r.checkout?` · HF ${r.checkout}`:''}</span>`).join('')}</div></div><div class="season-match-actions"><button class="secondary" data-tournament-detail="${esc(t.id)}">Details anzeigen</button><button class="danger" data-delete-tournament="${esc(t.id)}">Löschen</button></div></article>`).join('')}</div>`:'<div class="empty-card">Noch keine Turniere in dieser Saison.</div>';
+  const tournaments=season?.tournaments||[],list=tournaments.length?`<div class="match-list">${tournaments.map(t=>`<article class="match season-match"><div class="match-no">${esc(t.date)} · ${t.participantCount} Teilnehmer${t.manual?' · Manuell':''}</div><div><b>${esc(t.name)}</b><p>Sieger: ${esc(tournamentPlayerName(t,t.winner)||'–')} · Top 3: ${(t.top3||[]).map(name=>esc(tournamentPlayerName(t,name))).join(', ')||'–'}</p><div class="season-detail hidden" id="details-${esc(t.id)}">${(t.results||[]).sort((a,b)=>a.rank-b.rank).map(r=>`<span>${r.rank}. ${esc(tournamentPlayerName(t,r.name))} · ${r.wins}S/${r.losses}N · ${r.points} Pkt.${r.max180?` · ${r.max180}x180`:''}${r.checkout?` · HF ${r.checkout}`:''}</span>`).join('')}</div></div><div class="season-match-actions"><button class="secondary" data-tournament-detail="${esc(t.id)}">Details anzeigen</button><button class="danger" data-delete-tournament="${esc(t.id)}">Löschen</button></div></article>`).join('')}</div>`:'<div class="empty-card">Noch keine Turniere in dieser Saison.</div>';
   $('#seasonTournaments').innerHTML=renderManualTournamentForm(season)+list;
 }
 function renderSeasonStats(season=selectedSeason(),rows=calculateSeasonStandings(season)){
@@ -853,5 +902,5 @@ $('#seasonPlayerDetail').addEventListener('click',e=>{if(e.target.classList.cont
 $('#winnerCard').addEventListener('click',e=>{if(e.target.id==='exportCurrentTournamentBtn'){exportCurrentTournamentJson();return}if(e.target.id==='seasonFromWinnerBtn'){showSeason();return}if(e.target.id!=='addToSeasonBtn')return;const id=$('#seasonImportSelect')?.value;if(!id)return;const tournament=buildCurrentTournamentRecord();addTournamentToSeason(id,tournament);state.seasonImportedTo=id;save();renderSeasonImport(champion());alert('Turnier wurde in die Saisonwertung übernommen.')});
 $('#exportSeasonJsonBtn').addEventListener('click',exportSeasonJson);
 $('#exportStandingsCsvBtn').addEventListener('click',exportStandingsCsv);
-function reset(){if(state.started&&!confirm('Das aktuelle Turnier wirklich löschen?'))return;Object.assign(state,{players:[],started:false,matches:[],settings:{}});delete state.seasonImportedTo;delete state.savedToHistory;save();renderPlayers();renderTournament();showTournament()}
+function reset(){if(state.started&&!confirm('Das aktuelle Turnier wirklich löschen?'))return;Object.assign(state,{players:[],playerProfileIds:{},started:false,matches:[],settings:{}});delete state.seasonImportedTo;delete state.savedToHistory;save();renderPlayers();renderTournament();showTournament()}
 $('#resetBtn').onclick=reset;$('#liveResetBtn').onclick=reset;$('#finishReset').onclick=reset;registerAccess();applyTheme();applyTournamentDefaults();fillSeasonForm();renderPlayers();renderSettingsForm();renderNavigation();renderSeasonView();showTournament();T20Cloud.init();
