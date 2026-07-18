@@ -161,7 +161,7 @@ async function handleBackupImport(file){
   alert('Backup wurde lokal eingespielt und online gespeichert.');
 }
 window.T20Cloud={
-  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,loginBusy:false,magicLinkBusy:false,profileBusy:false,avatarBusy:false,authMessage:'',authError:'',loadBusy:false,pendingAuthSession:null,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,
+  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,loginBusy:false,magicLinkBusy:false,profileBusy:false,avatarBusy:false,authMessage:'',authError:'',loadBusy:false,pendingAuthSession:null,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token)=/.test(location.href),
   async init(){
     if(this.initPromise)return this.initPromise;
     this.initPromise=(async()=>{
@@ -178,7 +178,7 @@ window.T20Cloud={
         }
         this.ready=true;
         renderCloudPanel();
-        this.restoreSessionAfterInit();
+        await this.restoreSessionAfterInit();
         this.startPolling();
         setLoginError('');
       }catch(error){
@@ -192,8 +192,16 @@ window.T20Cloud={
   },
   async restoreSessionAfterInit(){
     try{
-      const {data:{session},error}=await withTimeout(this.client.auth.getSession(),5000,'Gespeicherte Sitzung konnte nicht rechtzeitig geladen werden.');
+      let {data:{session},error}=await withTimeout(this.client.auth.getSession(),5000,'Gespeicherte Sitzung konnte nicht rechtzeitig geladen werden.');
       if(error)throw error;
+      if(!session&&this.authRedirectPending){
+        for(let attempt=0;attempt<20&&!session;attempt++){
+          await new Promise(resolve=>setTimeout(resolve,150));
+          const result=await this.client.auth.getSession();
+          if(result.error)throw result.error;
+          session=result.data.session;
+        }
+      }
       await this.setSession(session||null);
       renderCloudPanel();
       this.loadCloud({initial:true}).catch(e=>console.warn('Cloud-Startladen fehlgeschlagen',e));
@@ -213,7 +221,7 @@ window.T20Cloud={
       if(this.user)this.isAdmin=await this.checkAdmin(this.user.id);
       if(this.user&&!this.isAdmin)this.profile=await this.loadProfile();
       renderReadonlyMode();renderCloudPanel();
-      if(this.user&&!this.isAdmin){setSyncStatus('Angemeldet – Mitglied','view-only');return}
+      if(this.user&&!this.isAdmin){setSyncStatus('Angemeldet – Mitglied','view-only');if(this.authRedirectPending){this.authRedirectPending=false;showLogin()}return}
       setSyncStatus(this.isAdmin?'Online – aktuell':'Nur Ansicht',this.isAdmin?'online':'view-only');
       if(loadCloud)await this.loadCloud({initial:true});
     }catch(e){console.warn('Session-Verarbeitung fehlgeschlagen',e);this.session=null;this.user=null;this.isAdmin=false;renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only');setLoginError('Anmeldung konnte nicht vollständig geprüft werden. Bitte später erneut versuchen.')}
