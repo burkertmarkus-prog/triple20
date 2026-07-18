@@ -144,10 +144,10 @@ function replaceCloudPanelHtml(panel,html){
 function renderAdminMembers(){
   const c=T20Cloud,profiles=c.adminProfiles||[];
   const cards=profiles.map(profile=>{
-    const name=profile.display_name||'Name noch nicht eingetragen',nickname=profile.nickname||'Spitzname fehlt',initial=esc((profile.nickname||profile.display_name||'?').trim().charAt(0).toUpperCase()||'?'),photo=c.adminProfileAvatars?.[profile.id],avatar=photo?`<img src="${esc(photo)}" alt="">`:initial;
+    const adminProfile=profile.id===c.user?.id,name=profile.display_name||(adminProfile?'Turnierleitung':'Name noch nicht eingetragen'),nickname=profile.nickname||(adminProfile?'Administrator':'Spitzname fehlt'),initial=esc((profile.nickname||profile.display_name||(adminProfile?'A':'?')).trim().charAt(0).toUpperCase()||'?'),photo=c.adminProfileAvatars?.[profile.id],avatar=photo?`<img src="${esc(photo)}" alt="">`:initial;
     const joined=profile.created_at?new Date(profile.created_at).toLocaleDateString('de-AT'):'–';
     const online=c.onlineUserIds?.has(profile.id);
-    return `<article class="admin-member-card"><span class="profile-avatar">${avatar}</span><div><strong>${esc(nickname)} <i class="online-dot ${online?'is-online':''}" title="${online?'Online':'Offline'}"></i></strong><span>${esc(name)}</span><small>${online?'Jetzt online · ':''}Registriert seit ${esc(joined)}</small></div></article>`;
+    return `<article class="admin-member-card ${adminProfile?'admin-account':''}"><span class="profile-avatar">${avatar}</span><div><strong>${esc(nickname)} <i class="online-dot ${online?'is-online':''}" title="${online?'Online':'Offline'}"></i></strong><span>${esc(name)}</span><small>${adminProfile?'Administratorkonto · ':''}${online?'Jetzt online · ':''}Registriert seit ${esc(joined)}</small></div></article>`;
   }).join('');
   return `<section class="admin-members"><div class="admin-section-heading"><div><h3>Registrierte Mitglieder</h3><p class="view-note">${profiles.length} Profil${profiles.length===1?'':'e'} vorhanden</p></div><button id="refreshMembersBtn" class="secondary" type="button" ${c.adminProfilesBusy?'disabled':''}>${c.adminProfilesBusy?'Wird geladen …':'Aktualisieren'}</button></div><div class="admin-member-grid">${cards||'<p class="view-note">Noch keine Mitgliederprofile vorhanden.</p>'}</div></section>`;
 }
