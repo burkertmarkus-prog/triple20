@@ -124,14 +124,21 @@ function isAdmin(){return !!window.T20Cloud?.isAdmin}
 function isMember(){return !!window.T20Cloud?.user&&!isAdmin()}
 function assertAdminAction(){if(isAdmin())return true;alert('Nur die Turnierleitung darf Daten ändern. Du bist aktuell im Nur-Ansicht-Modus.');return false}
 function renderReadonlyMode(){
-  document.body.classList.toggle('view-only',!isAdmin());
-  document.body.classList.toggle('admin-mode',isAdmin());
-  const readonly=!isAdmin();
+  const admin=isAdmin(),member=isMember(),guest=!admin&&!member,readonly=!admin;
+  document.body.classList.toggle('view-only',readonly);
+  document.body.classList.toggle('admin-mode',admin);
+  document.body.classList.toggle('member-mode',member);
+  document.body.classList.toggle('guest-mode',guest);
   ['seasonActionSelect','addToSeasonBtn'].forEach(id=>{$('#'+id)?.classList.toggle('hidden',readonly)});
-  $('#showSettingsBtn')?.classList.toggle('hidden',readonly);
-  const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=isAdmin()?'Konto':isMember()?'Mein Profil':'Anmelden';
+  $('#showSettingsBtn')?.classList.toggle('hidden',!admin);
+  $('#showSeasonBtn')?.classList.toggle('hidden',guest);
+  const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=admin?'Konto':member?'Mein Profil':'Anmelden';
+  const editControls=['tournamentName','mode','legs','startScore','groupCount','qualifiers','swissRounds','playerName','startBtn','resetBtn','liveResetBtn','finishReset'];
+  editControls.forEach(id=>{const element=$('#'+id);if(element)element.disabled=readonly});
+  document.querySelectorAll('[data-remove],[data-save],[data-finals],.score-controls select,.score-controls button').forEach(element=>element.disabled=readonly);
   renderNavigation();
   if(readonly&&$('#settingsSection')&&!$('#settingsSection').classList.contains('hidden'))showLogin();
+  if(guest&&$('#seasonSection')&&!$('#seasonSection').classList.contains('hidden'))showTournament();
 }
 function replaceCloudPanelHtml(panel,html){
   const active=document.activeElement,activeId=active?.id||'',selection=active&&typeof active.selectionStart==='number'?[active.selectionStart,active.selectionEnd]:null;
@@ -364,7 +371,7 @@ window.T20Cloud={
     try{await this.stopPresence();if(this.client)await this.client.auth.signOut()}catch(e){console.warn('Abmeldung fehlgeschlagen',e)}
     localStorage.removeItem('triple20_admin_uid');
     this.pendingAuthSession=null;this.session=null;this.user=null;this.isAdmin=false;this.profile=null;this.avatarSignedUrl='';this.authMessage='';this.authError='';
-    renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only');showLogin();
+    renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only');showTournament();
   },
   async fetchCloud(){const client=requireSupabaseClient();const {data,error}=await client.from('triple20_data').select('data_key,data,updated_at').in('data_key',CLOUD_DATA_KEYS);if(error)throw error;this.online=true;return data||[]},
   rowsToObject(rows){return Object.fromEntries(CLOUD_DATA_KEYS.map(k=>{const row=rows.find(r=>r.data_key===k);if(row?.updated_at)this.cloudUpdated[k]=row.updated_at;return[k,row?row.data:null]}))},
@@ -790,9 +797,11 @@ function exportStandingsCsv(){const season=selectedSeason();if(!season)return;co
 
 function hideMainSections(){['dashboardSection','authSection','settingsSection','seasonSection','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
 function renderNavigation(){
+  const admin=isAdmin(),member=isMember(),guest=!admin&&!member;
   $('.club-settings-block')?.classList.remove('hidden');
-  $('#showSettingsBtn')?.classList.toggle('hidden',!isAdmin());
-  const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=isAdmin()?'Konto':isMember()?'Mein Profil':'Anmelden';
+  $('#showSettingsBtn')?.classList.toggle('hidden',!admin);
+  $('#showSeasonBtn')?.classList.toggle('hidden',guest);
+  const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=admin?'Konto':member?'Mein Profil':'Anmelden';
 }
 function renderDashboard(){
   if(!$('#dashboardCards')||!$('#dashboardPanel'))return;
@@ -884,13 +893,13 @@ function renderBracket(){
 }
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#matchesView').classList.toggle('hidden',b.dataset.tab!=='matches');$('#bracketView').classList.toggle('hidden',b.dataset.tab!=='bracket');$('#tableView').classList.toggle('hidden',b.dataset.tab!=='table')}));
 function showTournament(){hideMainSections();renderTournament();if(!state.started)$('#setupSection').classList.remove('hidden');else $('#tournamentSection').classList.remove('hidden');renderNavigation()}
-function showSeason(){if(!isClubMode()){showDashboard();return}hideMainSections();$('#seasonSection').classList.remove('hidden');renderSeasonView();renderNavigation()}
+function showSeason(){if(!isMember()&&!isAdmin()){showTournament();return}if(!isClubMode()){showDashboard();return}hideMainSections();$('#seasonSection').classList.remove('hidden');renderSeasonView();renderNavigation()}
 function fillSeasonForm(){const h=currentHalfYear();$('#seasonName').value=h.name;$('#seasonStart').value=h.start;$('#seasonEnd').value=h.end;$('#seasonDrops').value='0'}
 function closeMenu(){const hero=$('.hero'),btn=$('#menuToggle');hero?.classList.remove('nav-open');if(btn)btn.setAttribute('aria-expanded','false')}
-document.addEventListener('submit',e=>{if(!isAdmin()&&e.target.closest('#settingsForm,#seasonForm,#memberForm,#manualTournamentForm')){e.preventDefault();assertAdminAction()}},true);
+document.addEventListener('submit',e=>{if(!isAdmin()&&e.target.closest('#settingsForm,#seasonForm,#memberForm,#manualTournamentForm,#playerForm')){e.preventDefault();assertAdminAction()}},true);
 document.addEventListener('click',e=>{
   if(isAdmin())return;
-  const blocked=e.target.closest('#addToSeasonBtn,#seasonActionSelect,[data-remove-member],[data-delete-tournament],#toggleManualTournament');
+  const blocked=e.target.closest('#addToSeasonBtn,#seasonActionSelect,[data-remove-member],[data-delete-tournament],#toggleManualTournament,#startBtn,#resetBtn,#liveResetBtn,#finishReset,[data-remove],[data-save],[data-finals]');
   if(blocked){e.preventDefault();e.stopPropagation();assertAdminAction()}
 },true);
 $('#menuToggle')?.addEventListener('click',e=>{e.stopPropagation();const hero=$('.hero'),open=!hero.classList.contains('nav-open');hero.classList.toggle('nav-open',open);e.currentTarget.setAttribute('aria-expanded',String(open))});
