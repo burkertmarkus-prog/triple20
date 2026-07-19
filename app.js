@@ -179,9 +179,14 @@ async function handleBackupImport(file){
 const AvatarCrop={bitmap:null,zoom:1,panX:0,panY:0,drag:null};
 function closeAvatarCrop(){AvatarCrop.bitmap?.close?.();Object.assign(AvatarCrop,{bitmap:null,zoom:1,panX:0,panY:0,drag:null});$('#avatarCropOverlay')?.remove()}
 async function decodeAvatarImage(file){
-  try{return await createImageBitmap(file)}catch{
-    return await new Promise((resolve,reject)=>{const url=URL.createObjectURL(file),image=new Image();image.onload=()=>{URL.revokeObjectURL(url);resolve(image)};image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Das ausgewählte Bildformat konnte nicht geöffnet werden.'))};image.src=url});
-  }
+  const asImage=blob=>new Promise((resolve,reject)=>{const url=URL.createObjectURL(blob),image=new Image();image.onload=()=>{URL.revokeObjectURL(url);resolve(image)};image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Bild konnte nicht direkt geöffnet werden.'))};image.src=url});
+  try{return await createImageBitmap(file)}catch{}
+  try{return await asImage(file)}catch{}
+  const sources=['https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js','https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js'];let loadError=null;
+  if(typeof window.heic2any!=='function')for(const source of sources){try{await loadScript(source);if(typeof window.heic2any==='function')break}catch(error){loadError=error}}
+  if(typeof window.heic2any!=='function')throw loadError||new Error('Die iPhone-Fotokonvertierung konnte nicht geladen werden.');
+  const converted=await window.heic2any({blob:file,toType:'image/jpeg',quality:.9}),jpeg=Array.isArray(converted)?converted[0]:converted;
+  try{return await createImageBitmap(jpeg)}catch{return await asImage(jpeg)}
 }
 function drawAvatarCrop(){
   const canvas=$('#avatarCropCanvas'),bitmap=AvatarCrop.bitmap;if(!canvas||!bitmap)return;
@@ -191,7 +196,7 @@ function drawAvatarCrop(){
 }
 async function openAvatarCrop(file){
   if(!file||(!file.type.startsWith('image/')&&!/\.(heic|heif|jpe?g|png|webp)$/i.test(file.name||''))){T20Cloud.authError='Bitte eine Bilddatei auswählen.';renderCloudPanel();return}
-  if(file.size>25*1024*1024){T20Cloud.authError='Das Ausgangsbild ist größer als 25 MB.';renderCloudPanel();return}
+  if(file.size>50*1024*1024){T20Cloud.authError='Das Ausgangsbild ist größer als 50 MB.';renderCloudPanel();return}
   closeAvatarCrop();AvatarCrop.bitmap=await decodeAvatarImage(file);AvatarCrop.zoom=1;AvatarCrop.panX=0;AvatarCrop.panY=0;
   document.body.insertAdjacentHTML('beforeend',`<div id="avatarCropOverlay" class="avatar-crop-overlay" role="dialog" aria-modal="true" aria-labelledby="avatarCropTitle"><section class="avatar-crop-dialog"><h3 id="avatarCropTitle">Profilbild ausrichten</h3><p>Verschiebe das Bild mit dem Finger oder der Maus. Mit dem Regler kannst du hineinzoomen.</p><div class="avatar-crop-frame"><canvas id="avatarCropCanvas" width="512" height="512"></canvas></div><label>Bildgröße<input id="avatarCropZoom" type="range" min="1" max="3" value="1" step="0.01"></label><div class="avatar-crop-actions"><button id="cancelAvatarCropBtn" class="secondary" type="button">Abbrechen</button><button id="saveAvatarCropBtn" class="primary" type="button">AUSSCHNITT ÜBERNEHMEN</button></div></section></div>`);
   const canvas=$('#avatarCropCanvas');drawAvatarCrop();
