@@ -149,21 +149,4 @@ main{padding-top:34px}
 }
 
 /* Sichtbarkeit nach Benutzerrolle */
-body.view-only #playerForm,
-body.view-only #startBtn,
-body.view-only #resetBtn,
-body.view-only #liveResetBtn,
-body.view-only #finishReset,
-body.view-only #qualificationCard .final-actions{display:none!important}
-body.view-only #playerList .player button{display:none!important}
-body.view-only #tournamentSection .score-controls{display:none!important}
-body.view-only #tournamentSection .match{grid-template-columns:100px 1fr}
-body.guest-mode #setupSection .tournament-actions,
-body.guest-mode #setupSection>.grid,
-body.guest-mode #setupSection>#groupOptions,
-body.guest-mode #setupSection>#swissOptions,
-body.guest-mode #setupSection .players-head,
-body.guest-mode #setupSection #playerList{display:none!important}
-body.guest-mode #setupSection:after{content:"Aktuell läuft kein Turnier. Melde dich an, um die Saisonwertung und Spielerprofile zu sehen.";display:block;padding:18px;border:1px solid #cfe0f5;border-radius:14px;background:#f5f9ff;color:#65758b;font-weight:800;line-height:1.5}
 body.member-mode #seasonStandings .link-btn{color:var(--blue);font-weight:900}
-@media(max-width:700px){body.view-only #tournamentSection .match{grid-template-columns:1fr}}
