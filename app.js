@@ -178,6 +178,11 @@ async function handleBackupImport(file){
 }
 const AvatarCrop={bitmap:null,zoom:1,panX:0,panY:0,drag:null};
 function closeAvatarCrop(){AvatarCrop.bitmap?.close?.();Object.assign(AvatarCrop,{bitmap:null,zoom:1,panX:0,panY:0,drag:null});$('#avatarCropOverlay')?.remove()}
+async function decodeAvatarImage(file){
+  try{return await createImageBitmap(file)}catch{
+    return await new Promise((resolve,reject)=>{const url=URL.createObjectURL(file),image=new Image();image.onload=()=>{URL.revokeObjectURL(url);resolve(image)};image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Das ausgewählte Bildformat konnte nicht geöffnet werden.'))};image.src=url});
+  }
+}
 function drawAvatarCrop(){
   const canvas=$('#avatarCropCanvas'),bitmap=AvatarCrop.bitmap;if(!canvas||!bitmap)return;
   const size=canvas.width,scale=Math.max(size/bitmap.width,size/bitmap.height)*AvatarCrop.zoom,maxX=Math.max(0,(bitmap.width*scale-size)/2),maxY=Math.max(0,(bitmap.height*scale-size)/2);
@@ -187,7 +192,7 @@ function drawAvatarCrop(){
 async function openAvatarCrop(file){
   if(!['image/jpeg','image/png','image/webp'].includes(file?.type)){T20Cloud.authError='Bitte ein JPEG-, PNG- oder WebP-Bild auswählen.';renderCloudPanel();return}
   if(file.size>10*1024*1024){T20Cloud.authError='Das Ausgangsbild ist größer als 10 MB.';renderCloudPanel();return}
-  closeAvatarCrop();AvatarCrop.bitmap=await createImageBitmap(file,{imageOrientation:'from-image'});AvatarCrop.zoom=1;AvatarCrop.panX=0;AvatarCrop.panY=0;
+  closeAvatarCrop();AvatarCrop.bitmap=await decodeAvatarImage(file);AvatarCrop.zoom=1;AvatarCrop.panX=0;AvatarCrop.panY=0;
   document.body.insertAdjacentHTML('beforeend',`<div id="avatarCropOverlay" class="avatar-crop-overlay" role="dialog" aria-modal="true" aria-labelledby="avatarCropTitle"><section class="avatar-crop-dialog"><h3 id="avatarCropTitle">Profilbild ausrichten</h3><p>Verschiebe das Bild mit dem Finger oder der Maus. Mit dem Regler kannst du hineinzoomen.</p><div class="avatar-crop-frame"><canvas id="avatarCropCanvas" width="512" height="512"></canvas></div><label>Bildgröße<input id="avatarCropZoom" type="range" min="1" max="3" value="1" step="0.01"></label><div class="avatar-crop-actions"><button id="cancelAvatarCropBtn" class="secondary" type="button">Abbrechen</button><button id="saveAvatarCropBtn" class="primary" type="button">AUSSCHNITT ÜBERNEHMEN</button></div></section></div>`);
   const canvas=$('#avatarCropCanvas');drawAvatarCrop();
   canvas.addEventListener('pointerdown',event=>{canvas.setPointerCapture(event.pointerId);AvatarCrop.drag={id:event.pointerId,x:event.clientX,y:event.clientY}});
