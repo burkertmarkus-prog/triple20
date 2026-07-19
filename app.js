@@ -176,6 +176,30 @@ async function handleBackupImport(file){
   await T20Cloud.syncAll({force:true});
   alert('Backup wurde lokal eingespielt und online gespeichert.');
 }
+const AvatarCrop={bitmap:null,zoom:1,panX:0,panY:0,drag:null};
+function closeAvatarCrop(){AvatarCrop.bitmap?.close?.();Object.assign(AvatarCrop,{bitmap:null,zoom:1,panX:0,panY:0,drag:null});$('#avatarCropOverlay')?.remove()}
+function drawAvatarCrop(){
+  const canvas=$('#avatarCropCanvas'),bitmap=AvatarCrop.bitmap;if(!canvas||!bitmap)return;
+  const size=canvas.width,scale=Math.max(size/bitmap.width,size/bitmap.height)*AvatarCrop.zoom,maxX=Math.max(0,(bitmap.width*scale-size)/2),maxY=Math.max(0,(bitmap.height*scale-size)/2);
+  AvatarCrop.panX=Math.max(-maxX,Math.min(maxX,AvatarCrop.panX));AvatarCrop.panY=Math.max(-maxY,Math.min(maxY,AvatarCrop.panY));
+  const context=canvas.getContext('2d');context.clearRect(0,0,size,size);context.drawImage(bitmap,(size-bitmap.width*scale)/2+AvatarCrop.panX,(size-bitmap.height*scale)/2+AvatarCrop.panY,bitmap.width*scale,bitmap.height*scale);
+}
+async function openAvatarCrop(file){
+  if(!['image/jpeg','image/png','image/webp'].includes(file?.type)){T20Cloud.authError='Bitte ein JPEG-, PNG- oder WebP-Bild auswählen.';renderCloudPanel();return}
+  if(file.size>10*1024*1024){T20Cloud.authError='Das Ausgangsbild ist größer als 10 MB.';renderCloudPanel();return}
+  closeAvatarCrop();AvatarCrop.bitmap=await createImageBitmap(file,{imageOrientation:'from-image'});AvatarCrop.zoom=1;AvatarCrop.panX=0;AvatarCrop.panY=0;
+  document.body.insertAdjacentHTML('beforeend',`<div id="avatarCropOverlay" class="avatar-crop-overlay" role="dialog" aria-modal="true" aria-labelledby="avatarCropTitle"><section class="avatar-crop-dialog"><h3 id="avatarCropTitle">Profilbild ausrichten</h3><p>Verschiebe das Bild mit dem Finger oder der Maus. Mit dem Regler kannst du hineinzoomen.</p><div class="avatar-crop-frame"><canvas id="avatarCropCanvas" width="512" height="512"></canvas></div><label>Bildgröße<input id="avatarCropZoom" type="range" min="1" max="3" value="1" step="0.01"></label><div class="avatar-crop-actions"><button id="cancelAvatarCropBtn" class="secondary" type="button">Abbrechen</button><button id="saveAvatarCropBtn" class="primary" type="button">AUSSCHNITT ÜBERNEHMEN</button></div></section></div>`);
+  const canvas=$('#avatarCropCanvas');drawAvatarCrop();
+  canvas.addEventListener('pointerdown',event=>{canvas.setPointerCapture(event.pointerId);AvatarCrop.drag={id:event.pointerId,x:event.clientX,y:event.clientY}});
+  canvas.addEventListener('pointermove',event=>{if(AvatarCrop.drag?.id!==event.pointerId)return;const ratio=canvas.width/canvas.getBoundingClientRect().width;AvatarCrop.panX+=(event.clientX-AvatarCrop.drag.x)*ratio;AvatarCrop.panY+=(event.clientY-AvatarCrop.drag.y)*ratio;AvatarCrop.drag.x=event.clientX;AvatarCrop.drag.y=event.clientY;drawAvatarCrop()});
+  const end=event=>{if(AvatarCrop.drag?.id===event.pointerId)AvatarCrop.drag=null};canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);
+  $('#avatarCropZoom').addEventListener('input',event=>{AvatarCrop.zoom=+event.target.value;drawAvatarCrop()});
+}
+async function saveAvatarCrop(){
+  const canvas=$('#avatarCropCanvas');if(!canvas||!AvatarCrop.bitmap)return;
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.86));if(!blob)return;
+  closeAvatarCrop();await T20Cloud.uploadAvatar(new File([blob],'avatar.webp',{type:'image/webp'}));
+}
 const T20TabCoord={
   id:globalThis.crypto?.randomUUID?.()||`tab-${Date.now()}-${Math.random()}`,channel:null,pendingResolve:null,pendingTimer:null,
   init(){
@@ -920,7 +944,8 @@ $('#cloudAdminPanel').addEventListener('click',e=>{
   if(e.target.id==='loadCloudBtn')T20Cloud.loadCloudConfirmed();
   if(e.target.id==='forceCloudBtn'){if(confirm('Lokale Daten wirklich in der Cloud überschreiben?'))T20Cloud.syncAll({force:true})}
 });
-$('#cloudAdminPanel').addEventListener('change',e=>{if(e.target.id==='backupImportInput')handleBackupImport(e.target.files?.[0]);if(e.target.id==='profileAvatarInput'&&e.target.files?.[0])T20Cloud.uploadAvatar(e.target.files[0])});
+$('#cloudAdminPanel').addEventListener('change',e=>{if(e.target.id==='backupImportInput')handleBackupImport(e.target.files?.[0]);if(e.target.id==='profileAvatarInput'&&e.target.files?.[0])openAvatarCrop(e.target.files[0]).catch(error=>{T20Cloud.authError=`Bild konnte nicht geöffnet werden: ${error?.message||'Unbekannter Fehler'}`;renderCloudPanel()})});
+document.addEventListener('click',e=>{if(e.target.id==='cancelAvatarCropBtn'||e.target.id==='avatarCropOverlay')closeAvatarCrop();if(e.target.id==='saveAvatarCropBtn')saveAvatarCrop()});
 $('#showTournamentBtn').addEventListener('click',showTournament);
 $('#showSeasonBtn').addEventListener('click',showSeason);
 $('#showSettingsBtn').addEventListener('click',showSettings);
