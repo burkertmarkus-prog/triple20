@@ -159,3 +159,5 @@ body.member-mode #seasonStandings .link-btn{color:var(--blue);font-weight:900}
 .avatar-crop-dialog>label{display:block;color:#102039}.avatar-crop-dialog input[type=range]{padding:0;accent-color:var(--blue)}
 .avatar-crop-actions{display:grid;grid-template-columns:1fr 1.5fr;gap:12px;margin-top:18px}.avatar-crop-actions button{width:100%;min-height:52px;margin:0}.avatar-crop-actions .primary{justify-content:center}
 @media(max-width:520px){.avatar-crop-dialog{padding:18px}.avatar-crop-actions{grid-template-columns:1fr}.avatar-crop-frame{width:min(290px,76vw)}}
+.member-link-control{display:flex;align-items:center;gap:8px}.member-link-control select{min-width:210px;margin:0;padding:10px}.member-link-control button{margin:0;white-space:nowrap}.member-linked{color:#178548!important;font-weight:850}
+@media(max-width:900px){.member-row{grid-template-columns:1fr}.member-link-control{display:grid;grid-template-columns:1fr auto}.member-link-control select{min-width:0}.member-row .danger{width:100%}}
