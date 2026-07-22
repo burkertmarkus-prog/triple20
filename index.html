@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260722-4">
+  <link rel="stylesheet" href="styles.css?v=20260722-5">
 </head>
 <body>
   <header class="hero">
@@ -91,6 +91,8 @@
       <div class="export-actions"><button id="exportSeasonJsonBtn" class="secondary">Saison als JSON exportieren</button><button id="exportStandingsCsvBtn" class="secondary">Rangliste als CSV exportieren</button></div>
     </section>
 
+    <nav id="tournamentSubnav" class="tournament-subnav hidden" aria-label="Turnieransicht"></nav>
+    <section id="memberLiveEmpty" class="card slim-card member-live-empty hidden"><h3>Derzeit läuft kein Vereinsturnier</h3><p>Sobald die Turnierleitung ein Turnier startet, kannst du hier den Spielplan und die Tabelle ansehen.</p></section>
     <section class="setup card" id="setupSection">
       <div class="section-title"><div><h2>Turnier einrichten</h2><p>Die wichtigsten Eckdaten</p></div></div>
       <div class="tournament-actions"><button id="resetBtn" class="secondary" type="button">Neues Turnier</button><p>Offline spielbar: Einzelturniere bleiben lokal auf diesem Gerät und werden nicht automatisch in eine Saison übernommen.</p></div>
@@ -121,6 +123,6 @@
   </main>
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260722-4"></script>
+  <script src="app.js?v=20260722-7"></script>
 </body>
 </html>
