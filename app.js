@@ -130,6 +130,7 @@ function renderReadonlyMode(){
   document.body.classList.toggle('member-mode',member);
   document.body.classList.toggle('guest-mode',guest);
   ['seasonActionSelect','addToSeasonBtn'].forEach(id=>{$('#'+id)?.classList.toggle('hidden',readonly)});
+  document.querySelectorAll('#setupSection input,#setupSection select,#setupSection button').forEach(control=>{control.disabled=readonly;control.setAttribute('aria-disabled',String(readonly))});
   document.querySelectorAll('.score-controls select,.score-controls button').forEach(control=>{control.disabled=readonly;control.setAttribute('aria-disabled',String(readonly))});
   $('#showSettingsBtn')?.classList.toggle('hidden',!admin);
   $('#showSeasonBtn')?.classList.toggle('hidden',guest);
@@ -296,6 +297,7 @@ window.T20Cloud={
       if(this.user&&!this.isAdmin)this.profile=await this.loadProfile();
       if(this.user)this.startPresence();
       renderReadonlyMode();renderCloudPanel();
+      if(!$('#setupSection')?.classList.contains('hidden')||!$('#tournamentSection')?.classList.contains('hidden'))showTournament();
       if(this.user&&!this.isAdmin){setSyncStatus('Angemeldet – Mitglied','view-only');if(this.authRedirectPending){this.authRedirectPending=false;await this.finishAuthRedirect()}return}
       setSyncStatus(this.isAdmin?'Online – aktuell':'Nur Ansicht',this.isAdmin?'online':'view-only');
       if(loadCloud)await this.loadCloud({initial:true});
@@ -567,7 +569,8 @@ function champion(){
   return active.length===1&&state.matches.every(m=>m.sa!==null)?active[0]:'';
 }
 function renderTournament(){
-  if(!state.started){$('#setupSection').classList.remove('hidden');$('#tournamentSection').classList.add('hidden');renderReadonlyMode();return}
+  const liveHiddenFromGuest=state.started&&!T20Cloud.user;
+  if(!state.started||liveHiddenFromGuest){$('#setupSection').classList.remove('hidden');$('#tournamentSection').classList.add('hidden');if(liveHiddenFromGuest){$('#playerList').innerHTML='';$('#playerCount').textContent='0 Spieler eingetragen';$('#registeredPlayerChoices')?.classList.add('hidden');$('#startBtn').disabled=true}renderReadonlyMode();return}
   const noBracket=state.settings.mode==='roundrobin'||state.settings.mode==='swiss';
   $('#setupSection').classList.add('hidden');$('#tournamentSection').classList.remove('hidden');$('#bracketTab').classList.toggle('hidden',noBracket);
   if(noBracket&&$('#bracketTab').classList.contains('active')){document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelector('[data-tab="matches"]').classList.add('active');$('#matchesView').classList.remove('hidden');$('#bracketView').classList.add('hidden');$('#tableView').classList.add('hidden')}
@@ -772,7 +775,7 @@ function calculateSeasonStandings(season=selectedSeason()){
   }
   return [...players.values()].map(player=>{
     const entries=tournaments.map(t=>{const r=(t.results||[]).find(x=>resultIdentity(x.name,x.profileId||t.playerProfileIds?.[x.name]||memberIdForName(x.name))===player.key);return r?{tournamentId:t.id,date:t.date,name:t.name,present:true,points:r.points||0,wins:r.wins||0,losses:r.losses||0,max180:r.max180||0,checkout:r.checkout||0,rank:r.rank||0}:{tournamentId:t.id,date:t.date,name:t.name,present:false,points:0,wins:0,losses:0,max180:0,checkout:0,rank:0}});
-    const dropped=calculateDropResults(entries,season.dropCount||0),used=dropped.filter(e=>!e.dropped),played=entries.filter(e=>e.present),wins=entries.reduce((sum,e)=>sum+e.wins,0),losses=entries.reduce((sum,e)=>sum+e.losses,0),max180=entries.reduce((sum,e)=>sum+e.max180,0),checkout=Math.max(0,...entries.map(e=>e.checkout||0));
+    const configuredDrops=season.dropCount||0,effectiveDrops=tournaments.length>configuredDrops?configuredDrops:0,dropped=calculateDropResults(entries,effectiveDrops),used=dropped.filter(e=>!e.dropped),played=entries.filter(e=>e.present),wins=entries.reduce((sum,e)=>sum+e.wins,0),losses=entries.reduce((sum,e)=>sum+e.losses,0),max180=entries.reduce((sum,e)=>sum+e.max180,0),checkout=Math.max(0,...entries.map(e=>e.checkout||0));
     return{name:player.name,profileId:player.profileId,totalPoints:entries.reduce((sum,e)=>sum+e.points,0),cleanPoints:used.reduce((sum,e)=>sum+e.points,0),played:played.length,wins,losses,max180,checkout,dropResults:dropped.filter(e=>e.dropped),entries:dropped,participation:tournaments.length?played.length/tournaments.length:0,winRate:wins+losses?wins/(wins+losses):0};
   }).sort((a,b)=>b.cleanPoints-a.cleanPoints||b.wins-a.wins||b.played-a.played||a.name.localeCompare(b.name,'de'));
 }
