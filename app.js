@@ -225,14 +225,20 @@ const T20TabCoord={
   }
 };
 T20TabCoord.init();
+function authRedirectErrorMessage(){
+  const query=new URLSearchParams(location.search),hash=new URLSearchParams(location.hash.replace(/^#/,'')),description=query.get('error_description')||hash.get('error_description'),code=query.get('error_code')||hash.get('error_code')||query.get('error')||hash.get('error');
+  if(!description&&!code)return'';
+  return `Der Anmeldelink ist ungültig, abgelaufen oder wurde bereits verwendet. Bitte fordere einen neuen Link an.${description?` (${description.replaceAll('+',' ')})`:''}`;
+}
+function cleanAuthRedirectUrl(){
+  const url=new URL(location.href),authKeys=['code','token_hash','type','error','error_code','error_description'];
+  authKeys.forEach(key=>url.searchParams.delete(key));
+  if(/[=#&](access_token|refresh_token|expires_in|token_type|error|error_code|error_description)=/.test(url.hash))url.hash='';
+  history.replaceState({},document.title,url.pathname+(url.searchParams.size?`?${url.searchParams}`:'')+url.hash);
+}
 window.T20Cloud={
-  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,loginBusy:false,magicLinkBusy:false,profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),authMessage:'',authError:'',loadBusy:false,pendingAuthSession:null,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token)=/.test(location.href),
-  async finishAuthRedirect(){
-    const otherTab=await T20TabCoord.hasOtherTab();
-    if(!otherTab){showLogin();return}
-    this.authHandoffActive=true;showLogin();renderCloudPanel();
-    clearTimeout(this.authHandoffCloseTimer);this.authHandoffCloseTimer=setTimeout(()=>{try{window.close()}catch{}},900);
-  },
+  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,loginBusy:false,magicLinkBusy:false,profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),authMessage:'',authError:'',loadBusy:false,pendingAuthSession:null,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
+  async finishAuthRedirect(){cleanAuthRedirectUrl();this.authHandoffActive=false;this.authMessage='Anmeldung erfolgreich. Du kannst diesen Tab weiterverwenden.';showLogin();renderCloudPanel()},
   async init(){
     if(this.initPromise)return this.initPromise;
     this.initPromise=(async()=>{
@@ -248,7 +254,7 @@ window.T20Cloud={
           this.authListenerStarted=true;
         }
         this.ready=true;
-        await this.loadPublicMembers();
+        try{await this.loadPublicMembers()}catch(error){console.warn('Öffentliche Mitgliederliste konnte beim Start nicht geladen werden:',error)}
         renderCloudPanel();
         await this.restoreSessionAfterInit();
         this.startPolling();
@@ -267,20 +273,20 @@ window.T20Cloud={
       let {data:{session},error}=await withTimeout(this.client.auth.getSession(),5000,'Gespeicherte Sitzung konnte nicht rechtzeitig geladen werden.');
       if(error)throw error;
       if(!session&&this.authRedirectPending){
-        for(let attempt=0;attempt<20&&!session;attempt++){
-          await new Promise(resolve=>setTimeout(resolve,150));
+        for(let attempt=0;attempt<40&&!session;attempt++){
+          await new Promise(resolve=>setTimeout(resolve,250));
           const result=await this.client.auth.getSession();
           if(result.error)throw result.error;
           session=result.data.session;
         }
+        if(!session){this.authError=authRedirectErrorMessage()||'Der Anmeldelink konnte nicht bestätigt werden. Er ist möglicherweise abgelaufen oder bereits verwendet. Bitte fordere einen neuen Link an.';this.authMessage='';this.authRedirectPending=false;cleanAuthRedirectUrl();await this.setSession(null);showLogin();renderCloudPanel();return}
       }
       await this.setSession(session||null);
       renderCloudPanel();
       this.loadCloud({initial:true}).catch(e=>console.warn('Cloud-Startladen fehlgeschlagen',e));
     }catch(error){
       console.warn('Session nach Start konnte nicht geladen werden:',error);
-      setSyncStatus('Nur Ansicht','view-only');
-      renderCloudPanel();
+      this.authError=authRedirectErrorMessage()||`Anmeldung konnte nicht abgeschlossen werden: ${error?.message||'Bitte fordere einen neuen Link an.'}`;this.authMessage='';this.authRedirectPending=false;cleanAuthRedirectUrl();setSyncStatus('Nur Ansicht','view-only');showLogin();renderCloudPanel();
     }
   },
   async processPendingAuthSession(){if(this.authBusy){setTimeout(()=>this.processPendingAuthSession(),0);return}const session=this.pendingAuthSession;this.pendingAuthSession=null;await this.setSession(session||null)},
@@ -293,8 +299,8 @@ window.T20Cloud={
       this.session=session;this.user=session?.user||null;this.isAdmin=false;this.profile=null;this.avatarSignedUrl='';
       if(this.user)this.isAdmin=await this.checkAdmin(this.user.id);
       if(this.isAdmin&&localStorage.getItem('triple20_identity_pending')==='1'){this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');localStorage.removeItem('triple20_identity_pending')}
-      if(this.user&&this.isAdmin)await this.loadAdminProfiles();
-      if(this.user&&!this.isAdmin)this.profile=await this.loadProfile();
+      if(this.user&&this.isAdmin)try{await this.loadAdminProfiles()}catch(error){console.warn('Mitgliederprofile konnten nach der Anmeldung nicht geladen werden:',error)}
+      if(this.user&&!this.isAdmin)try{this.profile=await this.loadProfile()}catch(error){console.warn('Profil konnte nach der Anmeldung nicht geladen werden:',error);this.profile={id:this.user.id,display_name:'',nickname:'',avatar_url:null};this.authError='Du bist angemeldet, aber dein Profil konnte noch nicht geladen werden. Bitte aktualisiere die Seite.'}
       if(this.user)this.startPresence();
       renderReadonlyMode();renderCloudPanel();
       if(!$('#setupSection')?.classList.contains('hidden')||!$('#tournamentSection')?.classList.contains('hidden'))showTournament();
@@ -362,7 +368,7 @@ window.T20Cloud={
   },
   async sendMagicLink(email){
     if(this.magicLinkBusy)return;this.magicLinkBusy=true;this.authMessage='';this.authError='';renderCloudPanel();
-    try{if(!this.ready||!this.client)await this.init();if(!this.client)throw new Error('Supabase konnte nicht initialisiert werden.');const {error}=await withTimeout(this.client.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:TRIPLE20_PUBLIC_URL}}),15000,'Der Anmeldelink konnte nicht rechtzeitig versendet werden.');if(error)throw error;this.authMessage='Wenn die Adresse freigeschaltet ist, wurde ein Anmeldelink gesendet. Bitte prüfe auch den Spam-Ordner.'}
+    try{if(!this.ready||!this.client)await this.init();if(!this.client)throw new Error('Supabase konnte nicht initialisiert werden.');const {error}=await withTimeout(this.client.auth.signInWithOtp({email:email.trim().toLowerCase(),options:{shouldCreateUser:false,emailRedirectTo:TRIPLE20_PUBLIC_URL}}),15000,'Der Anmeldelink konnte nicht rechtzeitig versendet werden.');if(error)throw error;this.authMessage='Der Anmeldelink wurde angefordert. Bitte verwende immer den neuesten Link und öffne ihn innerhalb einer Stunde. Prüfe auch den Spam-Ordner.'}
     catch(error){console.error('Mitglieder-Anmeldelink fehlgeschlagen:',error);this.authMessage='';this.authError=`Anmeldelink konnte nicht gesendet werden: ${error?.message||'Bitte später erneut versuchen.'}`}
     finally{this.magicLinkBusy=false;renderCloudPanel()}
   },
@@ -462,6 +468,7 @@ function currentMemberNickname(id,fallback=''){
 }
 function memberAvatarUrl(id){return T20Cloud.publicMemberAvatars?.[id]||T20Cloud.adminProfileAvatars?.[id]||(T20Cloud.user?.id===id?T20Cloud.avatarSignedUrl:'')||''}
 function resultIdentity(name,id=''){return id?`id:${id}`:`name:${(name||'').trim().toLowerCase()}`}
+function normalizedPlayerName(name){return (name||'').trim().replace(/\s+/g,' ').toLowerCase()}
 function linkKnownMemberIds(){
   if(!T20Cloud.publicMembers?.length)return false;
   let changed=false;
@@ -765,16 +772,18 @@ function calculateDropResults(entries,dropCount=0){
 }
 function calculateSeasonStandings(season=selectedSeason()){
   if(!isClubMode()||!season)return[];
-  const tournaments=season.tournaments||[],players=new Map();
-  const addPlayer=(name,id='')=>{const key=resultIdentity(name,id),display=id?currentMemberNickname(id,name):name;if(!players.has(key))players.set(key,{key,name:display,profileId:id})};
-  for(const name of season.members||[])addPlayer(name,season.memberProfileIds?.[name]||memberIdForName(name));
-  for(const name of season.players||[])addPlayer(name,season.memberProfileIds?.[name]||memberIdForName(name));
+  const tournaments=season.tournaments||[],players=new Map(),knownIds=new Map();
+  Object.entries(season.memberProfileIds||{}).forEach(([name,id])=>{if(id){knownIds.set(normalizedPlayerName(name),id);knownIds.set(normalizedPlayerName(currentMemberNickname(id,name)),id)}});
+  for(const tournament of tournaments){Object.entries(tournament.playerProfileIds||{}).forEach(([name,id])=>{if(id){knownIds.set(normalizedPlayerName(name),id);knownIds.set(normalizedPlayerName(currentMemberNickname(id,name)),id)}});for(const result of tournament.results||[])if(result.profileId){knownIds.set(normalizedPlayerName(result.name),result.profileId);knownIds.set(normalizedPlayerName(currentMemberNickname(result.profileId,result.name)),result.profileId)}}
+  const resolveId=(name,id='')=>id||knownIds.get(normalizedPlayerName(name))||memberIdForName(name),addPlayer=(name,id='')=>{id=resolveId(name,id);const display=id?currentMemberNickname(id,name):name,key=resultIdentity(display,id),displayKey=resultIdentity(display),existing=players.get(key)||players.get(displayKey)||[...players.values()].find(player=>normalizedPlayerName(player.name)===normalizedPlayerName(display));if(existing){if(id&&!existing.profileId){players.delete(existing.key);existing.key=key;existing.profileId=id;existing.name=display;players.set(key,existing)}return}players.set(key,{key,name:display,profileId:id})};
+  for(const name of season.members||[])addPlayer(name,season.memberProfileIds?.[name]);
+  for(const name of season.players||[])addPlayer(name,season.memberProfileIds?.[name]);
   for(const tournament of tournaments){
     for(const name of tournament.players||[])addPlayer(name,tournament.playerProfileIds?.[name]||memberIdForName(name));
     for(const result of tournament.results||[])addPlayer(result.name,result.profileId||tournament.playerProfileIds?.[result.name]||memberIdForName(result.name));
   }
   return [...players.values()].map(player=>{
-    const entries=tournaments.map(t=>{const r=(t.results||[]).find(x=>resultIdentity(x.name,x.profileId||t.playerProfileIds?.[x.name]||memberIdForName(x.name))===player.key);return r?{tournamentId:t.id,date:t.date,name:t.name,present:true,points:r.points||0,wins:r.wins||0,losses:r.losses||0,max180:r.max180||0,checkout:r.checkout||0,rank:r.rank||0}:{tournamentId:t.id,date:t.date,name:t.name,present:false,points:0,wins:0,losses:0,max180:0,checkout:0,rank:0}});
+    const entries=tournaments.map(t=>{const r=(t.results||[]).find(x=>{const id=resolveId(x.name,x.profileId||t.playerProfileIds?.[x.name]),display=id?currentMemberNickname(id,x.name):x.name;return player.profileId&&id?player.profileId===id:normalizedPlayerName(player.name)===normalizedPlayerName(display)});return r?{tournamentId:t.id,date:t.date,name:t.name,present:true,points:r.points||0,wins:r.wins||0,losses:r.losses||0,max180:r.max180||0,checkout:r.checkout||0,rank:r.rank||0}:{tournamentId:t.id,date:t.date,name:t.name,present:false,points:0,wins:0,losses:0,max180:0,checkout:0,rank:0}});
     const configuredDrops=season.dropCount||0,effectiveDrops=tournaments.length>configuredDrops?configuredDrops:0,dropped=calculateDropResults(entries,effectiveDrops),used=dropped.filter(e=>!e.dropped),played=entries.filter(e=>e.present),wins=entries.reduce((sum,e)=>sum+e.wins,0),losses=entries.reduce((sum,e)=>sum+e.losses,0),max180=entries.reduce((sum,e)=>sum+e.max180,0),checkout=Math.max(0,...entries.map(e=>e.checkout||0));
     return{name:player.name,profileId:player.profileId,totalPoints:entries.reduce((sum,e)=>sum+e.points,0),cleanPoints:used.reduce((sum,e)=>sum+e.points,0),played:played.length,wins,losses,max180,checkout,dropResults:dropped.filter(e=>e.dropped),entries:dropped,participation:tournaments.length?played.length/tournaments.length:0,winRate:wins+losses?wins/(wins+losses):0};
   }).sort((a,b)=>b.cleanPoints-a.cleanPoints||b.wins-a.wins||b.played-a.played||a.name.localeCompare(b.name,'de'));
@@ -821,7 +830,7 @@ function renderSeasonStandings(season=selectedSeason(),rows=calculateSeasonStand
   $('#seasonStandings').innerHTML=`<div class="table-wrap"><table><thead><tr><th>#</th><th>Spieler</th><th>Gesamt</th><th>Bereinigt</th><th>Turniere</th><th>Siege</th><th>Niederl.</th><th>180er</th><th>High Finish</th><th>Streicher</th></tr></thead><tbody>${rows.map((r,i)=>`<tr data-season-player="${esc(r.name)}"><td>${i+1}</td><td><button class="link-btn" data-season-player="${esc(r.name)}">${esc(r.name)}</button></td><td>${r.totalPoints}</td><td><b>${r.cleanPoints}</b></td><td>${r.played}</td><td>${r.wins}</td><td>${r.losses}</td><td>${r.max180}</td><td>${r.checkout}</td><td>${r.dropResults.map(e=>`<span class="drop-pill">${e.present?e.points:0}</span>`).join(' ')||'–'}</td></tr>`).join('')}</tbody></table></div>`;
 }
 function renderSeasonMembers(season=selectedSeason(),rows=calculateSeasonStandings(season)){
-  const wins=Object.fromEntries(rows.map(r=>[r.name,r.wins||0])),members=seasonMembers(season).map(storedName=>({storedName,name:currentMemberNickname(season.memberProfileIds?.[storedName],storedName)})).sort((a,b)=>(wins[b.name]||0)-(wins[a.name]||0)||a.name.localeCompare(b.name,'de'));
+  const wins=Object.fromEntries(rows.map(r=>[r.name,r.wins||0])),memberMap=new Map();seasonMembers(season).forEach(storedName=>{const profileId=season.memberProfileIds?.[storedName]||memberIdForName(storedName),name=currentMemberNickname(profileId,storedName),key=profileId?`id:${profileId}`:`name:${normalizedPlayerName(name)}`,existing=memberMap.get(key);if(!existing||normalizedPlayerName(storedName)===normalizedPlayerName(name))memberMap.set(key,{storedName,name,profileId})});const members=[...memberMap.values()].sort((a,b)=>(wins[b.name]||0)-(wins[a.name]||0)||a.name.localeCompare(b.name,'de'));
   const profiles=isAdmin()?(T20Cloud.adminProfiles||[]).filter(profile=>profile.nickname?.trim()):[];
   $('#seasonMembers').innerHTML=`<div class="card slim-card"><h3>Mitglieder</h3><p>Diese Liste wird für neue Dienstagsturniere als Setzliste verwendet: mehr Saison-Siege = weiter oben.</p><form id="memberForm" class="player-form"><input id="memberName" placeholder="Mitgliedsname" maxlength="30" autocomplete="off"><button type="submit">+ Mitglied</button></form><div class="member-list">${members.map((p,i)=>{const linkedId=season?.memberProfileIds?.[p.storedName],linked=profiles.find(profile=>profile.id===linkedId),mapping=isAdmin()?(linked?`<small class="member-linked">✓ Verknüpft mit ${esc(linked.nickname)}</small>`:profiles.length?`<div class="member-link-control"><select aria-label="Benutzer für ${esc(p.storedName)} auswählen"><option value="">Benutzer zuordnen …</option>${profiles.map(profile=>`<option value="${esc(profile.id)}">${esc(profile.nickname)}${profile.display_name?` · ${esc(profile.display_name)}`:''}</option>`).join('')}</select><button class="secondary" type="button" data-link-member="${esc(p.storedName)}">Zuordnen</button></div>`:'<small>Registrierte Benutzer im Konto aktualisieren</small>'):'';return `<div class="member-row"><b><span>${i+1}</span>${esc(p.name)}</b><small>${wins[p.name]||0} Saison-Siege</small>${mapping}<button class="danger" data-remove-member="${esc(p.storedName)}">Entfernen</button></div>`}).join('')||'<p class="empty-line">Noch keine Mitglieder eingetragen.</p>'}</div></div>`;
 }
