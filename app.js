@@ -123,6 +123,8 @@ function setSyncStatus(text,cls='view-only'){const bar=$('#syncStatusBar'),label
 function isAdmin(){return !!window.T20Cloud?.isAdmin}
 function isMember(){return !!window.T20Cloud?.user&&!isAdmin()}
 function assertAdminAction(){if(isAdmin())return true;alert('Nur die Turnierleitung darf Daten ändern. Du bist aktuell im Nur-Ansicht-Modus.');return false}
+function canEditCurrentTournament(){return isAdmin()||(!T20Cloud.user&&!!state.guestLocal)}
+function assertTournamentAction(){if(canEditCurrentTournament())return true;alert('Dieses Vereinsturnier kann nur von der Turnierleitung geändert werden.');return false}
 function renderReadonlyMode(){
   const admin=isAdmin(),member=isMember(),guest=!admin&&!member,readonly=!admin;
   document.body.classList.toggle('view-only',readonly);
@@ -130,8 +132,8 @@ function renderReadonlyMode(){
   document.body.classList.toggle('member-mode',member);
   document.body.classList.toggle('guest-mode',guest);
   ['seasonActionSelect','addToSeasonBtn'].forEach(id=>{$('#'+id)?.classList.toggle('hidden',readonly)});
-  document.querySelectorAll('#setupSection input,#setupSection select,#setupSection button').forEach(control=>{control.disabled=readonly;control.setAttribute('aria-disabled',String(readonly))});
-  document.querySelectorAll('.score-controls select,.score-controls button').forEach(control=>{control.disabled=readonly;control.setAttribute('aria-disabled',String(readonly))});
+  document.querySelectorAll('#setupSection input,#setupSection select,#setupSection button').forEach(control=>{const disabled=!T20Cloud.authResolved||member;control.disabled=disabled;control.setAttribute('aria-disabled',String(disabled))});
+  document.querySelectorAll('.score-controls select,.score-controls button').forEach(control=>{const disabled=!canEditCurrentTournament();control.disabled=disabled;control.setAttribute('aria-disabled',String(disabled))});
   $('#showSettingsBtn')?.classList.toggle('hidden',!admin);
   $('#showSeasonBtn')?.classList.toggle('hidden',guest);
   const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=admin?'Konto':member?'Mein Profil':'Anmelden';
@@ -237,6 +239,7 @@ function cleanAuthRedirectUrl(){
   history.replaceState({},document.title,url.pathname+(url.searchParams.size?`?${url.searchParams}`:'')+url.hash);
 }
 window.T20Cloud={
+  authResolved:false,
   client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,loginBusy:false,magicLinkBusy:false,profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),authMessage:'',authError:'',loadBusy:false,pendingAuthSession:null,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
   async finishAuthRedirect(){cleanAuthRedirectUrl();this.authHandoffActive=false;this.authMessage='Anmeldung erfolgreich. Du kannst diesen Tab weiterverwenden.';showLogin();renderCloudPanel()},
   async init(){
@@ -254,14 +257,14 @@ window.T20Cloud={
           this.authListenerStarted=true;
         }
         this.ready=true;
-        try{await this.loadPublicMembers()}catch(error){console.warn('Öffentliche Mitgliederliste konnte beim Start nicht geladen werden:',error)}
         renderCloudPanel();
         await this.restoreSessionAfterInit();
+        if(this.user)try{await this.loadPublicMembers()}catch(error){console.warn('Mitgliederliste konnte nach der Anmeldung nicht geladen werden:',error)}
         this.startPolling();
         setLoginError('');
       }catch(error){
         console.error('Supabase-Initialisierung fehlgeschlagen:',error);
-        this.client=null;supabaseClient=null;this.ready=false;this.initPromise=null;
+        this.client=null;supabaseClient=null;this.ready=false;this.authResolved=true;this.initPromise=null;
         setSyncStatus('Offline – lokale Kopie','offline');
         renderReadonlyMode();renderCloudPanel();setLoginError(error.message);
       }
@@ -296,7 +299,8 @@ window.T20Cloud={
     this.authBusy=true;
     try{
       if(!session&&this.presenceChannel)await this.stopPresence();
-      this.session=session;this.user=session?.user||null;this.isAdmin=false;this.profile=null;this.avatarSignedUrl='';
+      this.session=session;this.user=session?.user||null;this.authResolved=true;this.isAdmin=false;this.profile=null;this.avatarSignedUrl='';
+      if(this.user&&state.guestLocal){Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,{players:[],playerProfileIds:{},started:false,matches:[],settings:{}});localStorage.removeItem('dartTournament');localStorage.removeItem('triple20_pending_sync');this.pendingSync=false}
       if(this.user)this.isAdmin=await this.checkAdmin(this.user.id);
       if(this.isAdmin&&localStorage.getItem('triple20_identity_pending')==='1'){this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');localStorage.removeItem('triple20_identity_pending')}
       if(this.user&&this.isAdmin)try{await this.loadAdminProfiles()}catch(error){console.warn('Mitgliederprofile konnten nach der Anmeldung nicht geladen werden:',error)}
@@ -457,7 +461,7 @@ window.T20Cloud={
   },
   async uploadLocalWithBackup(){if(!isAdmin())return;const summary=backupPreview();backupTriple20Data('triple20_vor_cloud_upload');if(!confirm(`Lokale Triple20-Daten in die Cloud übernehmen?\n\n${summary}\n\nEin JSON-Backup wurde heruntergeladen.`))return;await this.syncAll({force:true})},
   async loadCloudConfirmed(){if(!this.loadedCloudData)await this.loadCloud();if(!this.loadedCloudData)return;backupTriple20Data('triple20_vor_cloud_laden');if(!confirm('Cloud-Daten laden? Die aktuelle lokale Version wurde vorher als Backup gesichert.'))return;applyTriple20Data(this.loadedCloudData);setSyncStatus('Online – aktuell','online')},
-  startPolling(){clearInterval(this.pollTimer);clearInterval(this.memberPollTimer);this.pollTimer=setInterval(()=>this.loadCloud(),15000);this.memberPollTimer=setInterval(()=>this.loadPublicMembers().then(()=>{if(!$('#seasonSection')?.classList.contains('hidden'))renderSeasonView()}).catch(error=>console.warn('Mitgliedsnamen konnten nicht aktualisiert werden',error)),60000)}
+  startPolling(){clearInterval(this.pollTimer);clearInterval(this.memberPollTimer);this.pollTimer=setInterval(()=>this.loadCloud(),15000);this.memberPollTimer=setInterval(()=>{if(!this.user)return;this.loadPublicMembers().then(()=>{if(!$('#seasonSection')?.classList.contains('hidden'))renderSeasonView()}).catch(error=>console.warn('Mitgliedsnamen konnten nicht aktualisiert werden',error))},60000)}
 };
 function memberIdForName(name){
   const normalized=(name||'').trim().toLowerCase();
@@ -493,6 +497,7 @@ function registeredMemberProfiles(){
   return isAdmin()?(T20Cloud.adminProfiles||[]).filter(profile=>profile.nickname?.trim()):[];
 }
 function addTournamentPlayer(name,profileId=''){
+  if(!T20Cloud.user&&!state.guestLocal){Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,{players:[],playerProfileIds:{},started:false,matches:[],settings:{},guestLocal:true})}
   name=(name||'').trim().replace(/\s+/g,' ');
   if(!name)return false;
   if(state.players.some(player=>player.toLowerCase()===name.toLowerCase())){alert('Dieser Spieler ist bereits eingetragen.');return false}
@@ -511,6 +516,7 @@ function renderRegisteredPlayerChoices(){
   box.innerHTML=members.length?`<div class="registered-player-title"><strong>Gespeicherte Mitglieder</strong><small>Zum Hinzufügen anklicken</small></div><div class="registered-player-grid">${members.map(member=>{const photo=member.profileId?T20Cloud.adminProfileAvatars?.[member.profileId]||memberAvatarUrl(member.profileId):'',avatar=photo?`<img src="${esc(photo)}" alt="">`:esc(member.name.charAt(0).toUpperCase());return `<button type="button" class="registered-player" data-add-profile="${esc(member.name)}" data-profile-id="${esc(member.profileId||'')}"><span class="profile-avatar">${avatar}</span><span>${esc(member.name)}</span><b>+</b></button>`}).join('')}</div>`:'';
 }
 function renderPlayers(){
+  if(!T20Cloud.user&&!state.guestLocal&&(state.players?.length||state.matches?.length)){ $('#playerList').innerHTML='';$('#playerCount').textContent='0 Spieler eingetragen';$('#memberSuggestions').innerHTML='';$('#registeredPlayerChoices')?.classList.add('hidden');$('#startBtn').disabled=true;return }
   if(!state.started)state.players=sortBySeasonWins(state.players);
   $('#playerList').innerHTML=state.players.map((p,i)=>`<div class="player"><b><span>${i+1}</span>${esc(p)}</b><button data-remove="${i}" aria-label="${esc(p)} entfernen">×</button></div>`).join('');
   $('#playerCount').textContent=`${state.players.length} Spieler eingetragen`;
@@ -576,8 +582,9 @@ function champion(){
   return active.length===1&&state.matches.every(m=>m.sa!==null)?active[0]:'';
 }
 function renderTournament(){
-  const liveHiddenFromGuest=state.started&&!T20Cloud.user;
-  if(!state.started||liveHiddenFromGuest){$('#setupSection').classList.remove('hidden');$('#tournamentSection').classList.add('hidden');if(liveHiddenFromGuest){$('#playerList').innerHTML='';$('#playerCount').textContent='0 Spieler eingetragen';$('#registeredPlayerChoices')?.classList.add('hidden');$('#startBtn').disabled=true}renderReadonlyMode();return}
+  if(!T20Cloud.authResolved&&!state.guestLocal&&(state.started||state.players?.length||state.matches?.length)){ $('#setupSection').classList.remove('hidden');$('#tournamentSection').classList.add('hidden');$('#playerList').innerHTML='';$('#playerCount').textContent='0 Spieler eingetragen';$('#registeredPlayerChoices')?.classList.add('hidden');renderReadonlyMode();return }
+  if(!T20Cloud.user&&!state.guestLocal&&(state.started||state.players?.length||state.matches?.length)){Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,{players:[],playerProfileIds:{},started:false,matches:[],settings:{},guestLocal:true});save();renderPlayers()}
+  if(!state.started){$('#setupSection').classList.remove('hidden');$('#tournamentSection').classList.add('hidden');renderReadonlyMode();return}
   const noBracket=state.settings.mode==='roundrobin'||state.settings.mode==='swiss';
   $('#setupSection').classList.add('hidden');$('#tournamentSection').classList.remove('hidden');$('#bracketTab').classList.toggle('hidden',noBracket);
   if(noBracket&&$('#bracketTab').classList.contains('active')){document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelector('[data-tab="matches"]').classList.add('active');$('#matchesView').classList.remove('hidden');$('#bracketView').classList.add('hidden');$('#tableView').classList.add('hidden')}
@@ -651,7 +658,7 @@ function advanceElimination(){
     if(lowerEntrants.length)addPairs(state.matches,lowerEntrants,next,'lower');
   }
 }
-$('#matchList').addEventListener('click',e=>{const i=e.target.dataset.save;if(i===undefined)return;if(!assertAdminAction())return;const a=$(`[data-sa="${i}"]`).value,b=$(`[data-sb="${i}"]`).value;if(a===''||b===''||a===b){alert('Bitte ein eindeutiges Ergebnis eintragen.');return}if(Math.max(+a,+b)!==state.settings.legs){alert(`Der Sieger benötigt ${state.settings.legs} Legs.`);return}state.matches[i].sa=+a;state.matches[i].sb=+b;advanceElimination();renderTournament()});
+$('#matchList').addEventListener('click',e=>{const i=e.target.dataset.save;if(i===undefined)return;if(!assertTournamentAction())return;const a=$(`[data-sa="${i}"]`).value,b=$(`[data-sb="${i}"]`).value;if(a===''||b===''||a===b){alert('Bitte ein eindeutiges Ergebnis eintragen.');return}if(Math.max(+a,+b)!==state.settings.legs){alert(`Der Sieger benötigt ${state.settings.legs} Legs.`);return}state.matches[i].sa=+a;state.matches[i].sb=+b;advanceElimination();renderTournament()});
 $('#withdrawCard').addEventListener('click',e=>{
   if(e.target.id==='withdrawPlayerBtn'){const name=$('#withdrawPlayerSelect')?.value;if(!name)return;if(!confirm(`${name} aus dem weiteren Turnier nehmen?`))return;withdrawSwissPlayer(name)}
   if(e.target.id==='joinPlayerBtn'){const name=$('#joinPlayerName')?.value;if(!name)return;if(!confirm(`${name} ab der nächsten Runde ins Turnier aufnehmen?`))return;joinSwissPlayer(name)}
@@ -689,12 +696,13 @@ function updateSeasonFromForm(){
 }
 function tournamentWins(name,matches){return matches.filter(m=>m.sa!==null&&m.b!=='Freilos'&&(m.a===name||m.b===name)&&((m.a===name&&m.sa>m.sb)||(m.b===name&&m.sb>m.sa))).length}
 function tournamentLosses(name,matches){return matches.filter(m=>m.sa!==null&&m.b!=='Freilos'&&(m.a===name||m.b===name)&&((m.a===name&&m.sa<m.sb)||(m.b===name&&m.sb<m.sa))).length}
+function tournamentByes(name,matches){return matches.filter(m=>m.a===name&&m.b==='Freilos').length}
 function pointsForWins(wins,pointSystem=defaultPointSystem()){return pointSystem[Math.min(5,wins)]??0}
 function buildCurrentTournamentRecord(){
   const rows=standings(),pointSystem=defaultPointSystem(),date=$('#seasonTournamentDate')?.value||todayIso(),stats={};
   document.querySelectorAll('[data-stat-player]').forEach(row=>{const p=row.dataset.statPlayer;stats[p]={max180:+(row.querySelector('[data-stat-180]')?.value||0),checkout:+(row.querySelector('[data-stat-checkout]')?.value||0)}});
   const playerProfileIds=Object.fromEntries(state.players.map(name=>[name,state.playerProfileIds?.[name]||memberIdForName(name)]).filter(([,id])=>id));
-  const results=state.players.map(name=>{const wins=tournamentWins(name,state.matches),losses=tournamentLosses(name,state.matches),row=rows.find(r=>r.name===name)||{},profileId=playerProfileIds[name]||'';return{name,profileId,wins,losses,rank:(rows.findIndex(r=>r.name===name)+1)||0,legsFor:row.lf||0,legsAgainst:row.la||0,points:pointsForWins(wins,pointSystem),max180:stats[name]?.max180||0,checkout:stats[name]?.checkout||0}});
+  const results=state.players.map(name=>{const wins=tournamentWins(name,state.matches),losses=tournamentLosses(name,state.matches),byes=tournamentByes(name,state.matches),row=rows.find(r=>r.name===name)||{},profileId=playerProfileIds[name]||'';return{name,profileId,wins,losses,byes,rank:(rows.findIndex(r=>r.name===name)+1)||0,legsFor:row.lf||0,legsAgainst:row.la||0,points:pointsForWins(wins,pointSystem)+byes,max180:stats[name]?.max180||0,checkout:stats[name]?.checkout||0}});
   return{id:`tournament-${Date.now()}`,name:state.settings.name||'Turnier',date,mode:state.settings.mode,players:[...state.players],participantCount:state.players.length,winner:rows[0]?.name||'',top3:rows.slice(0,3).map(r=>r.name),playerProfileIds,settings:{...state.settings},matches:state.matches.map(m=>({...m})),results,createdAt:new Date().toISOString()};
 }
 function loadTournamentHistory(){try{const data=JSON.parse(localStorage.getItem(TOURNAMENT_HISTORY_KEY)||'[]');return Array.isArray(data)?data:[]}catch{return[]}}
@@ -749,7 +757,7 @@ function buildManualTournamentRecord(){
   const season=selectedSeason(),pointSystem=defaultPointSystem(),date=$('#manualTournamentDate')?.value||todayIso(),name=$('#manualTournamentName')?.value.trim()||'Dienstagsturnier';
   const results=[...document.querySelectorAll('[data-manual-player]')].filter(row=>row.querySelector('[data-manual-present]')?.checked).map(row=>{
     const player=row.dataset.manualPlayer,wins=+(row.querySelector('[data-manual-wins]')?.value||0),losses=+(row.querySelector('[data-manual-losses]')?.value||0),max180=+(row.querySelector('[data-manual-180]')?.value||0),checkout=+(row.querySelector('[data-manual-checkout]')?.value||0);
-    return{name:player,profileId:season?.memberProfileIds?.[player]||memberIdForName(player),wins,losses,max180,checkout,points:pointsForWins(wins,pointSystem),rank:0,legsFor:0,legsAgainst:0};
+    return{name:player,profileId:season?.memberProfileIds?.[player]||memberIdForName(player),wins,losses,byes:0,max180,checkout,points:pointsForWins(wins,pointSystem),rank:0,legsFor:0,legsAgainst:0};
   }).sort((a,b)=>b.wins-a.wins||a.losses-b.losses||b.max180-a.max180||b.checkout-a.checkout||a.name.localeCompare(b.name,'de'));
   results.forEach((r,i)=>r.rank=i+1);
   const playerProfileIds=Object.fromEntries(results.filter(r=>r.profileId).map(r=>[r.name,r.profileId]));
@@ -783,9 +791,9 @@ function calculateSeasonStandings(season=selectedSeason()){
     for(const result of tournament.results||[])addPlayer(result.name,result.profileId||tournament.playerProfileIds?.[result.name]||memberIdForName(result.name));
   }
   return [...players.values()].map(player=>{
-    const entries=tournaments.map(t=>{const r=(t.results||[]).find(x=>{const id=resolveId(x.name,x.profileId||t.playerProfileIds?.[x.name]),display=id?currentMemberNickname(id,x.name):x.name;return player.profileId&&id?player.profileId===id:normalizedPlayerName(player.name)===normalizedPlayerName(display)});return r?{tournamentId:t.id,date:t.date,name:t.name,present:true,points:r.points||0,wins:r.wins||0,losses:r.losses||0,max180:r.max180||0,checkout:r.checkout||0,rank:r.rank||0}:{tournamentId:t.id,date:t.date,name:t.name,present:false,points:0,wins:0,losses:0,max180:0,checkout:0,rank:0}});
-    const configuredDrops=season.dropCount||0,effectiveDrops=tournaments.length>configuredDrops?configuredDrops:0,dropped=calculateDropResults(entries,effectiveDrops),used=dropped.filter(e=>!e.dropped),played=entries.filter(e=>e.present),wins=entries.reduce((sum,e)=>sum+e.wins,0),losses=entries.reduce((sum,e)=>sum+e.losses,0),max180=entries.reduce((sum,e)=>sum+e.max180,0),checkout=Math.max(0,...entries.map(e=>e.checkout||0));
-    return{name:player.name,profileId:player.profileId,totalPoints:entries.reduce((sum,e)=>sum+e.points,0),cleanPoints:used.reduce((sum,e)=>sum+e.points,0),played:played.length,wins,losses,max180,checkout,dropResults:dropped.filter(e=>e.dropped),entries:dropped,participation:tournaments.length?played.length/tournaments.length:0,winRate:wins+losses?wins/(wins+losses):0};
+    const entries=tournaments.map(t=>{const r=(t.results||[]).find(x=>{const id=resolveId(x.name,x.profileId||t.playerProfileIds?.[x.name]),display=id?currentMemberNickname(id,x.name):x.name;return player.profileId&&id?player.profileId===id:normalizedPlayerName(player.name)===normalizedPlayerName(display)}),byes=r?(r.byes??tournamentByes(r.name,t.matches||[])):0,points=r?(r.points||0)+(r.byes===undefined?byes:0):0;return r?{tournamentId:t.id,date:t.date,name:t.name,present:true,points,wins:r.wins||0,losses:r.losses||0,byes,max180:r.max180||0,checkout:r.checkout||0,rank:r.rank||0}:{tournamentId:t.id,date:t.date,name:t.name,present:false,points:0,wins:0,losses:0,byes:0,max180:0,checkout:0,rank:0}});
+    const configuredDrops=season.dropCount||0,effectiveDrops=tournaments.length>configuredDrops?configuredDrops:0,dropped=calculateDropResults(entries,effectiveDrops),used=dropped.filter(e=>!e.dropped),played=entries.filter(e=>e.present),wins=entries.reduce((sum,e)=>sum+e.wins,0),losses=entries.reduce((sum,e)=>sum+e.losses,0),byes=entries.reduce((sum,e)=>sum+(e.byes||0),0),max180=entries.reduce((sum,e)=>sum+e.max180,0),checkout=Math.max(0,...entries.map(e=>e.checkout||0));
+    return{name:player.name,profileId:player.profileId,totalPoints:entries.reduce((sum,e)=>sum+e.points,0),cleanPoints:used.reduce((sum,e)=>sum+e.points,0),played:played.length,wins,losses,byes,max180,checkout,dropResults:dropped.filter(e=>e.dropped),entries:dropped,participation:tournaments.length?played.length/tournaments.length:0,winRate:wins+losses?wins/(wins+losses):0};
   }).sort((a,b)=>b.cleanPoints-a.cleanPoints||b.wins-a.wins||b.played-a.played||a.name.localeCompare(b.name,'de'));
 }
 function seasonStats(season=selectedSeason()){const rows=calculateSeasonStandings(season);return{max180:[...rows].sort((a,b)=>b.max180-a.max180)[0],checkout:[...rows].sort((a,b)=>b.checkout-a.checkout)[0],played:[...rows].sort((a,b)=>b.played-a.played)[0],participation:[...rows].sort((a,b)=>b.participation-a.participation||b.played-a.played)[0],wins:[...rows].sort((a,b)=>b.wins-a.wins)[0],winRate:[...rows].filter(r=>r.wins+r.losses>0).sort((a,b)=>b.winRate-a.winRate||b.wins-a.wins)[0]}}
@@ -827,7 +835,7 @@ function renderSeasonForm(season=selectedSeason()){
   $('#seasonName').value=s.name||h.name;$('#seasonStart').value=s.startDate||h.start;$('#seasonEnd').value=s.endDate||h.end;$('#seasonDrops').value=String(s.dropCount??0);
 }
 function renderSeasonStandings(season=selectedSeason(),rows=calculateSeasonStandings(season)){
-  $('#seasonStandings').innerHTML=`<div class="table-wrap"><table><thead><tr><th>#</th><th>Spieler</th><th>Gesamt</th><th>Bereinigt</th><th>Turniere</th><th>Siege</th><th>Niederl.</th><th>180er</th><th>High Finish</th><th>Streicher</th></tr></thead><tbody>${rows.map((r,i)=>`<tr data-season-player="${esc(r.name)}"><td>${i+1}</td><td><button class="link-btn" data-season-player="${esc(r.name)}">${esc(r.name)}</button></td><td>${r.totalPoints}</td><td><b>${r.cleanPoints}</b></td><td>${r.played}</td><td>${r.wins}</td><td>${r.losses}</td><td>${r.max180}</td><td>${r.checkout}</td><td>${r.dropResults.map(e=>`<span class="drop-pill">${e.present?e.points:0}</span>`).join(' ')||'–'}</td></tr>`).join('')}</tbody></table></div>`;
+  $('#seasonStandings').innerHTML=`<div class="table-wrap"><table><thead><tr><th>#</th><th>Spieler</th><th>Gesamt</th><th>Bereinigt</th><th>Turniere</th><th>Siege</th><th>Freilose</th><th>Niederl.</th><th>180er</th><th>High Finish</th><th>Streicher</th></tr></thead><tbody>${rows.map((r,i)=>`<tr data-season-player="${esc(r.name)}"><td>${i+1}</td><td><button class="link-btn" data-season-player="${esc(r.name)}">${esc(r.name)}</button></td><td>${r.totalPoints}</td><td><b>${r.cleanPoints}</b></td><td>${r.played}</td><td>${r.wins}</td><td>${r.byes||0}</td><td>${r.losses}</td><td>${r.max180}</td><td>${r.checkout}</td><td>${r.dropResults.map(e=>`<span class="drop-pill">${e.present?e.points:0}</span>`).join(' ')||'–'}</td></tr>`).join('')}</tbody></table></div>`;
 }
 function renderSeasonMembers(season=selectedSeason(),rows=calculateSeasonStandings(season)){
   const wins=Object.fromEntries(rows.map(r=>[r.name,r.wins||0])),memberMap=new Map();seasonMembers(season).forEach(storedName=>{const profileId=season.memberProfileIds?.[storedName]||memberIdForName(storedName),name=currentMemberNickname(profileId,storedName),key=profileId?`id:${profileId}`:`name:${normalizedPlayerName(name)}`,existing=memberMap.get(key);if(!existing||normalizedPlayerName(storedName)===normalizedPlayerName(name))memberMap.set(key,{storedName,name,profileId})});const members=[...memberMap.values()].sort((a,b)=>(wins[b.name]||0)-(wins[a.name]||0)||a.name.localeCompare(b.name,'de'));
@@ -844,7 +852,7 @@ function tournamentMatchesHtml(tournament){
   return `<div class="season-pairings">${matches.map(m=>`<div class="season-pairing"><small>Runde ${m.round||1}</small><b>${esc(tournamentPlayerName(tournament,m.a))}</b><strong>${m.sa??'–'} : ${m.sb??'–'}</strong><b>${esc(tournamentPlayerName(tournament,m.b))}</b></div>`).join('')}</div>`;
 }
 function renderSeasonTournaments(season=selectedSeason()){
-  const tournaments=season?.tournaments||[],list=tournaments.length?`<div class="match-list">${tournaments.map(t=>`<article class="match season-match"><div class="match-no">${esc(t.date)} · ${t.participantCount} Teilnehmer${t.manual?' · Manuell':''}</div><div><b>${esc(t.name)}</b><p>Sieger: ${esc(tournamentPlayerName(t,t.winner)||'–')} · Top 3: ${(t.top3||[]).map(name=>esc(tournamentPlayerName(t,name))).join(', ')||'–'}</p><div class="season-detail hidden" id="details-${esc(t.id)}"><h4>Platzierungen</h4><div class="season-results">${(t.results||[]).sort((a,b)=>a.rank-b.rank).map(r=>`<span>${r.rank}. ${esc(tournamentPlayerName(t,r.name))} · ${r.wins}S/${r.losses}N · ${r.points} Pkt.${r.max180?` · ${r.max180}x180`:''}${r.checkout?` · HF ${r.checkout}`:''}</span>`).join('')}</div><h4>Paarungen</h4>${tournamentMatchesHtml(t)}</div></div><div class="season-match-actions"><button class="secondary" data-tournament-detail="${esc(t.id)}">Details anzeigen</button><button class="danger" data-delete-tournament="${esc(t.id)}">Löschen</button></div></article>`).join('')}</div>`:'<div class="empty-card">Noch keine Turniere in dieser Saison.</div>';
+  const tournaments=season?.tournaments||[],list=tournaments.length?`<div class="match-list">${tournaments.map(t=>`<article class="match season-match"><div class="match-no">${esc(t.date)} · ${t.participantCount} Teilnehmer${t.manual?' · Manuell':''}</div><div><b>${esc(t.name)}</b><p>Sieger: ${esc(tournamentPlayerName(t,t.winner)||'–')} · Top 3: ${(t.top3||[]).map(name=>esc(tournamentPlayerName(t,name))).join(', ')||'–'}</p><div class="season-detail hidden" id="details-${esc(t.id)}"><h4>Platzierungen</h4><div class="season-results">${(t.results||[]).sort((a,b)=>a.rank-b.rank).map(r=>`<span>${r.rank}. ${esc(tournamentPlayerName(t,r.name))} · ${r.wins}S/${r.losses}N${(r.byes??tournamentByes(r.name,t.matches||[]))?` · ${r.byes??tournamentByes(r.name,t.matches||[])} Freilos`:''} · ${r.points+(r.byes===undefined?tournamentByes(r.name,t.matches||[]):0)} Pkt.${r.max180?` · ${r.max180}x180`:''}${r.checkout?` · HF ${r.checkout}`:''}</span>`).join('')}</div><h4>Paarungen</h4>${tournamentMatchesHtml(t)}</div></div><div class="season-match-actions"><button class="secondary" data-tournament-detail="${esc(t.id)}">Details anzeigen</button><button class="danger" data-delete-tournament="${esc(t.id)}">Löschen</button></div></article>`).join('')}</div>`:'<div class="empty-card">Noch keine Turniere in dieser Saison.</div>';
   $('#seasonTournaments').innerHTML=renderManualTournamentForm(season)+list;
 }
 function renderSeasonStats(season=selectedSeason(),rows=calculateSeasonStandings(season)){
