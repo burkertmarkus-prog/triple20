@@ -16,6 +16,9 @@
 .menu-toggle{border:0;background:transparent;color:var(--blue);font-size:42px;line-height:1;cursor:pointer;text-shadow:0 0 18px rgba(22,131,255,.75);padding:4px 6px;border-radius:12px}
 .menu-toggle:hover,.menu-toggle:focus-visible{background:rgba(255,255,255,.12);outline:0}
 .manual-toggle-row{display:flex;justify-content:flex-end;margin:0 0 16px}.manual-toggle-row .secondary{min-width:230px}
+.manual-matches{margin:26px 0}.manual-matches-head{display:flex;justify-content:space-between;gap:18px;align-items:center;margin-bottom:12px}.manual-matches-head h4,.season-detail h4{margin:0 0 5px}.manual-matches-head p{margin:0}.manual-match-row{display:grid;grid-template-columns:82px minmax(150px,1fr) 90px 18px 90px minmax(150px,1fr) 48px;gap:8px;align-items:end;padding:10px 0;border-bottom:1px solid var(--line)}.manual-match-row label{font-size:12px}.manual-match-row input,.manual-match-row select{width:100%;margin-top:4px;padding:9px}.manual-match-separator{align-self:center;text-align:center;font-weight:900;margin-top:18px}.manual-match-remove{padding:10px;font-size:20px}.season-detail{display:block;margin-top:14px}.season-results{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}.season-pairings{display:grid;gap:7px}.season-pairing{display:grid;grid-template-columns:75px minmax(110px,1fr) 64px minmax(110px,1fr);gap:10px;align-items:center;padding:9px 11px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:10px}.season-pairing small{color:var(--muted)}.season-pairing strong{text-align:center;color:var(--blue)}
+@media(max-width:900px){.manual-match-row{grid-template-columns:70px 1fr 70px 14px 70px 1fr 44px}}
+@media(max-width:650px){.manual-matches-head{align-items:stretch;flex-direction:column}.manual-match-row{grid-template-columns:70px 1fr 44px}.manual-match-row label:nth-of-type(2),.manual-match-row label:nth-of-type(5){grid-column:span 2}.manual-match-separator{display:none}.season-pairing{grid-template-columns:70px 1fr 55px 1fr}.manual-match-remove{grid-column:3;grid-row:1}}
 .season-toolbar{grid-template-columns:minmax(260px,1fr) minmax(180px,260px) auto auto auto auto}
 .season-section>.season-toolbar{margin-top:34px}
 .season-current-summary{display:grid;gap:4px}
@@ -87,6 +90,7 @@ footer{background:#f8fbff;border-top:1px solid #d6e2f2;color:#65758b}
 .tournament-actions{display:flex;align-items:center;gap:14px;margin:-8px 0 24px;flex-wrap:wrap}.tournament-actions p{margin:0;color:#65758b;font-weight:800}
 body.view-only #settingsForm,body.view-only .season-toolbar,body.view-only #seasonForm,body.view-only #seasonMembers form,body.view-only #seasonMembers .danger,body.view-only #seasonTournaments .danger,body.view-only #toggleManualTournament{display:none!important}
 body.view-only .score-controls{font-weight:900;color:#65758b}
+body.view-only .score-controls select,body.view-only .score-controls button{cursor:not-allowed;opacity:.55;pointer-events:none}
 @media(max-width:700px){.sync-status{display:grid;gap:3px;text-align:center}.cloud-login{grid-template-columns:1fr}.cloud-actions{display:grid}}
 .intro{padding:18px 0 14px}
 .intro h1{font-size:clamp(24px,3.2vw,38px);line-height:.96;letter-spacing:-1.5px;margin:0;max-width:460px}

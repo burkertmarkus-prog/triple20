@@ -130,6 +130,7 @@ function renderReadonlyMode(){
   document.body.classList.toggle('member-mode',member);
   document.body.classList.toggle('guest-mode',guest);
   ['seasonActionSelect','addToSeasonBtn'].forEach(id=>{$('#'+id)?.classList.toggle('hidden',readonly)});
+  document.querySelectorAll('.score-controls select,.score-controls button').forEach(control=>{control.disabled=readonly;control.setAttribute('aria-disabled',String(readonly))});
   $('#showSettingsBtn')?.classList.toggle('hidden',!admin);
   $('#showSeasonBtn')?.classList.toggle('hidden',guest);
   const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=admin?'Konto':member?'Mein Profil':'Anmelden';
@@ -493,10 +494,12 @@ function renderRegisteredPlayerChoices(){
   let box=$('#registeredPlayerChoices');
   if(!box){box=document.createElement('div');box.id='registeredPlayerChoices';form.insertAdjacentElement('afterend',box)}
   if(!isAdmin()){box.innerHTML='';box.classList.add('hidden');return}
-  const entered=new Set(state.players.map(player=>player.toLowerCase()));
-  const profiles=registeredMemberProfiles().filter(profile=>!entered.has(profile.nickname.trim().toLowerCase()));
-  box.className=`registered-player-choices ${profiles.length?'':'hidden'}`;
-  box.innerHTML=profiles.length?`<div class="registered-player-title"><strong>Registrierte Mitglieder</strong><small>Zum Hinzufügen anklicken</small></div><div class="registered-player-grid">${profiles.map(profile=>{const name=profile.nickname.trim(),photo=T20Cloud.adminProfileAvatars?.[profile.id],avatar=photo?`<img src="${esc(photo)}" alt="">`:esc(name.charAt(0).toUpperCase());return `<button type="button" class="registered-player" data-add-profile="${esc(name)}" data-profile-id="${esc(profile.id)}"><span class="profile-avatar">${avatar}</span><span>${esc(name)}</span><b>+</b></button>`}).join('')}</div>`:'';
+  const season=selectedSeason(),entered=new Set(state.players.map(player=>player.toLowerCase())),choices=new Map();
+  seasonMembers(season).forEach(storedName=>{const profileId=season?.memberProfileIds?.[storedName]||memberIdForName(storedName),name=currentMemberNickname(profileId,storedName).trim();if(name)choices.set(profileId?`id:${profileId}`:`name:${name.toLowerCase()}`,{name,profileId})});
+  registeredMemberProfiles().forEach(profile=>{const name=profile.nickname.trim();choices.set(`id:${profile.id}`,{name,profileId:profile.id})});
+  const members=[...choices.values()].filter(member=>!entered.has(member.name.toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name,'de'));
+  box.className=`registered-player-choices ${members.length?'':'hidden'}`;
+  box.innerHTML=members.length?`<div class="registered-player-title"><strong>Gespeicherte Mitglieder</strong><small>Zum Hinzufügen anklicken</small></div><div class="registered-player-grid">${members.map(member=>{const photo=member.profileId?T20Cloud.adminProfileAvatars?.[member.profileId]||memberAvatarUrl(member.profileId):'',avatar=photo?`<img src="${esc(photo)}" alt="">`:esc(member.name.charAt(0).toUpperCase());return `<button type="button" class="registered-player" data-add-profile="${esc(member.name)}" data-profile-id="${esc(member.profileId||'')}"><span class="profile-avatar">${avatar}</span><span>${esc(member.name)}</span><b>+</b></button>`}).join('')}</div>`:'';
 }
 function renderPlayers(){
   if(!state.started)state.players=sortBySeasonWins(state.players);
@@ -638,7 +641,7 @@ function advanceElimination(){
     if(lowerEntrants.length)addPairs(state.matches,lowerEntrants,next,'lower');
   }
 }
-$('#matchList').addEventListener('click',e=>{const i=e.target.dataset.save;if(i===undefined)return;const a=$(`[data-sa="${i}"]`).value,b=$(`[data-sb="${i}"]`).value;if(a===''||b===''||a===b){alert('Bitte ein eindeutiges Ergebnis eintragen.');return}if(Math.max(+a,+b)!==state.settings.legs){alert(`Der Sieger benötigt ${state.settings.legs} Legs.`);return}state.matches[i].sa=+a;state.matches[i].sb=+b;advanceElimination();renderTournament()});
+$('#matchList').addEventListener('click',e=>{const i=e.target.dataset.save;if(i===undefined)return;if(!assertAdminAction())return;const a=$(`[data-sa="${i}"]`).value,b=$(`[data-sb="${i}"]`).value;if(a===''||b===''||a===b){alert('Bitte ein eindeutiges Ergebnis eintragen.');return}if(Math.max(+a,+b)!==state.settings.legs){alert(`Der Sieger benötigt ${state.settings.legs} Legs.`);return}state.matches[i].sa=+a;state.matches[i].sb=+b;advanceElimination();renderTournament()});
 $('#withdrawCard').addEventListener('click',e=>{
   if(e.target.id==='withdrawPlayerBtn'){const name=$('#withdrawPlayerSelect')?.value;if(!name)return;if(!confirm(`${name} aus dem weiteren Turnier nehmen?`))return;withdrawSwissPlayer(name)}
   if(e.target.id==='joinPlayerBtn'){const name=$('#joinPlayerName')?.value;if(!name)return;if(!confirm(`${name} ab der nächsten Runde ins Turnier aufnehmen?`))return;joinSwissPlayer(name)}
@@ -692,7 +695,7 @@ function saveTournamentToHistory(){
 function exportCurrentTournamentJson(){const record=state.savedToHistory?loadTournamentHistory().find(t=>t.id===state.savedToHistory)||buildCurrentTournamentRecord():buildCurrentTournamentRecord();downloadFile(`${(record.name||'Turnier').replaceAll(' ','_')}.json`,'application/json',JSON.stringify(record,null,2))}
 function seasonMembers(season=selectedSeason()){return [...new Set((season?.members!==undefined?season.members:season?.players)||[])].sort((a,b)=>a.localeCompare(b,'de'))}
 function saveSeasonMembers(season,names){season.members=[...new Set(names.map(n=>n.trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));season.memberProfileIds=season.memberProfileIds||{};season.members.forEach(name=>{const id=season.memberProfileIds[name]||memberIdForName(name);if(id)season.memberProfileIds[name]=id});season.players=[...new Set([...(season.tournaments||[]).flatMap(t=>t.players||[]),...season.members])].sort((a,b)=>a.localeCompare(b,'de'));saveSeason(season)}
-function renderMemberSuggestions(){const list=$('#memberSuggestions'),season=selectedSeason();if(!list)return;if(!T20Cloud.user){list.innerHTML='';return}const entered=new Set(state.players.map(p=>p.toLowerCase())),registered=new Set((T20Cloud.publicMembers||[]).map(member=>member.nickname.trim().toLowerCase())),names=seasonMembers(season).filter(name=>!season?.memberProfileIds?.[name]&&!registered.has(name.toLowerCase())),unique=[...new Map(names.filter(Boolean).map(name=>[name.toLowerCase(),name])).values()];list.innerHTML=unique.filter(name=>!entered.has(name.toLowerCase())).map(name=>`<option value="${esc(name)}"></option>`).join('')}
+function renderMemberSuggestions(){const list=$('#memberSuggestions'),season=selectedSeason();if(!list)return;if(!T20Cloud.user){list.innerHTML='';return}const entered=new Set(state.players.map(p=>p.toLowerCase())),names=seasonMembers(season).map(storedName=>currentMemberNickname(season?.memberProfileIds?.[storedName],storedName)),unique=[...new Map(names.filter(Boolean).map(name=>[name.toLowerCase(),name])).values()];list.innerHTML=unique.filter(name=>!entered.has(name.toLowerCase())).map(name=>`<option value="${esc(name)}"></option>`).join('')}
 function addSeasonMember(name){const season=selectedSeason();if(!season||!name.trim())return;const members=seasonMembers(season);if(members.some(p=>p.toLowerCase()===name.trim().toLowerCase())){alert('Dieses Mitglied ist bereits eingetragen.');return}saveSeasonMembers(season,[...members,name.trim()]);renderMemberSuggestions()}
 function removeSeasonMember(name){const season=selectedSeason();if(!season)return;if(!confirm(`${name} aus der Mitgliederliste entfernen? Bereits gespeicherte Spieltage bleiben erhalten.`))return;saveSeasonMembers(season,seasonMembers(season).filter(p=>p!==name));renderMemberSuggestions()}
 function linkSeasonMemberProfile(storedName,profileId){
@@ -721,12 +724,16 @@ function manualTournamentPlayers(season=selectedSeason()){
   const rows=calculateSeasonStandings(season),wins=Object.fromEntries(rows.map(r=>[r.name,r.wins||0]));
   return seasonMembers(season).sort((a,b)=>(wins[b]||0)-(wins[a]||0)||a.localeCompare(b,'de'));
 }
+function manualMatchRow(players,round=1){
+  const options=players.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  return `<div class="manual-match-row" data-manual-match><label>Runde<input type="number" min="1" max="30" value="${round}" data-manual-round></label><label>Spieler 1<select data-manual-a><option value="">Auswählen …</option>${options}</select></label><label>Ergebnis<input type="number" min="0" max="30" data-manual-sa placeholder="0"></label><span class="manual-match-separator">:</span><label>Ergebnis<input type="number" min="0" max="30" data-manual-sb placeholder="0"></label><label>Spieler 2<select data-manual-b><option value="">Auswählen …</option>${options}</select></label><button class="danger manual-match-remove" type="button" data-remove-manual-match aria-label="Paarung entfernen">×</button></div>`;
+}
 function renderManualTournamentForm(season=selectedSeason()){
   const button=`<div class="manual-toggle-row"><button type="button" class="secondary" id="toggleManualTournament">${manualTournamentOpen?'Nachtrag ausblenden':'+ Spieltag manuell nachtragen'}</button></div>`;
   if(!manualTournamentOpen)return button;
   const players=manualTournamentPlayers(season);
   if(!players.length)return button+`<div class="card slim-card manual-tournament-card"><h3>Spieltag manuell nachtragen</h3><p class="empty-line">Lege zuerst unter „Mitglieder“ die Spieler an. Danach kannst du hier den gespielten Schweizer Spieltag eintragen.</p></div>`;
-  return button+`<form id="manualTournamentForm" class="card slim-card manual-tournament-card"><h3>Spieltag manuell nachtragen</h3><p>Für bereits gespielte Schweizer Turniere: Teilnehmer markieren und pro Spieler Siege, Niederlagen, 180er und höchstes Checkout eintragen. Die Saisonpunkte werden automatisch berechnet.</p><div class="grid"><label>Datum<input id="manualTournamentDate" type="date" value="${todayIso()}" required></label><label>Turniername<input id="manualTournamentName" value="Dienstagsturnier" maxlength="50"></label></div><div class="table-wrap manual-entry-table"><table><thead><tr><th>Dabei</th><th>Spieler</th><th>Siege</th><th>Niederlagen</th><th>180er</th><th>Checkout</th></tr></thead><tbody>${players.map(p=>`<tr data-manual-player="${esc(p)}"><td><input type="checkbox" data-manual-present checked></td><td><b>${esc(p)}</b></td><td><input type="number" min="0" max="20" value="0" data-manual-wins></td><td><input type="number" min="0" max="20" value="0" data-manual-losses></td><td><input type="number" min="0" max="99" value="0" data-manual-180></td><td><input type="number" min="0" max="170" value="0" data-manual-checkout></td></tr>`).join('')}</tbody></table></div><button class="primary" type="submit">SPIELTAG IN SAISON SPEICHERN <span>→</span></button></form>`;
+  return button+`<form id="manualTournamentForm" class="card slim-card manual-tournament-card"><h3>Spieltag manuell nachtragen</h3><p>Teilnehmer markieren und pro Spieler Siege, Niederlagen, 180er und höchstes Checkout eintragen. Darunter können die einzelnen Paarungen und Ergebnisse erfasst werden.</p><div class="grid"><label>Datum<input id="manualTournamentDate" type="date" value="${todayIso()}" required></label><label>Turniername<input id="manualTournamentName" value="Dienstagsturnier" maxlength="50"></label></div><div class="table-wrap manual-entry-table"><table><thead><tr><th>Dabei</th><th>Spieler</th><th>Siege</th><th>Niederlagen</th><th>180er</th><th>Checkout</th></tr></thead><tbody>${players.map(p=>`<tr data-manual-player="${esc(p)}"><td><input type="checkbox" data-manual-present checked></td><td><b>${esc(p)}</b></td><td><input type="number" min="0" max="20" value="0" data-manual-wins></td><td><input type="number" min="0" max="20" value="0" data-manual-losses></td><td><input type="number" min="0" max="99" value="0" data-manual-180></td><td><input type="number" min="0" max="170" value="0" data-manual-checkout></td></tr>`).join('')}</tbody></table></div><section class="manual-matches"><div class="manual-matches-head"><div><h4>Paarungen</h4><p>Runde, Spieler und Ergebnis jeder Begegnung eintragen.</p></div><button class="secondary" type="button" id="addManualMatch">+ Paarung</button></div><div id="manualMatchRows">${manualMatchRow(players)}</div></section><button class="primary" type="submit">SPIELTAG IN SAISON SPEICHERN <span>→</span></button></form>`;
 }
 function buildManualTournamentRecord(){
   const season=selectedSeason(),pointSystem=defaultPointSystem(),date=$('#manualTournamentDate')?.value||todayIso(),name=$('#manualTournamentName')?.value.trim()||'Dienstagsturnier';
@@ -736,12 +743,15 @@ function buildManualTournamentRecord(){
   }).sort((a,b)=>b.wins-a.wins||a.losses-b.losses||b.max180-a.max180||b.checkout-a.checkout||a.name.localeCompare(b.name,'de'));
   results.forEach((r,i)=>r.rank=i+1);
   const playerProfileIds=Object.fromEntries(results.filter(r=>r.profileId).map(r=>[r.name,r.profileId]));
-  return{id:`manual-tournament-${Date.now()}`,name,date,mode:'swiss',manual:true,players:results.map(r=>r.name),playerProfileIds,participantCount:results.length,winner:results[0]?.name||'',top3:results.slice(0,3).map(r=>r.name),settings:{mode:'swiss',name,manual:true},matches:[],results,createdAt:new Date().toISOString()};
+  const matches=[...document.querySelectorAll('[data-manual-match]')].map(row=>({round:+(row.querySelector('[data-manual-round]')?.value||1),a:row.querySelector('[data-manual-a]')?.value||'',b:row.querySelector('[data-manual-b]')?.value||'',sa:row.querySelector('[data-manual-sa]')?.value,sb:row.querySelector('[data-manual-sb]')?.value})).filter(m=>m.a||m.b||m.sa!==''||m.sb!=='').map(m=>({...m,sa:m.sa===''?null:+m.sa,sb:m.sb===''?null:+m.sb}));
+  return{id:`manual-tournament-${Date.now()}`,name,date,mode:'swiss',manual:true,players:results.map(r=>r.name),playerProfileIds,participantCount:results.length,winner:results[0]?.name||'',top3:results.slice(0,3).map(r=>r.name),settings:{mode:'swiss',name,manual:true},matches,results,createdAt:new Date().toISOString()};
 }
 function addManualTournamentFromForm(){
   const season=selectedSeason();if(!season)return;
   const tournament=buildManualTournamentRecord();
   if(tournament.participantCount<2){alert('Bitte mindestens zwei Teilnehmer markieren.');return}
+  const participants=new Set(tournament.players),invalid=tournament.matches.find(m=>!m.a||!m.b||m.sa===null||m.sb===null||m.a===m.b||!participants.has(m.a)||!participants.has(m.b)||m.sa===m.sb);
+  if(invalid){alert('Bitte alle begonnenen Paarungen vollständig ausfüllen. Die Spieler müssen verschieden und als Teilnehmer markiert sein; ein Ergebnis darf nicht unentschieden sein.');return}
   addTournamentToSeason(season.id,tournament);manualTournamentOpen=false;
   alert('Spieltag wurde manuell in die Saisonwertung übernommen.');
 }
@@ -816,8 +826,13 @@ function tournamentPlayerName(tournament,name){
   const id=tournament.playerProfileIds?.[name]||(tournament.results||[]).find(result=>result.name===name)?.profileId||'';
   return currentMemberNickname(id,name);
 }
+function tournamentMatchesHtml(tournament){
+  const matches=(tournament.matches||[]).filter(m=>m.a&&m.b).sort((a,b)=>(a.round||1)-(b.round||1));
+  if(!matches.length)return '<p class="empty-line">Für diesen Spieltag wurden keine einzelnen Paarungen gespeichert.</p>';
+  return `<div class="season-pairings">${matches.map(m=>`<div class="season-pairing"><small>Runde ${m.round||1}</small><b>${esc(tournamentPlayerName(tournament,m.a))}</b><strong>${m.sa??'–'} : ${m.sb??'–'}</strong><b>${esc(tournamentPlayerName(tournament,m.b))}</b></div>`).join('')}</div>`;
+}
 function renderSeasonTournaments(season=selectedSeason()){
-  const tournaments=season?.tournaments||[],list=tournaments.length?`<div class="match-list">${tournaments.map(t=>`<article class="match season-match"><div class="match-no">${esc(t.date)} · ${t.participantCount} Teilnehmer${t.manual?' · Manuell':''}</div><div><b>${esc(t.name)}</b><p>Sieger: ${esc(tournamentPlayerName(t,t.winner)||'–')} · Top 3: ${(t.top3||[]).map(name=>esc(tournamentPlayerName(t,name))).join(', ')||'–'}</p><div class="season-detail hidden" id="details-${esc(t.id)}">${(t.results||[]).sort((a,b)=>a.rank-b.rank).map(r=>`<span>${r.rank}. ${esc(tournamentPlayerName(t,r.name))} · ${r.wins}S/${r.losses}N · ${r.points} Pkt.${r.max180?` · ${r.max180}x180`:''}${r.checkout?` · HF ${r.checkout}`:''}</span>`).join('')}</div></div><div class="season-match-actions"><button class="secondary" data-tournament-detail="${esc(t.id)}">Details anzeigen</button><button class="danger" data-delete-tournament="${esc(t.id)}">Löschen</button></div></article>`).join('')}</div>`:'<div class="empty-card">Noch keine Turniere in dieser Saison.</div>';
+  const tournaments=season?.tournaments||[],list=tournaments.length?`<div class="match-list">${tournaments.map(t=>`<article class="match season-match"><div class="match-no">${esc(t.date)} · ${t.participantCount} Teilnehmer${t.manual?' · Manuell':''}</div><div><b>${esc(t.name)}</b><p>Sieger: ${esc(tournamentPlayerName(t,t.winner)||'–')} · Top 3: ${(t.top3||[]).map(name=>esc(tournamentPlayerName(t,name))).join(', ')||'–'}</p><div class="season-detail hidden" id="details-${esc(t.id)}"><h4>Platzierungen</h4><div class="season-results">${(t.results||[]).sort((a,b)=>a.rank-b.rank).map(r=>`<span>${r.rank}. ${esc(tournamentPlayerName(t,r.name))} · ${r.wins}S/${r.losses}N · ${r.points} Pkt.${r.max180?` · ${r.max180}x180`:''}${r.checkout?` · HF ${r.checkout}`:''}</span>`).join('')}</div><h4>Paarungen</h4>${tournamentMatchesHtml(t)}</div></div><div class="season-match-actions"><button class="secondary" data-tournament-detail="${esc(t.id)}">Details anzeigen</button><button class="danger" data-delete-tournament="${esc(t.id)}">Löschen</button></div></article>`).join('')}</div>`:'<div class="empty-card">Noch keine Turniere in dieser Saison.</div>';
   $('#seasonTournaments').innerHTML=renderManualTournamentForm(season)+list;
 }
 function renderSeasonStats(season=selectedSeason(),rows=calculateSeasonStandings(season)){
@@ -983,6 +998,8 @@ $('#seasonTournaments').addEventListener('submit',e=>{if(e.target.id!=='manualTo
 $('#seasonTournaments').addEventListener('click',e=>{
   const detailId=e.target.dataset.tournamentDetail,deleteId=e.target.dataset.deleteTournament;
   if(e.target.id==='toggleManualTournament'){manualTournamentOpen=!manualTournamentOpen;renderSeasonTournaments();return}
+  if(e.target.id==='addManualMatch'){const rows=$('#manualMatchRows'),players=manualTournamentPlayers();if(rows)rows.insertAdjacentHTML('beforeend',manualMatchRow(players,Math.max(1,...[...rows.querySelectorAll('[data-manual-round]')].map(input=>+input.value||1))));return}
+  if(e.target.dataset.removeManualMatch!==undefined){e.target.closest('[data-manual-match]')?.remove();return}
   if(detailId){const box=document.getElementById(`details-${detailId}`);if(box){box.classList.toggle('hidden');e.target.textContent=box.classList.contains('hidden')?'Details anzeigen':'Details ausblenden'}return}
   if(deleteId){const season=selectedSeason(),tournament=season?.tournaments?.find(t=>t.id===deleteId);if(!season||!tournament)return;if(!confirm(`Spieltag „${tournament.name}“ vom ${tournament.date} wirklich aus der Saison löschen?`))return;deleteTournamentFromSeason(season.id,deleteId)}
 });
