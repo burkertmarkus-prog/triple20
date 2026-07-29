@@ -29,10 +29,36 @@ const seasonStore=loadSeasons();
 let selectedSeasonId=localStorage.getItem('tripleTwentySelectedSeason')||'';
 let manualTournamentOpen=false;
 let seasonFormOpen=false;
-function replaceTournamentState(next){Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,next||{players:[],playerProfileIds:{},started:false,matches:[],settings:{}})}
+const COMPETITION_KEYS=['players','playerProfileIds','started','matches','settings','groups','withdrawn','savedToHistory','seasonImportedTo','seasonTournamentId','groupStage'];
+function emptyCompetition(){return{players:[],playerProfileIds:{},started:false,matches:[],settings:{}}}
+function competitionSnapshot(source=state){const out={};for(const key of COMPETITION_KEYS)if(source[key]!==undefined)out[key]=structuredClone(source[key]);return{...emptyCompetition(),...out}}
+function ensureTournamentDayState(target=state){
+  if(!target.competitions){
+    const legacy=competitionSnapshot(target);
+    target.competitions={men:legacy,women:emptyCompetition()};
+    target.activeCompetition='men';
+    target.eventName=target.eventName||legacy.settings?.eventName||legacy.settings?.name||'Freitag-Abend-Cup';
+  }
+  target.competitions.men=target.competitions.men||emptyCompetition();
+  target.competitions.women=target.competitions.women||emptyCompetition();
+  target.activeCompetition=['men','women'].includes(target.activeCompetition)?target.activeCompetition:'men';
+  target.eventName=target.eventName||'Freitag-Abend-Cup';
+  return target;
+}
+function syncActiveCompetition(){ensureTournamentDayState();state.competitions[state.activeCompetition]=competitionSnapshot()}
+function loadActiveCompetition(){
+  ensureTournamentDayState();
+  const next=competitionSnapshot(state.competitions[state.activeCompetition]);
+  for(const key of COMPETITION_KEYS)delete state[key];
+  Object.assign(state,next);
+}
+function competitionLabel(key=state.activeCompetition){return key==='women'?'Damen':'Herren'}
+function competitionTitle(){return `${state.eventName||'Spieltag'} – ${competitionLabel()}`}
+function replaceTournamentState(next){Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,next||emptyCompetition());ensureTournamentDayState();loadActiveCompetition()}
+ensureTournamentDayState();loadActiveCompetition();
 function emptyMemberTournament(){return{players:[],playerProfileIds:{},started:false,matches:[],settings:{},memberLocal:true}}
 function loadMemberTournament(){return safeJsonParse(localStorage.getItem(MEMBER_TOURNAMENT_KEY)||'null')||emptyMemberTournament()}
-function save(){if(isMember()&&T20Cloud.tournamentViewMode==='live')return;if(isMember()||state.memberLocal){state.memberLocal=true;localStorage.setItem(MEMBER_TOURNAMENT_KEY,JSON.stringify(state));return}localStorage.setItem('dartTournament',JSON.stringify(state))}
+function save(){if(isMember()&&T20Cloud.tournamentViewMode==='live')return;syncActiveCompetition();if(isMember()||state.memberLocal){state.memberLocal=true;localStorage.setItem(MEMBER_TOURNAMENT_KEY,JSON.stringify(state));return}localStorage.setItem('dartTournament',JSON.stringify(state))}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function mergeSettings(base,stored){const out={...base,...(stored||{})};out.club={...base.club,...(stored?.club||{}),pointSystem:{...base.club.pointSystem,...(stored?.club?.pointSystem||{})}};out.tournament={...base.tournament,...(stored?.tournament||{})};out.theme={...base.theme,...(stored?.theme||{})};out.club.enabled=out.mode==='club';return out}
 function migrateFriendlyTheme(stored){const t=stored?.theme;if(t?.background==='#05070A'&&t?.card==='#111820'&&t?.text==='#F7F7F7')stored.theme={...defaultSettings.theme};return stored}
@@ -111,7 +137,7 @@ function applyTriple20Data(data){
     }
   }finally{T20_SUPPRESS_SYNC=false}
   const incomingState=safeJsonParse(localStorage.getItem('dartTournament')||'null')||{players:[],started:false,matches:[],settings:{}};
-  Object.keys(state).forEach(k=>delete state[k]);Object.assign(state,incomingState);
+  Object.keys(state).forEach(k=>delete state[k]);Object.assign(state,incomingState);ensureTournamentDayState();loadActiveCompetition();
   const seasons=loadSeasons();seasonStore.seasons=seasons.seasons||[];
   selectedSeasonId=localStorage.getItem('tripleTwentySelectedSeason')||'';
   appSettings=loadSettings();
@@ -438,7 +464,7 @@ window.T20Cloud={
     try{
       const rows=await this.fetchCloud(),cloud=this.rowsToObject(rows),hasCloud=rows.length&&Object.values(cloud).some(v=>v!==null&&v!==undefined);
       this.loadedCloudData=cloud;this.lastSyncAt=new Date().toISOString();localStorage.setItem('triple20_last_sync',this.lastSyncAt);
-      if(this.user&&!this.isAdmin){this.liveTournamentState=structuredClone(cloud.dartTournament||{players:[],playerProfileIds:{},started:false,matches:[],settings:{}});const target=this.tournamentViewMode==='live'?this.liveTournamentState:loadMemberTournament();applyTriple20Data({...cloud,dartTournament:target});if(this.tournamentViewMode==='local')save();setSyncStatus('Angemeldet – Mitglied','view-only');return}
+      if(this.user&&!this.isAdmin){const selectedCompetition=state.activeCompetition||'men';this.liveTournamentState=structuredClone(cloud.dartTournament||{players:[],playerProfileIds:{},started:false,matches:[],settings:{}});if(this.liveTournamentState.competitions?.[selectedCompetition])this.liveTournamentState.activeCompetition=selectedCompetition;const target=this.tournamentViewMode==='live'?this.liveTournamentState:loadMemberTournament();applyTriple20Data({...cloud,dartTournament:target});if(this.tournamentViewMode==='local')save();setSyncStatus('Angemeldet – Mitglied','view-only');return}
       if(this.isAdmin&&this.pendingSync){await this.syncAll();return}
       if(!hasCloud){setSyncStatus(this.isAdmin&&hasMeaningfulLocalData()?'Online – Cloud leer, lokale Daten vorhanden':'Online – aktuell','online');renderCloudPanel();return}
       if(!this.isAdmin&&(state.started||state.players?.length||state.matches?.length)){setSyncStatus('Offline – lokales Turnier','offline');renderCloudPanel();return}
@@ -538,8 +564,18 @@ function renderPlayers(){
   renderRegisteredPlayerChoices();
   $('#startBtn').disabled=state.players.length<2;save();
 }
-function renderTournamentSubnav(){const nav=$('#tournamentSubnav');if(!nav)return;nav.classList.toggle('hidden',!isMember());if(!isMember())return;const mode=T20Cloud.tournamentViewMode||'local',live=!!T20Cloud.liveTournamentState?.started;nav.innerHTML=`<button type="button" class="${mode==='local'?'active':''}" data-tournament-mode="local">Turnier einrichten</button><button type="button" class="${mode==='live'?'active':''}" data-tournament-mode="live">Live-Turnier ansehen${live?' · läuft':''}</button>`}
+function renderTournamentSubnav(){const nav=$('#tournamentSubnav');if(!nav)return;nav.classList.toggle('hidden',!isMember());if(!isMember())return;const mode=T20Cloud.tournamentViewMode||'local',liveState=T20Cloud.liveTournamentState,live=!!(liveState?.started||Object.values(liveState?.competitions||{}).some(competition=>competition?.started));nav.innerHTML=`<button type="button" class="${mode==='local'?'active':''}" data-tournament-mode="local">Turnier einrichten</button><button type="button" class="${mode==='live'?'active':''}" data-tournament-mode="live">Live-Turnier ansehen${live?' · läuft':''}</button>`}
 function setTournamentViewMode(mode){if(!isMember()||!['local','live'].includes(mode)||T20Cloud.tournamentViewMode===mode)return;if(T20Cloud.tournamentViewMode==='local')save();T20Cloud.tournamentViewMode=mode;replaceTournamentState(mode==='live'?structuredClone(T20Cloud.liveTournamentState||{players:[],playerProfileIds:{},started:false,matches:[],settings:{}}):loadMemberTournament());renderPlayers();showTournament()}
+function renderCompetitionNav(){
+  const nav=$('#competitionNav');if(!nav)return;
+  ensureTournamentDayState();
+  nav.innerHTML=['men','women'].map(key=>{const competition=key===state.activeCompetition?competitionSnapshot():state.competitions[key],prepared=competition.started||competition.players?.length,open=competition.matches?.filter(match=>match.sa===null).length||0,status=competition.started?` · ${open} offen`:prepared?' · vorbereitet':'';return `<button type="button" class="${key===state.activeCompetition?'active':''}" data-competition="${key}">${competitionLabel(key)}${status}</button>`}).join('');
+}
+function setActiveCompetition(key){
+  if(!['men','women'].includes(key)||key===state.activeCompetition)return;
+  if(!state.started&&$('#tournamentName')?.value.trim())state.eventName=$('#tournamentName').value.trim();
+  syncActiveCompetition();state.activeCompetition=key;loadActiveCompetition();save();renderPlayers();showTournament();
+}
 $('#playerForm').addEventListener('submit',e=>{e.preventDefault();const input=$('#playerName');if(addTournamentPlayer(input.value)){input.value='';input.focus()}});
 $('#playerList').addEventListener('click',e=>{const i=e.target.dataset.remove;if(i!==undefined){state.players.splice(+i,1);renderPlayers()}});
 $('#setupSection').addEventListener('click',e=>{const button=e.target.closest('[data-add-profile]');if(button)addTournamentPlayer(button.dataset.addProfile,button.dataset.profileId)});
@@ -585,7 +621,7 @@ function makeMatches(){
   else addPairs(arr,shuffle(state.players),1,'upper');
   return arr;
 }
-$('#startBtn').addEventListener('click',()=>{state.withdrawn=[];delete state.savedToHistory;delete state.seasonImportedTo;state.settings={name:$('#tournamentName').value.trim()||'Dartturnier',mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value};state.matches=makeMatches();state.started=true;save();renderTournament()});
+$('#startBtn').addEventListener('click',()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value};state.matches=makeMatches();state.started=true;save();renderTournament()});
 
 function playerLosses(){const losses=Object.fromEntries(state.players.map(p=>[p,0]));state.matches.filter(m=>m.sa!==null&&m.b!=='Freilos').forEach(m=>{losses[m.sa>m.sb?m.b:m.a]++});return losses}
 function standingsFor(players,matches=state.matches){return players.map(name=>{const played=matches.filter(m=>m.sa!==null&&(m.a===name||m.b===name));let w=0,lf=0,la=0;played.forEach(m=>{const own=m.a===name?m.sa:m.sb,other=m.a===name?m.sb:m.sa;lf+=own;la+=other;if(own>other)w++});return{name,p:played.length,w,l:played.length-w,lf,la,pts:w*2}}).sort((a,b)=>b.pts-a.pts||(b.lf-b.la)-(a.lf-a.la)||b.lf-a.lf)}
@@ -598,15 +634,16 @@ function champion(){
   return active.length===1&&state.matches.every(m=>m.sa!==null)?active[0]:'';
 }
 function renderTournament(){
-  renderTournamentSubnav();$('#memberLiveEmpty')?.classList.add('hidden');
+  renderTournamentSubnav();renderCompetitionNav();$('#memberLiveEmpty')?.classList.add('hidden');
   if(isMember()&&T20Cloud.tournamentViewMode==='live'&&!state.started){$('#setupSection').classList.add('hidden');$('#tournamentSection').classList.add('hidden');$('#memberLiveEmpty')?.classList.remove('hidden');renderReadonlyMode();return}
   if(!T20Cloud.authResolved&&!state.guestLocal&&(state.started||state.players?.length||state.matches?.length)){ $('#setupSection').classList.remove('hidden');$('#tournamentSection').classList.add('hidden');$('#playerList').innerHTML='';$('#playerCount').textContent='0 Spieler eingetragen';$('#registeredPlayerChoices')?.classList.add('hidden');renderReadonlyMode();return }
   if(!T20Cloud.user&&!state.guestLocal&&(state.started||state.players?.length||state.matches?.length)){Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,{players:[],playerProfileIds:{},started:false,matches:[],settings:{},guestLocal:true});save();renderPlayers()}
-  if(!state.started){$('#setupSection').classList.remove('hidden');$('#tournamentSection').classList.add('hidden');renderReadonlyMode();return}
+  if(!state.started){$('#setupSection').classList.remove('hidden');$('#tournamentSection').classList.add('hidden');$('#tournamentName').value=state.eventName||'Freitag-Abend-Cup';renderReadonlyMode();return}
   const noBracket=state.settings.mode==='roundrobin'||state.settings.mode==='swiss';
   $('#setupSection').classList.add('hidden');$('#tournamentSection').classList.remove('hidden');$('#bracketTab').classList.toggle('hidden',noBracket);
   if(noBracket&&$('#bracketTab').classList.contains('active')){document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelector('[data-tab="matches"]').classList.add('active');$('#matchesView').classList.remove('hidden');$('#bracketView').classList.add('hidden');$('#tableView').classList.add('hidden')}
-  $('#liveTitle').textContent=state.settings.name;$('#liveMeta').textContent=`${state.players.length} Spieler · ${modeName()} · ${state.settings.start}`;
+  $('#liveCompetitionLabel').textContent=`${competitionLabel().toUpperCase()} · LIVE-TURNIER`;$('#liveTitle').textContent=state.eventName||state.settings.eventName||state.settings.name;$('#liveMeta').textContent=`${state.players.length} Teilnehmende · ${modeName()} · ${state.settings.start}`;
+  $('#renameEventBtn')?.classList.toggle('hidden',!isAdmin());
   const done=state.matches.filter(m=>m.sa!==null).length;$('#progressText').textContent=Math.round(done/state.matches.length*100)+'%';
   $('#matchList').innerHTML=state.matches.map((m,i)=>`<article class="match ${m.sa!==null?'done':''}"><div class="match-no">${m.group!==undefined?'Gruppe '+String.fromCharCode(65+m.group)+' · ':''}Runde ${m.round} · ${m.bracket==='lower'?'Verlierer':m.bracket==='grand'?'Finale':'Spiel'} ${String(i+1).padStart(2,'0')}</div><div class="players-match"><span class="${m.sa>m.sb?'winner-player':''}">${esc(m.a)}</span><b>${m.sa===null?'VS':m.sa+' : '+m.sb}</b><span class="${m.sb>m.sa?'winner-player':''}">${esc(m.b)}</span></div><div class="score-controls">${m.b==='Freilos'?'Weiter':`<select data-sa="${i}">${options(m.sa)}</select><span>:</span><select data-sb="${i}">${options(m.sb)}</select><button data-save="${i}">✓</button>`}</div></article>`).join('');
   renderTable();renderBracket();renderQualification();renderWithdrawCard();const winner=champion();$('#winnerCard').classList.toggle('hidden',!winner);if(winner){$('#winnerName').textContent=winner;saveTournamentToHistory()}renderSeasonImport(winner);save();renderReadonlyMode();
@@ -722,7 +759,7 @@ function buildCurrentTournamentRecord(){
   document.querySelectorAll('[data-stat-player]').forEach(row=>{const p=row.dataset.statPlayer;stats[p]={max180:+(row.querySelector('[data-stat-180]')?.value||0),checkout:+(row.querySelector('[data-stat-checkout]')?.value||0)}});
   const playerProfileIds=Object.fromEntries(state.players.map(name=>[name,state.playerProfileIds?.[name]||memberIdForName(name)]).filter(([,id])=>id));
   const results=state.players.map(name=>{const wins=tournamentWins(name,state.matches),losses=tournamentLosses(name,state.matches),byes=tournamentByes(name,state.matches),row=rows.find(r=>r.name===name)||{},profileId=playerProfileIds[name]||'';return{name,profileId,wins,losses,byes,rank:(rows.findIndex(r=>r.name===name)+1)||0,legsFor:row.lf||0,legsAgainst:row.la||0,points:pointsForWins(wins,pointSystem)+byes,max180:stats[name]?.max180||0,checkout:stats[name]?.checkout||0}});
-  return{id:`tournament-${Date.now()}`,name:state.settings.name||'Turnier',date,mode:state.settings.mode,players:[...state.players],participantCount:state.players.length,winner:rows[0]?.name||'',top3:rows.slice(0,3).map(r=>r.name),playerProfileIds,settings:{...state.settings},matches:state.matches.map(m=>({...m})),results,createdAt:new Date().toISOString()};
+  return{id:`tournament-${Date.now()}`,name:competitionTitle(),eventName:state.eventName||'',competition:state.activeCompetition,competitionLabel:competitionLabel(),date,mode:state.settings.mode,players:[...state.players],participantCount:state.players.length,winner:rows[0]?.name||'',top3:rows.slice(0,3).map(r=>r.name),playerProfileIds,settings:{...state.settings,name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition},matches:state.matches.map(m=>({...m})),results,createdAt:new Date().toISOString()};
 }
 function loadTournamentHistory(){try{const data=JSON.parse(localStorage.getItem(TOURNAMENT_HISTORY_KEY)||'[]');return Array.isArray(data)?data:[]}catch{return[]}}
 function saveTournamentToHistory(){
@@ -890,7 +927,7 @@ function renderPlayerSeasonDetail(name){
 function exportSeasonJson(){const season=selectedSeason();if(!season)return;downloadFile(`${season.name.replaceAll(' ','_')}.json`,'application/json',JSON.stringify(season,null,2))}
 function exportStandingsCsv(){const season=selectedSeason();if(!season)return;const rows=calculateSeasonStandings(season),head=['Platz','Spieler','Gesamtpunkte','Bereinigte Punkte','Turniere','Siege','Niederlagen','180er','Höchstes Checkout'];const csv=[head.join(';'),...rows.map((r,i)=>[i+1,r.name,r.totalPoints,r.cleanPoints,r.played,r.wins,r.losses,r.max180,r.checkout].map(v=>`"${String(v).replaceAll('"','""')}"`).join(';'))].join('\n');downloadFile(`${season.name.replaceAll(' ','_')}_rangliste.csv`,'text/csv;charset=utf-8',csv)}
 
-function hideMainSections(){['dashboardSection','authSection','settingsSection','seasonSection','tournamentSubnav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
+function hideMainSections(){['dashboardSection','authSection','settingsSection','seasonSection','tournamentSubnav','competitionNav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
 function renderNavigation(){
   const admin=isAdmin(),member=isMember(),guest=!admin&&!member;
   $('.club-settings-block')?.classList.remove('hidden');
@@ -987,7 +1024,7 @@ function renderBracket(){
   $('#bracketGrid').innerHTML=`<div class="double-bracket-layout">${doubleLane('lower','Verliererrunde',lowerStages,lowerRounds,upperRounds)}${final}${doubleLane('upper','Gewinnerrunde',upperStages,upperRounds,upperRounds)}</div>`;
 }
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#matchesView').classList.toggle('hidden',b.dataset.tab!=='matches');$('#bracketView').classList.toggle('hidden',b.dataset.tab!=='bracket');$('#tableView').classList.toggle('hidden',b.dataset.tab!=='table')}));
-function showTournament(){hideMainSections();renderTournament();renderNavigation()}
+function showTournament(){hideMainSections();$('#competitionNav')?.classList.remove('hidden');renderTournament();renderNavigation()}
 function showSeason(){if(!isMember()&&!isAdmin()){showTournament();return}if(!isClubMode()){showDashboard();return}hideMainSections();$('#seasonSection').classList.remove('hidden');renderSeasonView();renderNavigation()}
 function fillSeasonForm(){const h=currentHalfYear();$('#seasonName').value=h.name;$('#seasonStart').value=h.start;$('#seasonEnd').value=h.end;$('#seasonDrops').value='0'}
 function closeMenu(){const hero=$('.hero'),btn=$('#menuToggle');hero?.classList.remove('nav-open');if(btn)btn.setAttribute('aria-expanded','false')}
@@ -1020,7 +1057,7 @@ $('#cloudAdminPanel').addEventListener('click',e=>{
 $('#cloudAdminPanel').addEventListener('change',e=>{if(e.target.id==='backupImportInput')handleBackupImport(e.target.files?.[0]);if(e.target.id==='profileAvatarInput'&&e.target.files?.[0])openAvatarCrop(e.target.files[0]).catch(error=>{T20Cloud.authError=`Bild konnte nicht geöffnet werden: ${error?.message||'Unbekannter Fehler'}`;renderCloudPanel()})});
 document.addEventListener('click',e=>{if(e.target.id==='cancelAvatarCropBtn'||e.target.id==='avatarCropOverlay')closeAvatarCrop();if(e.target.id==='saveAvatarCropBtn')saveAvatarCrop()});
 $('#showTournamentBtn').addEventListener('click',showTournament);
-document.addEventListener('click',e=>{const button=e.target.closest('[data-tournament-mode]');if(button)setTournamentViewMode(button.dataset.tournamentMode)});
+document.addEventListener('click',e=>{const modeButton=e.target.closest('[data-tournament-mode]');if(modeButton){setTournamentViewMode(modeButton.dataset.tournamentMode);return}const competitionButton=e.target.closest('[data-competition]');if(competitionButton)setActiveCompetition(competitionButton.dataset.competition)});
 $('#showSeasonBtn').addEventListener('click',showSeason);
 $('#showSettingsBtn').addEventListener('click',showSettings);
 $('#showLoginBtn').addEventListener('click',showLogin);
@@ -1044,8 +1081,20 @@ $('#seasonTournaments').addEventListener('click',e=>{
   if(deleteId){const season=selectedSeason(),tournament=season?.tournaments?.find(t=>t.id===deleteId);if(!season||!tournament)return;if(!confirm(`Spieltag „${tournament.name}“ vom ${tournament.date} wirklich aus der Saison löschen?`))return;deleteTournamentFromSeason(season.id,deleteId)}
 });
 $('#seasonPlayerDetail').addEventListener('click',e=>{if(e.target.classList.contains('close-detail'))$('#seasonPlayerDetail').innerHTML=''});
-$('#winnerCard').addEventListener('click',e=>{if(e.target.id==='exportCurrentTournamentBtn'){exportCurrentTournamentJson();return}if(e.target.id==='seasonFromWinnerBtn'){showSeason();return}if(e.target.id!=='addToSeasonBtn')return;const id=$('#seasonImportSelect')?.value;if(!id)return;const tournament=buildCurrentTournamentRecord();addTournamentToSeason(id,tournament);state.seasonImportedTo=id;save();renderSeasonImport(champion());alert('Turnier wurde in die Saisonwertung übernommen.')});
+$('#winnerCard').addEventListener('click',e=>{if(e.target.id==='exportCurrentTournamentBtn'){exportCurrentTournamentJson();return}if(e.target.id==='seasonFromWinnerBtn'){showSeason();return}if(e.target.id!=='addToSeasonBtn')return;const id=$('#seasonImportSelect')?.value;if(!id)return;const tournament=buildCurrentTournamentRecord();addTournamentToSeason(id,tournament);state.seasonImportedTo=id;state.seasonTournamentId=tournament.id;save();renderSeasonImport(champion());alert('Turnier wurde in die Saisonwertung übernommen.')});
 $('#exportSeasonJsonBtn').addEventListener('click',exportSeasonJson);
 $('#exportStandingsCsvBtn').addEventListener('click',exportStandingsCsv);
-function reset(){if(state.started&&!confirm('Das aktuelle Turnier wirklich löschen?'))return;Object.assign(state,{players:[],playerProfileIds:{},started:false,matches:[],settings:{}});delete state.seasonImportedTo;delete state.savedToHistory;save();renderPlayers();renderTournament();showTournament()}
-$('#resetBtn').onclick=reset;$('#liveResetBtn').onclick=reset;$('#finishReset').onclick=reset;registerAccess();applyTheme();applyTournamentDefaults();fillSeasonForm();renderPlayers();renderSettingsForm();renderNavigation();renderSeasonView();showTournament();T20Cloud.init();
+function renameEvent(){
+  if(!isAdmin())return;
+  const next=prompt('Neuer Name des Spieltags:',state.eventName||'');
+  if(next===null)return;
+  const name=next.trim();if(!name){alert('Bitte einen Namen für den Spieltag eingeben.');return}
+  state.eventName=name;
+  for(const [key,competition] of Object.entries(state.competitions||{})){competition.settings=competition.settings||{};competition.settings.eventName=name;competition.settings.name=`${name} – ${competitionLabel(key)}`}
+  state.settings={...(state.settings||{}),eventName:name,name:competitionTitle()};
+  if(state.savedToHistory){const history=loadTournamentHistory(),record=history.find(item=>item.id===state.savedToHistory);if(record){record.eventName=name;record.name=competitionTitle();record.settings={...(record.settings||{}),eventName:name,name:competitionTitle()};localStorage.setItem(TOURNAMENT_HISTORY_KEY,JSON.stringify(history))}}
+  if(state.seasonImportedTo&&state.seasonTournamentId){const season=seasonStore.seasons.find(item=>item.id===state.seasonImportedTo),record=season?.tournaments?.find(item=>item.id===state.seasonTournamentId);if(record){record.eventName=name;record.name=competitionTitle();record.settings={...(record.settings||{}),eventName:name,name:competitionTitle()};persistSeasons()}}
+  save();renderTournament();renderNavigation();
+}
+function reset(){if(state.started&&!confirm(`Den Bewerb „${competitionLabel()}“ wirklich löschen? Der andere Bewerb bleibt erhalten.`))return;for(const key of COMPETITION_KEYS)delete state[key];Object.assign(state,emptyCompetition());syncActiveCompetition();save();renderPlayers();renderTournament();showTournament()}
+$('#resetBtn').onclick=reset;$('#liveResetBtn').onclick=reset;$('#finishReset').onclick=reset;$('#renameEventBtn').onclick=renameEvent;registerAccess();applyTheme();applyTournamentDefaults();fillSeasonForm();renderPlayers();renderSettingsForm();renderNavigation();renderSeasonView();showTournament();T20Cloud.init();

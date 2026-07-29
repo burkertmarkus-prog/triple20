@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260722-5">
+  <link rel="stylesheet" href="styles.css?v=20260729-1">
 </head>
 <body>
   <header class="hero">
@@ -92,6 +92,7 @@
     </section>
 
     <nav id="tournamentSubnav" class="tournament-subnav hidden" aria-label="Turnieransicht"></nav>
+    <nav id="competitionNav" class="competition-nav" aria-label="Bewerb auswählen"></nav>
     <section id="memberLiveEmpty" class="card slim-card member-live-empty hidden"><h3>Derzeit läuft kein Vereinsturnier</h3><p>Sobald die Turnierleitung ein Turnier startet, kannst du hier den Spielplan und die Tabelle ansehen.</p></section>
     <section class="setup card" id="setupSection">
       <div class="section-title"><div><h2>Turnier einrichten</h2><p>Die wichtigsten Eckdaten</p></div></div>
@@ -111,7 +112,7 @@
     </section>
 
     <section id="tournamentSection" class="hidden">
-      <div class="tournament-head"><div><p class="eyebrow">LIVE-TURNIER</p><h2 id="liveTitle"></h2><p id="liveMeta"></p><button id="liveResetBtn" class="secondary" type="button">Neues Turnier</button></div><div class="progress-ring"><strong id="progressText">0%</strong><span>gespielt</span></div></div>
+      <div class="tournament-head"><div><p class="eyebrow" id="liveCompetitionLabel">LIVE-TURNIER</p><h2 id="liveTitle"></h2><p id="liveMeta"></p><div class="live-tournament-actions"><button id="renameEventBtn" class="secondary" type="button">Spieltag umbenennen</button><button id="liveResetBtn" class="secondary" type="button">Neues Turnier</button></div></div><div class="progress-ring"><strong id="progressText">0%</strong><span>gespielt</span></div></div>
       <div id="withdrawCard" class="withdraw-card hidden"></div>
       <div class="tabs"><button class="tab active" data-tab="matches">Spielplan</button><button id="bracketTab" class="tab hidden" data-tab="bracket">Turnierbaum</button><button class="tab" data-tab="table">Tabelle</button></div>
       <div id="matchesView"><div id="matchList" class="match-list"></div></div>
@@ -123,6 +124,6 @@
   </main>
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260729-1"></script>
+  <script src="app.js?v=20260729-2"></script>
 </body>
 </html>
