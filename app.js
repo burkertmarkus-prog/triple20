@@ -272,7 +272,7 @@ function cleanAuthRedirectUrl(){
 window.T20Cloud={
   authResolved:false,
   liveTournamentState:null,tournamentViewMode:'local',
-  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,sessionProcessingPromise:null,authRedirectSessionPromise:null,authRedirectSessionResolve:null,loginBusy:false,magicLinkBusy:false,profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),authMessage:'',authError:'',loadBusy:false,pendingAuthSession:null,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
+  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,sessionProcessingPromise:null,authRedirectSessionPromise:null,authRedirectSessionResolve:null,loginBusy:false,magicLinkBusy:false,profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),authMessage:'',authError:'',loadBusy:false,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
   async finishAuthRedirect(){cleanAuthRedirectUrl();this.authHandoffActive=false;this.authMessage='Anmeldung erfolgreich. Du kannst diesen Tab weiterverwenden.';showLogin();renderCloudPanel()},
   async init(){
     if(this.initPromise)return this.initPromise;
@@ -286,7 +286,7 @@ window.T20Cloud={
         }
         if(!this.authListenerStarted){
           if(this.authRedirectPending)this.authRedirectSessionPromise=new Promise(resolve=>{this.authRedirectSessionResolve=resolve});
-          this.client.auth.onAuthStateChange((_event,session)=>{if(session&&this.authRedirectSessionResolve){this.authRedirectSessionResolve(session);this.authRedirectSessionResolve=null}this.pendingAuthSession=session||null;setTimeout(()=>{if(!this.loginBusy)this.processPendingAuthSession()},0)});
+          this.client.auth.onAuthStateChange((event,session)=>{if(session&&this.authRedirectSessionResolve){this.authRedirectSessionResolve(session);this.authRedirectSessionResolve=null}setTimeout(()=>this.setSession(session||null,{authEvent:event}),0)});
           this.authListenerStarted=true;
         }
         this.ready=true;
@@ -322,8 +322,8 @@ window.T20Cloud={
       this.authError=authRedirectErrorMessage()||`Anmeldung konnte nicht abgeschlossen werden: ${error?.message||'Bitte fordere einen neuen Link an.'}`;this.authMessage='';this.authRedirectPending=false;cleanAuthRedirectUrl();setSyncStatus('Nur Ansicht','view-only');showLogin();renderCloudPanel();
     }
   },
-  async processPendingAuthSession(){const session=this.pendingAuthSession;this.pendingAuthSession=null;await this.setSession(session||null)},
   setSession(session,options={}){
+    if(!session&&options.authEvent==='INITIAL_SESSION'&&this.session)return Promise.resolve();
     if(session?.access_token&&this.session?.access_token===session.access_token&&this.authResolved)return this.sessionProcessingPromise||Promise.resolve();
     const previous=this.sessionProcessingPromise||Promise.resolve();
     const current=previous.catch(error=>console.warn('Vorherige Sitzungsverarbeitung fehlgeschlagen:',error)).then(()=>this.processSession(session,options));
@@ -441,7 +441,6 @@ window.T20Cloud={
       const {data,error}=await withTimeout(this.client.auth.signInWithPassword({email,password}),15000,'Anmeldung dauert zu lange. Bitte Verbindung prüfen und erneut versuchen.');
       if(error)throw error;
       if(!data?.session?.user)throw new Error('Keine gültige Sitzung erhalten.');
-      this.pendingAuthSession=null;
       await this.setSession(data.session||null);
       this.loadCloud({initial:true}).catch(e=>console.warn('Cloud nach Login konnte nicht geladen werden',e));
     }catch(error){
@@ -455,7 +454,7 @@ window.T20Cloud={
   async signOut(){
     try{await this.stopPresence();if(this.client)await this.client.auth.signOut()}catch(e){console.warn('Abmeldung fehlgeschlagen',e)}
     localStorage.removeItem('triple20_admin_uid');
-    this.pendingAuthSession=null;this.session=null;this.user=null;this.isAdmin=false;this.profile=null;this.avatarSignedUrl='';this.authMessage='';this.authError='';
+    this.session=null;this.user=null;this.isAdmin=false;this.profile=null;this.avatarSignedUrl='';this.authMessage='';this.authError='';
     if(state.memberLocal)replaceTournamentState({players:[],playerProfileIds:{},started:false,matches:[],settings:{},guestLocal:true});
     renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only');showTournament();
   },
