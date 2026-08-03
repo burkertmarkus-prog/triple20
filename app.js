@@ -129,7 +129,7 @@ function hasMeaningfulLocalData(){return !!(state.players?.length||state.matches
 function collectTriple20Data(){return Object.fromEntries(CLOUD_DATA_KEYS.map(k=>[k,localValueForKey(k)]))}
 function backupTriple20Data(prefix='triple20_backup'){const data={createdAt:new Date().toISOString(),app:'Triple20',data:collectTriple20Data()};downloadFile(`${prefix}_${new Date().toISOString().slice(0,19).replaceAll(':','-')}.json`,'application/json',JSON.stringify(data,null,2));return data}
 function applyTriple20Data(data){
-  const visibleSection=['authSection','settingsSection','seasonSection','setupSection','tournamentSection'].find(id=>!$('#'+id)?.classList.contains('hidden'))||'';
+  const visibleSection=['authSection','settingsSection','seasonSection','shopSection','setupSection','tournamentSection'].find(id=>!$('#'+id)?.classList.contains('hidden'))||'';
   if(!data)return;
   T20_SUPPRESS_SYNC=true;
   try{
@@ -150,6 +150,7 @@ function applyTriple20Data(data){
   if(visibleSection==='authSection')showLogin();
   else if(visibleSection==='settingsSection')showSettings();
   else if(visibleSection==='seasonSection')showSeason();
+  else if(visibleSection==='shopSection')showShop();
   else if(visibleSection==='tournamentSection'||visibleSection==='setupSection')showTournament();
 }
 function backupPreview(data=collectTriple20Data()){const seasons=data.tripleTwentySeasons?.seasons||[],tournaments=data.triple20_tournaments||[],current=data.dartTournament||{};return `${seasons.length} Saison(en), ${tournaments.length} gespeicherte Turnier(e), aktuelles Turnier: ${current.started?'läuft':'nicht gestartet'}${current.players?.length?`, ${current.players.length} Spieler`:''}`;}
