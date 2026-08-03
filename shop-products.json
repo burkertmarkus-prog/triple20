@@ -4,7 +4,7 @@
       "id": "red-dragon-razor-edge",
       "category": "darts",
       "title": "Red Dragon Razor Edge",
-      "description": "Steeldarts mit markantem, durchgehend griffigem Barrel für Spieler, die einen klaren Halt bevorzugen. Erhältlich in mehreren Gewichten. Eine interessante Wahl für Einsteiger.",
+      "description": "Steeldarts mit markantem, durchgehend griffigem Barrel für Spieler, die einen klaren Halt bevorzugen. Erhältlich in mehreren Gewichten. Eine klare Kaufempfehlung.",
       "tags": ["Steeldart", "Griffiges Barrel", "Mehrere Gewichte"],
       "icon": "target",
       "image": "",
@@ -31,7 +31,7 @@
       "description": "Ein 5 Meter langer, kaltweißer 24-Volt-LED-Streifen zur gleichmäßigen Ausleuchtung eines Autodarts-Aufbaus. Das passende Netzteil und die Kompatibilität mit deiner Installation müssen separat geprüft werden.",
       "tags": ["5 Meter", "24 Volt", "Ohne Netzteil"],
       "icon": "light",
-      "image": "",
+      "image": "ledstreifen.png",
       "imageAlt": "COB-LED-Streifen für ein Autodarts-System",
       "url": "https://www.amazon.de/dp/B09MN4LVXN?tag=triple20darts-21",
       "enabled": true
