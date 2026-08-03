@@ -1,6 +1,18 @@
 {
   "products": [
     {
+      "id": "red-dragon-razor-edge",
+      "category": "darts",
+      "title": "Red Dragon Razor Edge",
+      "description": "Steeldarts mit markantem, durchgehend griffigem Barrel für Spieler, die einen klaren Halt bevorzugen. Erhältlich in mehreren Gewichten. Der absolute Einsteiger! Klare Kaufempfehlung
+      "tags": ["Steeldart", "Griffiges Barrel", "Mehrere Gewichte"],
+      "icon": "target",
+      "image": "",
+      "imageAlt": "Red Dragon Razor Edge Steeldarts",
+      "url": "https://www.amazon.de/dp/B0117A4RP0?tag=triple20darts-21",
+      "enabled": true
+    },
+    {
       "id": "dartboard-training",
       "category": "darts",
       "title": "Target Aspar Board",
@@ -12,6 +24,8 @@
       "url": "https://www.amazon.de/Target-Darts-440015-Aspar-Dartboard/dp/B09GBN6G5L?                     pd_rd_w=mI5qm&content-id=amzn1.sym.bbac26bb-3f7b-44dd-a8a5-c10fcfb1ed60%3Aamzn1.symc.30e3dbb4-8dd8-4bad-b7a1-a45bcdbc49b8&pf_rd_p=bbac26bb-3f7b-44dd-a8a5-c10fcfb1ed60&pf_rd_r=W4G0KQGAYD6093JNPH31&pd_rd_wg=aANg0&pd_rd_r=f3e4e70d-8e6f-4d0b-8238-d208a3f79f8f&pd_rd_i=B09GBN6G5L&linkCode=ll2&tag=triple20darts-21&linkId=89eefbbc8283ddde4c7c613b097a3397&ref_=as_li_ss_tl",
       "enabled": true
     },
+
+
     {
       "id": "autodarts-camera",
       "category": "autodarts",
