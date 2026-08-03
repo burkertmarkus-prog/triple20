@@ -13,6 +13,30 @@
       "enabled": true
     },
     {
+      "id": "target-k-flex-no2-medium",
+      "category": "darts",
+      "title": "Target K-Flex No. 2 – Medium",
+      "description": "Ein integriertes Flight- und Shaft-System im 3er-Pack. Die einteilige Bauweise erleichtert den Aufbau des Darts; prüfe vor dem Kauf, ob Form No. 2 und die mittlere Länge zu deinem Setup und Wurfstil passen.",
+      "tags": ["3er-Pack", "Flight und Shaft", "Medium"],
+      "icon": "target",
+      "image": "product-images/target-k-flex-black.jpg",
+      "imageAlt": "Target K-Flex Flight- und Shaft-System",
+      "url": "https://www.amazon.de/dp/B0CYHK1K2Q?tag=triple20darts-21",
+      "enabled": true
+    },
+    {
+      "id": "target-diamond-pro-points-silver",
+      "category": "darts",
+      "title": "Target Diamond Pro Points – Silber",
+      "description": "Silberfarbene Steeldartspitzen mit strukturierter Oberfläche. Prüfe vor dem Kauf die ausgewählte Länge und ob die Spitzen zu deinen Barrels beziehungsweise deinem Spitzensystem passen.",
+      "tags": ["Steeldartspitzen", "Silber", "Kompatibilität prüfen"],
+      "icon": "tools",
+      "image": "product-images/target-diamond-points-silver.jpg",
+      "imageAlt": "Silberfarbene Target Diamond Pro Dartspitzen",
+      "url": "https://www.amazon.de/dp/B07WRDB986?tag=triple20darts-21",
+      "enabled": true
+    },
+    {
       "id": "dartboard-training",
       "category": "darts",
       "title": "Target Aspar Board",
