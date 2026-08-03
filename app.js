@@ -978,6 +978,7 @@ function showDashboard(){showTournament()}
 function showLogin(){hideMainSections();$('#authSection')?.classList.remove('hidden');renderCloudPanel();renderNavigation()}
 function showSettings(){if(!isAdmin()){showLogin();return}hideMainSections();$('#settingsSection').classList.remove('hidden');renderSettingsForm();renderNavigation()}
 function validPartnerUrl(value){try{const url=new URL(value);return url.protocol==='https:'&&/(^|\.)amazon\.de$/i.test(url.hostname)}catch{return false}}
+function validProductImage(value){return typeof value==='string'&&/^product-images\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)$/i.test(value)}
 function shopIcon(icon='target'){return({target:'🎯',camera:'📷',club:'👥',starter:'✨',case:'💼',light:'💡',board:'◉',tools:'🔧'})[icon]||'🎯'}
 async function loadShopConfig(){
   if(shopLoaded)return shopConfig;
@@ -993,7 +994,8 @@ function renderShop(){
   status.innerHTML='';grid.innerHTML=products.map(product=>{
     const hasLink=validPartnerUrl(product.url),tags=(product.tags||[]).slice(0,3).map(tag=>`<span>${esc(tag)}</span>`).join('');
     const action=hasLink?`<a class="shop-link" href="${esc(product.url)}" target="_blank" rel="sponsored noopener noreferrer" aria-label="${esc(product.title)} bei Amazon ansehen (Werbung)">Bei Amazon ansehen <span>↗</span></a>`:'<span class="shop-link disabled" aria-disabled="true">Link folgt</span>';
-    return `<article class="shop-product"><div class="shop-product-visual" aria-hidden="true"><span>${shopIcon(product.icon)}</span><small>Eigene Empfehlung</small></div><div class="shop-product-body"><div class="shop-ad-label">WERBUNG · PARTNERLINK</div><p class="shop-product-kicker">${esc(SHOP_CATEGORIES.find(([id])=>id===product.category)?.[1]||'Empfehlung')}</p><h2>${esc(product.title||'Empfehlung')}</h2><p>${esc(product.description||'')}</p><div class="shop-tags">${tags}</div>${action}</div></article>`
+    const visual=validProductImage(product.image)?`<img src="${esc(product.image)}" alt="${esc(product.imageAlt||product.title||'Produktbild')}" loading="lazy">`:`<span aria-hidden="true">${shopIcon(product.icon)}</span>`;
+    return `<article class="shop-product"><div class="shop-product-visual">${visual}<small>${validProductImage(product.image)?'Eigenes Produktbild':'Eigene Empfehlung'}</small></div><div class="shop-product-body"><div class="shop-ad-label">WERBUNG · PARTNERLINK</div><p class="shop-product-kicker">${esc(SHOP_CATEGORIES.find(([id])=>id===product.category)?.[1]||'Empfehlung')}</p><h2>${esc(product.title||'Empfehlung')}</h2><p>${esc(product.description||'')}</p><div class="shop-tags">${tags}</div>${action}</div></article>`
   }).join('');
 }
 async function showShop(){hideMainSections();$('#shopSection')?.classList.remove('hidden');renderNavigation();await loadShopConfig();renderShop()}

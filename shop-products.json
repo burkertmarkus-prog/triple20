@@ -7,6 +7,8 @@
       "description": "Für regelmäßiges Training zu Hause, Diese Scheibe wird auch im Verein verwendet! Preis - Leistung ist TOP. Achte auf passende Wandbefestigung und Schallschutz.",
       "tags": ["Training", "Steeldart", "Verein"],
       "icon": "board",
+      "image": "product-images/dartboard_aspar.jpg",
+      "imageAlt": "Dartboard für das Training",
       "url": "https://www.amazon.de/Target-Darts-440015-Aspar-Dartboard/dp/B09GBN6G5L?                     pd_rd_w=mI5qm&content-id=amzn1.sym.bbac26bb-3f7b-44dd-a8a5-c10fcfb1ed60%3Aamzn1.symc.30e3dbb4-8dd8-4bad-b7a1-a45bcdbc49b8&pf_rd_p=bbac26bb-3f7b-44dd-a8a5-c10fcfb1ed60&pf_rd_r=W4G0KQGAYD6093JNPH31&pd_rd_wg=aANg0&pd_rd_r=f3e4e70d-8e6f-4d0b-8238-d208a3f79f8f&pd_rd_i=B09GBN6G5L&linkCode=ll2&tag=triple20darts-21&linkId=89eefbbc8283ddde4c7c613b097a3397&ref_=as_li_ss_tl",
       "enabled": true
     },
@@ -14,10 +16,10 @@
       "id": "autodarts-camera",
       "category": "autodarts",
       "title": "Kamera für ein Autodarts-Setup",
-      "description": "Ein möglicher Baustein für ein eigenes Scoring-System. Prüfe Sichtfeld, Auflösung und Kompatibilität mit deiner konkreten Installation.",
+      "description": "Diese 3 Kameras sind in unseren 4 Autodarts Systemen verbaut. Funktionieren perfekt. Prüfe Sichtfeld, Auflösung und Kompatibilität mit deiner konkreten Installation.",
       "tags": ["DIY", "Kamera", "Kompatibilität prüfen"],
       "icon": "camera",
-      "url": "REPLACE_WITH_AMAZON_PARTNER_LINK",
+      "url": "https://www.amazon.de/OV9732-Kameramodul-Weitwinkel-1280x720p-30fps/dp/B0GJZV4LJG?dib=eyJ2IjoiMSJ9.x5UO8gTNDZzLaLh4DMPcxHPzPSpkOXyuyVuO2hLxdtc3tZF7wYz_Fl0ANUhz2Ig6CSGD80VEc6k7AFl003MqyoSW5D13pOCUfy_Xq5tx1gyWn7he8SWozkH6SLk9E_3O7XNI50PP4velBpb76WuqdKALacCVet04xka_eRd6Kn7oayuoW4HSakagNEQbNJ5H6nC-NhOpQfsqSVF_oiJsp0MKwIMXkfVnEKHckulqN7I.WXfjSU4BW_8juBjC3Dk6wbVhEemqNIHnwG6JuRmRxoA&dib_tag=se&keywords=kamera+auto+darts&qid=1785774920&sr=8-2-spons&aref=GwKLTyDZPt&sp_csd=d2lkZ2V0TmFtZT1zcF9hdGY&psc=1&linkCode=ll2&tag=triple20darts-21&linkId=4c0f09c44f2d4c6263857011cf2f831f&ref_=as_li_ss_tl",
       "enabled": true
     }
   ]
