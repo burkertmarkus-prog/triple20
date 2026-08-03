@@ -3,7 +3,7 @@
     {
       "id": "dartboard-training",
       "category": "darts",
-      "title": "Trainings-Dartboard",
+      "title": "Target Aspar Board",
       "description": "Für regelmäßiges Training zu Hause, Diese Scheibe wird auch im Verein verwendet! Preis - Leistung ist TOP. Achte auf passende Wandbefestigung und Schallschutz.",
       "tags": ["Training", "Steeldart", "Verein"],
       "icon": "board",
@@ -15,10 +15,12 @@
     {
       "id": "autodarts-camera",
       "category": "autodarts",
-      "title": "Kamera für ein Autodarts-Setup",
+      "title": "Kameras für Autodarts-Setup",
       "description": "Diese 3 Kameras sind in unseren 4 Autodarts Systemen verbaut. Funktionieren perfekt. Prüfe Sichtfeld, Auflösung und Kompatibilität mit deiner konkreten Installation.",
       "tags": ["DIY", "Kamera", "Kompatibilität prüfen"],
       "icon": "camera",
+      "image": "product-images/kamerasautodarts.jpg",
+      "imageAlt": "Kameras für Autodarts DIY",
       "url": "https://www.amazon.de/OV9732-Kameramodul-Weitwinkel-1280x720p-30fps/dp/B0GJZV4LJG?dib=eyJ2IjoiMSJ9.x5UO8gTNDZzLaLh4DMPcxHPzPSpkOXyuyVuO2hLxdtc3tZF7wYz_Fl0ANUhz2Ig6CSGD80VEc6k7AFl003MqyoSW5D13pOCUfy_Xq5tx1gyWn7he8SWozkH6SLk9E_3O7XNI50PP4velBpb76WuqdKALacCVet04xka_eRd6Kn7oayuoW4HSakagNEQbNJ5H6nC-NhOpQfsqSVF_oiJsp0MKwIMXkfVnEKHckulqN7I.WXfjSU4BW_8juBjC3Dk6wbVhEemqNIHnwG6JuRmRxoA&dib_tag=se&keywords=kamera+auto+darts&qid=1785774920&sr=8-2-spons&aref=GwKLTyDZPt&sp_csd=d2lkZ2V0TmFtZT1zcF9hdGY&psc=1&linkCode=ll2&tag=triple20darts-21&linkId=4c0f09c44f2d4c6263857011cf2f831f&ref_=as_li_ss_tl",
       "enabled": true
     }
