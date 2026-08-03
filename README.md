@@ -11,6 +11,15 @@ Die Hauptreiter sind bewusst schlank gehalten:
 - Turnier
 - Saison
 - Einstellungen
+- Empfehlungen
+
+## Empfehlungen und Partnerlinks
+
+Der Menüpunkt „Empfehlungen“ zeigt redaktionell beschriebene Ausrüstung in den Kategorien Darts und Autodarts. Produkte werden ausschließlich in `shop-products.json` gepflegt. Ersetze dort `REPLACE_WITH_AMAZON_PARTNER_LINK` durch einen direkt im Amazon PartnerNet erzeugten HTTPS-Link zu `amazon.de`. Erst dann wird der Button aktiv.
+
+Eigene Produktbilder kommen in den Ordner `product-images`. Unterstützt werden AVIF, JPG/JPEG, PNG und WebP. Trage anschließend beispielsweise `"image": "product-images/mein-dartboard.webp"` und einen beschreibenden Alternativtext unter `imageAlt` ein. Bleibt `image` leer, verwendet die App das konfigurierte Icon. Zulässig sind nur lokale Bilder aus diesem Ordner, keine externen Bildadressen.
+
+Jeder Link ist sichtbar als Werbung/Partnerlink gekennzeichnet und wird extern geöffnet. Keine Amazon-Seite wird in der App eingebettet. Verwende nur eigene Texte und eigene oder lizenzierte Bilder; die aktuelle Vorlage nutzt deshalb neutrale Symbole. Preise, Sternebewertungen, Amazon-Logos, Produktbilder und kopierte Produkttexte gehören nicht in die Konfiguration. Vor der Freischaltung muss die veröffentlichte Triple20-Webadresse im PartnerNet als Werbefläche hinterlegt und von Amazon zugelassen sein.
 
 ## Saisonwertung
 
