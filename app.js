@@ -982,7 +982,7 @@ function validProductImage(value){return typeof value==='string'&&/^product-imag
 function shopIcon(icon='target'){return({target:'🎯',camera:'📷',club:'👥',starter:'✨',case:'💼',light:'💡',board:'◉',tools:'🔧'})[icon]||'🎯'}
 async function loadShopConfig(){
   if(shopLoaded)return shopConfig;
-  try{const response=await fetch(`${SHOP_CONFIG_URL}?v=1`,{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.json();shopConfig={products:Array.isArray(data.products)?data.products:[]}}
+  try{const response=await fetch(`${SHOP_CONFIG_URL}?v=2`,{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.json();shopConfig={products:Array.isArray(data.products)?data.products:[]}}
   catch(error){shopConfig=SHOP_FALLBACK;console.info('Empfehlungen konnten nicht geladen werden.',error)}
   shopLoaded=true;return shopConfig;
 }
