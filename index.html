@@ -11,16 +11,34 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260729-1">
+  <link rel="stylesheet" href="styles.css?v=20260803-1">
 </head>
 <body>
   <header class="hero">
     <div class="brand"><button id="menuToggle" class="menu-toggle" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><div><strong>Triple<span>20</span></strong><small id="brandSubtitle">Turnierleitung</small></div></div>
-    <div class="main-actions"><button id="showTournamentBtn" class="ghost">Turnier</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="showLoginBtn" class="ghost">Anmelden</button></div>
+    <div class="main-actions"><button id="showTournamentBtn" class="ghost">Turnier</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="showShopBtn" class="ghost">Empfehlungen</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="showLoginBtn" class="ghost">Anmelden</button></div>
   </header>
   <div id="syncStatusBar" class="sync-status view-only"><span id="syncStatusText">Nur Ansicht</span><small id="syncLastSaved">Noch nicht synchronisiert</small></div>
 
   <main>
+    <section id="shopSection" class="shop-section hidden" aria-labelledby="shopTitle">
+      <div class="shop-hero">
+        <h1 id="shopTitle">Triple20 Empfehlungen</h1>
+        <p>Ausgewählte Ausrüstung, die zum Dartsport, zu Autodarts und zum Vereinsalltag passt.</p>
+      </div>
+      <aside class="affiliate-disclosure" aria-label="Werbekennzeichnung">
+        <strong>WERBUNG · PARTNERLINKS</strong>
+        <p>Einige Empfehlungen enthalten Partnerlinks.</p>
+      </aside>
+      <div id="shopCategoryFilters" class="shop-filters" aria-label="Empfehlungen filtern"></div>
+      <div id="shopStatus" class="shop-status" role="status"></div>
+      <div id="shopProductGrid" class="shop-product-grid"></div>
+      <section class="shop-transparency card slim-card">
+        <h2>Transparent empfohlen</h2>
+        <p>Die Beschreibungen stammen von Triple20. Produktdaten, Preise und Verfügbarkeit werden nicht von Amazon übernommen und können sich ändern. Bitte prüfe die aktuellen Angaben beim Anbieter.</p>
+      </section>
+    </section>
+
     <section id="authSection" class="settings-section hidden">
       <div class="section-title"><div><h2>Konto</h2><p>Mitgliederprofil und Turnierleitung verwalten</p></div></div>
       <div id="cloudAdminPanel" class="cloud-panel card slim-card"></div>
@@ -124,6 +142,6 @@
   </main>
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260729-5"></script>
+  <script src="app.js?v=20260803-1"></script>
 </body>
 </html>

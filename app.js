@@ -5,6 +5,10 @@ const MEMBER_TOURNAMENT_KEY='triple20_member_tournament';
 const ACCESS_COUNT_KEY='triple20_access_count';
 const ACCESS_DAILY_KEY='triple20_access_daily';
 const ACCESS_SESSION_KEY='triple20_access_counted';
+const SHOP_CONFIG_URL='shop-products.json';
+const SHOP_CATEGORIES=[['all','Alle'],['darts','Darts'],['autodarts','Autodarts']];
+const SHOP_FALLBACK={products:[]};
+let shopConfig=SHOP_FALLBACK,shopCategory='all',shopLoaded=false;
 const SUPABASE_URL='https://hidjvylnxmtlvtiomktu.supabase.co';
 const TRIPLE20_PUBLIC_URL='https://burkertmarkus-prog.github.io/triple20/';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_IzH5CLw7baFsaU005Bqh7w_lRMlrMLo';
@@ -940,7 +944,7 @@ function renderPlayerSeasonDetail(name){
 function exportSeasonJson(){const season=selectedSeason();if(!season)return;downloadFile(`${season.name.replaceAll(' ','_')}.json`,'application/json',JSON.stringify(season,null,2))}
 function exportStandingsCsv(){const season=selectedSeason();if(!season)return;const rows=calculateSeasonStandings(season),head=['Platz','Spieler','Gesamtpunkte','Bereinigte Punkte','Turniere','Siege','Niederlagen','180er','Höchstes Checkout'];const csv=[head.join(';'),...rows.map((r,i)=>[i+1,r.name,r.totalPoints,r.cleanPoints,r.played,r.wins,r.losses,r.max180,r.checkout].map(v=>`"${String(v).replaceAll('"','""')}"`).join(';'))].join('\n');downloadFile(`${season.name.replaceAll(' ','_')}_rangliste.csv`,'text/csv;charset=utf-8',csv)}
 
-function hideMainSections(){['dashboardSection','authSection','settingsSection','seasonSection','tournamentSubnav','competitionNav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
+function hideMainSections(){['dashboardSection','authSection','settingsSection','seasonSection','shopSection','tournamentSubnav','competitionNav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
 function renderNavigation(){
   const admin=isAdmin(),member=isMember(),guest=!admin&&!member;
   $('.club-settings-block')?.classList.remove('hidden');
@@ -973,6 +977,26 @@ function renderDashboard(){
 function showDashboard(){showTournament()}
 function showLogin(){hideMainSections();$('#authSection')?.classList.remove('hidden');renderCloudPanel();renderNavigation()}
 function showSettings(){if(!isAdmin()){showLogin();return}hideMainSections();$('#settingsSection').classList.remove('hidden');renderSettingsForm();renderNavigation()}
+function validPartnerUrl(value){try{const url=new URL(value);return url.protocol==='https:'&&/(^|\.)amazon\.de$/i.test(url.hostname)}catch{return false}}
+function shopIcon(icon='target'){return({target:'🎯',camera:'📷',club:'👥',starter:'✨',case:'💼',light:'💡',board:'◉',tools:'🔧'})[icon]||'🎯'}
+async function loadShopConfig(){
+  if(shopLoaded)return shopConfig;
+  try{const response=await fetch(`${SHOP_CONFIG_URL}?v=1`,{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.json();shopConfig={products:Array.isArray(data.products)?data.products:[]}}
+  catch(error){shopConfig=SHOP_FALLBACK;console.info('Empfehlungen konnten nicht geladen werden.',error)}
+  shopLoaded=true;return shopConfig;
+}
+function renderShop(){
+  const filters=$('#shopCategoryFilters'),grid=$('#shopProductGrid'),status=$('#shopStatus');if(!filters||!grid)return;
+  filters.innerHTML=SHOP_CATEGORIES.map(([id,label])=>`<button type="button" class="shop-filter ${shopCategory===id?'active':''}" data-shop-category="${id}" aria-pressed="${shopCategory===id}">${esc(label)}</button>`).join('');
+  const products=(shopConfig.products||[]).filter(product=>product.enabled!==false&&(shopCategory==='all'||product.category===shopCategory));
+  if(!products.length){grid.innerHTML='';status.innerHTML='<div class="shop-empty"><span>🎯</span><h2>Noch keine Empfehlungen</h2><p>Produkte werden über <code>shop-products.json</code> ergänzt.</p></div>';return}
+  status.innerHTML='';grid.innerHTML=products.map(product=>{
+    const hasLink=validPartnerUrl(product.url),tags=(product.tags||[]).slice(0,3).map(tag=>`<span>${esc(tag)}</span>`).join('');
+    const action=hasLink?`<a class="shop-link" href="${esc(product.url)}" target="_blank" rel="sponsored noopener noreferrer" aria-label="${esc(product.title)} bei Amazon ansehen (Werbung)">Bei Amazon ansehen <span>↗</span></a>`:'<span class="shop-link disabled" aria-disabled="true">Link folgt</span>';
+    return `<article class="shop-product"><div class="shop-product-visual" aria-hidden="true"><span>${shopIcon(product.icon)}</span><small>Eigene Empfehlung</small></div><div class="shop-product-body"><div class="shop-ad-label">WERBUNG · PARTNERLINK</div><p class="shop-product-kicker">${esc(SHOP_CATEGORIES.find(([id])=>id===product.category)?.[1]||'Empfehlung')}</p><h2>${esc(product.title||'Empfehlung')}</h2><p>${esc(product.description||'')}</p><div class="shop-tags">${tags}</div>${action}</div></article>`
+  }).join('');
+}
+async function showShop(){hideMainSections();$('#shopSection')?.classList.remove('hidden');renderNavigation();await loadShopConfig();renderShop()}
 function renderSettingsForm(){
   $('#settingsMode').value='club';$('#settingsDefaultMode').value=appSettings.tournament.defaultMode||'swiss';$('#settingsDefaultFormat').value=appSettings.tournament.defaultFormat||'single';$('#settingsDefaultLegs').value=String(appSettings.tournament.defaultLegs||2);
   $('#settingsClubName').value=appSettings.club.name||'';$('#settingsClubLogo').value=appSettings.club.logo||'';$('#settingsClubColor').value=appSettings.club.color||appSettings.theme.primary;$('#settingsSeasonMode').value=appSettings.club.seasonMode||'halfyear';
@@ -1072,7 +1096,9 @@ document.addEventListener('click',e=>{if(e.target.id==='cancelAvatarCropBtn'||e.
 $('#showTournamentBtn').addEventListener('click',showTournament);
 document.addEventListener('click',e=>{const modeButton=e.target.closest('[data-tournament-mode]');if(modeButton){setTournamentViewMode(modeButton.dataset.tournamentMode);return}const competitionButton=e.target.closest('[data-competition]');if(competitionButton)setActiveCompetition(competitionButton.dataset.competition)});
 $('#showSeasonBtn').addEventListener('click',showSeason);
+$('#showShopBtn').addEventListener('click',showShop);
 $('#showSettingsBtn').addEventListener('click',showSettings);
+$('#shopCategoryFilters')?.addEventListener('click',e=>{const button=e.target.closest('[data-shop-category]');if(!button)return;shopCategory=button.dataset.shopCategory;renderShop()});
 $('#showLoginBtn').addEventListener('click',showLogin);
 $('#themeMode').addEventListener('change',e=>renderThemePreview(e.target.value));
 $('#settingsForm').addEventListener('submit',e=>{e.preventDefault();const themeMode=$('#themeMode').value,preset=themeModes[themeMode]||themeModes.light;updateSettings({appName:'Triple20',mode:$('#settingsMode').value,themeMode,club:{enabled:$('#settingsMode').value==='club',name:$('#settingsClubName').value.trim(),logo:$('#settingsClubLogo').value.trim(),color:$('#settingsClubColor').value,seasonMode:$('#settingsSeasonMode').value,dropResults:appSettings.club.dropResults,pointSystem:{5:+$('#points5').value,4:+$('#points4').value,3:+$('#points3').value,2:+$('#points2').value,1:+$('#points1').value,0:+$('#points0').value}},tournament:{defaultMode:$('#settingsDefaultMode').value,defaultFormat:$('#settingsDefaultFormat').value,defaultLegs:+$('#settingsDefaultLegs').value},theme:{...preset.theme}});applyTournamentDefaults();showDashboard()});

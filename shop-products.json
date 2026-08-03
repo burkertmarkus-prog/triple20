@@ -1,0 +1,24 @@
+{
+  "products": [
+    {
+      "id": "dartboard-training",
+      "category": "darts",
+      "title": "Trainings-Dartboard",
+      "description": "Für regelmäßiges Training zu Hause oder als zusätzliche Scheibe im Verein. Achte auf passende Wandbefestigung und Schallschutz.",
+      "tags": ["Training", "Steeldart", "Verein"],
+      "icon": "board",
+      "url": "REPLACE_WITH_AMAZON_PARTNER_LINK",
+      "enabled": true
+    },
+    {
+      "id": "autodarts-camera",
+      "category": "autodarts",
+      "title": "Kamera für ein Autodarts-Setup",
+      "description": "Ein möglicher Baustein für ein eigenes Scoring-System. Prüfe Sichtfeld, Auflösung und Kompatibilität mit deiner konkreten Installation.",
+      "tags": ["DIY", "Kamera", "Kompatibilität prüfen"],
+      "icon": "camera",
+      "url": "REPLACE_WITH_AMAZON_PARTNER_LINK",
+      "enabled": true
+    }
+  ]
+}
