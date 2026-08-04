@@ -83,14 +83,6 @@
 
     <section id="seasonSection" class="season-section hidden">
       <div class="section-title"><div><h2>Saisonwertung</h2><p>Halbjahreswertung für den Dartverein</p></div></div>
-      <div id="seasonOverview" class="season-overview"></div>
-      <div class="tabs season-tabs"><button class="season-tab active" data-season-tab="standings">Rangliste</button><button class="season-tab" data-season-tab="members">Mitglieder</button><button class="season-tab" data-season-tab="tournaments">Spieltage</button><button class="season-tab" data-season-tab="stats">Statistiken</button><button class="season-tab" data-season-tab="honors">Ehrungen</button></div>
-      <div id="seasonStandings"></div>
-      <div id="seasonMembers" class="hidden"></div>
-      <div id="seasonTournaments" class="hidden"></div>
-      <div id="seasonStats" class="hidden"></div>
-      <div id="seasonHonors" class="hidden"></div>
-      <div id="seasonPlayerDetail"></div>
       <div class="season-toolbar card slim-card">
         <div id="seasonCurrentSummary" class="season-current-summary"></div>
         <label>Saison laden<select id="seasonSelect"></select></label>
@@ -106,6 +98,14 @@
         </div>
         <button id="seasonFormSubmit" class="primary" type="submit">SAISON SPEICHERN <span>→</span></button>
       </form>
+      <div class="tabs season-tabs"><button class="season-tab active" data-season-tab="standings">Rangliste</button><button class="season-tab" data-season-tab="members">Mitglieder</button><button class="season-tab" data-season-tab="tournaments">Spieltage</button><button class="season-tab" data-season-tab="stats">Statistiken</button><button class="season-tab" data-season-tab="honors">Ehrungen</button></div>
+      <div id="seasonStandings"></div>
+      <div id="seasonOverview" class="season-overview"></div>
+      <div id="seasonMembers" class="hidden"></div>
+      <div id="seasonTournaments" class="hidden"></div>
+      <div id="seasonStats" class="hidden"></div>
+      <div id="seasonHonors" class="hidden"></div>
+      <div id="seasonPlayerDetail"></div>
       <div class="export-actions"><button id="exportSeasonJsonBtn" class="secondary">Saison als JSON exportieren</button><button id="exportStandingsCsvBtn" class="secondary">Rangliste als CSV exportieren</button></div>
     </section>
 
