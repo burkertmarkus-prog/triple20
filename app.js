@@ -37,7 +37,7 @@ const seasonStore=loadSeasons();
 let selectedSeasonId=localStorage.getItem('tripleTwentySelectedSeason')||'';
 let manualTournamentOpen=false;
 let seasonFormOpen=false;
-const COMPETITION_KEYS=['players','playerProfileIds','started','matches','settings','groups','withdrawn','savedToHistory','seasonImportedTo','seasonTournamentId','groupStage'];
+const COMPETITION_KEYS=['players','playerProfileIds','started','matches','settings','groups','withdrawn','endedEarly','savedToHistory','seasonImportedTo','seasonTournamentId','groupStage'];
 function emptyCompetition(){return{players:[],playerProfileIds:{},started:false,matches:[],settings:{}}}
 function competitionSnapshot(source=state){const out={};for(const key of COMPETITION_KEYS)if(source[key]!==undefined)out[key]=structuredClone(source[key]);return{...emptyCompetition(),...out}}
 function ensureTournamentDayState(target=state){
@@ -188,8 +188,8 @@ function renderReadonlyMode(){
   document.body.classList.toggle('guest-mode',guest);
   ['seasonActionSelect','addToSeasonBtn'].forEach(id=>{$('#'+id)?.classList.toggle('hidden',readonly)});
   document.querySelectorAll('#setupSection input,#setupSection select,#setupSection button').forEach(control=>{const disabled=!T20Cloud.authResolved||(member&&!state.memberLocal);control.disabled=disabled;control.setAttribute('aria-disabled',String(disabled))});
-  document.querySelectorAll('.score-controls select,.score-controls button').forEach(control=>{const disabled=!canEditCurrentTournament();control.disabled=disabled;control.setAttribute('aria-disabled',String(disabled))});
-  document.querySelectorAll('#withdrawCard input,#withdrawCard select,#withdrawCard button,#qualificationCard button,#liveResetBtn,#finishReset,#seasonImportCard input,#seasonImportCard select,#seasonImportCard button').forEach(control=>{const disabled=!canEditCurrentTournament();control.disabled=disabled;control.setAttribute('aria-disabled',String(disabled))});
+  document.querySelectorAll('.score-controls select,.score-controls button').forEach(control=>{const disabled=!canEditCurrentTournament()||!!state.endedEarly;control.disabled=disabled;control.setAttribute('aria-disabled',String(disabled))});
+  document.querySelectorAll('#withdrawCard input,#withdrawCard select,#withdrawCard button,#qualificationCard button,#endTournamentBtn,#finishReset,#seasonImportCard input,#seasonImportCard select,#seasonImportCard button').forEach(control=>{const disabled=!canEditCurrentTournament();control.disabled=disabled;control.setAttribute('aria-disabled',String(disabled))});
   $('#showSettingsBtn')?.classList.toggle('hidden',!admin);
   $('#showSeasonBtn')?.classList.remove('hidden');
   const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=admin?'Konto':member?'Mein Profil':'Anmelden';
@@ -653,13 +653,14 @@ function makeMatches(){
   else addPairs(arr,shuffle(state.players),1,'upper');
   return arr;
 }
-$('#startBtn').addEventListener('click',async()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value};state.matches=makeMatches();state.started=true;save();renderTournament();await publishLiveTournament({notifyOnError:true})});
+$('#startBtn').addEventListener('click',async()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];delete state.endedEarly;delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value};state.matches=makeMatches();state.started=true;save();renderTournament();await publishLiveTournament({notifyOnError:true})});
 
 function playerLosses(){const losses=Object.fromEntries(state.players.map(p=>[p,0]));state.matches.filter(m=>m.sa!==null&&m.b!=='Freilos').forEach(m=>{losses[m.sa>m.sb?m.b:m.a]++});return losses}
 function standingsFor(players,matches=state.matches){return players.map(name=>{const played=matches.filter(m=>m.sa!==null&&(m.a===name||m.b===name));let w=0,lf=0,la=0;played.forEach(m=>{const own=m.a===name?m.sa:m.sb,other=m.a===name?m.sb:m.sa;lf+=own;la+=other;if(own>other)w++});return{name,p:played.length,w,l:played.length-w,lf,la,pts:w*2}}).sort((a,b)=>b.pts-a.pts||(b.lf-b.la)-(a.lf-a.la)||b.lf-a.lf)}
 function standings(){return standingsFor(state.players)}
 function modeName(){return state.settings.mode==='roundrobin'?'Jeder gegen jeden':state.settings.mode==='swiss'?'Schweizer System':state.settings.mode==='double'?'Doppel-K.-o.-Turnier':'K.-o.-Turnier'}
 function champion(){
+  if(state.endedEarly)return standings()[0]?.name||'';
   if(state.settings.mode==='roundrobin')return state.groups?.length>1?'':state.matches.every(m=>m.sa!==null)?standings()[0]?.name:'';
   if(state.settings.mode==='swiss'){const active=activeSwissPlayers();if(active.length<=1&&state.matches.every(m=>m.sa!==null))return active[0]||standings()[0]?.name||'';return state.matches.every(m=>m.sa!==null)&&Math.max(...state.matches.map(m=>m.round||1))>=(state.settings.swissRounds||4)?standings()[0]?.name:''}
   const limit=state.settings.mode==='double'?2:1,losses=playerLosses(),active=state.players.filter(p=>losses[p]<limit);
@@ -678,6 +679,7 @@ function renderTournament(){
   const refreshed=T20Cloud.lastSyncAt?new Date(T20Cloud.lastSyncAt).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'';$('#liveViewerStatus').textContent=refreshed?`Automatisch aktuell · zuletzt ${refreshed} Uhr`:'Automatische Aktualisierung alle 15 Sekunden';
   $('#showLiveQrBtn')?.classList.toggle('hidden',!isAdmin());
   $('#renameEventBtn')?.classList.toggle('hidden',!isAdmin());
+  $('#endTournamentBtn')?.classList.toggle('hidden',!isAdmin()||!!champion());
   const done=state.matches.filter(m=>m.sa!==null).length;$('#progressText').textContent=(state.matches.length?Math.round(done/state.matches.length*100):0)+'%';
   const indexedMatches=state.matches.map((match,index)=>({match,index})),viewerOrder=isAdmin()?indexedMatches:[...indexedMatches].sort((a,b)=>Number(a.match.sa!==null)-Number(b.match.sa!==null)||a.index-b.index),firstOpenIndex=viewerOrder.find(item=>item.match.sa===null&&item.match.b!=='Freilos')?.index;
   $('#matchList').innerHTML=viewerOrder.map(({match:m,index:i})=>{const current=!isAdmin()&&i===firstOpenIndex;return `<article class="match ${m.sa!==null?'done':''} ${current?'current-live-match':''}">${current?'<div class="current-live-label">AKTUELL · NÄCHSTES SPIEL</div>':''}<div class="match-no">${m.group!==undefined?'Gruppe '+String.fromCharCode(65+m.group)+' · ':''}Runde ${m.round} · ${m.bracket==='lower'?'Verlierer':m.bracket==='grand'?'Finale':'Spiel'} ${String(i+1).padStart(2,'0')}</div><div class="players-match"><span class="${m.sa>m.sb?'winner-player':''}">${esc(m.a)}</span><b>${m.sa===null?'VS':m.sa+' : '+m.sb}</b><span class="${m.sb>m.sa?'winner-player':''}">${esc(m.b)}</span></div><div class="score-controls">${m.b==='Freilos'?'Weiter':`<select data-sa="${i}">${options(m.sa)}</select><span>:</span><select data-sb="${i}">${options(m.sb)}</select><button data-save="${i}">✓</button>`}</div></article>`}).join('');
@@ -798,7 +800,7 @@ function buildCurrentTournamentRecord(){
 }
 function loadTournamentHistory(){try{const data=JSON.parse(localStorage.getItem(TOURNAMENT_HISTORY_KEY)||'[]');return Array.isArray(data)?data:[]}catch{return[]}}
 function saveTournamentToHistory(){
-  if(!T20Cloud.user||state.savedToHistory||!state.matches?.length||!state.matches.every(m=>m.sa!==null))return;
+  if(!T20Cloud.user||state.savedToHistory||!state.matches?.length||(!state.endedEarly&&!state.matches.every(m=>m.sa!==null)))return;
   const history=loadTournamentHistory(),record=buildCurrentTournamentRecord();history.push(record);localStorage.setItem(TOURNAMENT_HISTORY_KEY,JSON.stringify(history));state.savedToHistory=record.id;save();
 }
 function exportCurrentTournamentJson(){const record=state.savedToHistory?loadTournamentHistory().find(t=>t.id===state.savedToHistory)||buildCurrentTournamentRecord():buildCurrentTournamentRecord();downloadFile(`${(record.name||'Turnier').replaceAll(' ','_')}.json`,'application/json',JSON.stringify(record,null,2))}
@@ -890,7 +892,7 @@ function calculateSeasonStandings(season=selectedSeason()){
 function seasonStats(season=selectedSeason()){const rows=calculateSeasonStandings(season);return{max180:[...rows].sort((a,b)=>b.max180-a.max180)[0],checkout:[...rows].sort((a,b)=>b.checkout-a.checkout)[0],played:[...rows].sort((a,b)=>b.played-a.played)[0],participation:[...rows].sort((a,b)=>b.participation-a.participation||b.played-a.played)[0],wins:[...rows].sort((a,b)=>b.wins-a.wins)[0],winRate:[...rows].filter(r=>r.wins+r.losses>0).sort((a,b)=>b.winRate-a.winRate||b.wins-a.wins)[0]}}
 function calculateSeasonStatisticsSummary(season=selectedSeason()){const s=seasonStats(season),pick=(row,key)=>row?{player:row.name,value:row[key]||0}:null;return{updatedAt:new Date().toISOString(),max180:pick(s.max180,'max180'),checkout:pick(s.checkout,'checkout'),played:pick(s.played,'played'),participation:s.participation?{player:s.participation.name,value:s.participation.participation}:null,wins:pick(s.wins,'wins'),winRate:s.winRate?{player:s.winRate.name,value:s.winRate.winRate}:null}}
 function renderSeasonImport(winner){
-  const card=$('#seasonImportCard');if(!card)return;const complete=!!winner&&state.matches.length&&state.matches.every(m=>m.sa!==null);
+  const card=$('#seasonImportCard');if(!card)return;const complete=!!winner&&state.matches.length&&(state.endedEarly||state.matches.every(m=>m.sa!==null));
   card.classList.toggle('hidden',!complete);if(!complete)return;
   if(!T20Cloud.user){card.innerHTML='<h3>Turnier abgeschlossen</h3><p>Das Ergebnis wird ohne Anmeldung nicht gespeichert.</p>';return}
   if(!isAdmin()){card.innerHTML='<h3>Turnier abgeschlossen</h3><p>Dieses Turnier wurde lokal/offline gespielt und nicht in eine Saison übernommen.</p><button id="exportCurrentTournamentBtn" class="primary">TURNIER EXPORTIEREN <span>→</span></button>';return}
@@ -1272,5 +1274,13 @@ function renameEvent(){
   if(state.seasonImportedTo&&state.seasonTournamentId){const season=seasonStore.seasons.find(item=>item.id===state.seasonImportedTo),record=season?.tournaments?.find(item=>item.id===state.seasonTournamentId);if(record){record.eventName=name;record.name=competitionTitle();record.settings={...(record.settings||{}),eventName:name,name:competitionTitle()};persistSeasons()}}
   save();renderTournament();renderNavigation();
 }
+async function endTournamentEarly(){
+  if(!isAdmin()||!state.started||state.endedEarly)return;
+  const played=state.matches.filter(match=>match.sa!==null&&match.b!=='Freilos').length;
+  if(!played){alert('Das Turnier kann erst beendet werden, wenn mindestens ein reguläres Spiel abgeschlossen ist.');return}
+  const leader=standings()[0]?.name||'der aktuelle Tabellenführer';
+  if(!confirm(`Turnier vorzeitig beenden?\n\nAktueller Tabellenführer: ${leader}\nGespielte Partien: ${played} von ${state.matches.filter(match=>match.b!=='Freilos').length}\n\nDanach kann das Turnier wie gewohnt in die Saisonwertung übernommen werden.`))return;
+  state.endedEarly=true;save();renderTournament();await publishLiveTournament({notifyOnError:true});
+}
 async function reset(){if(state.started&&!confirm(`Den Bewerb „${competitionLabel()}“ wirklich löschen? Der andere Bewerb bleibt erhalten.`))return;for(const key of COMPETITION_KEYS)delete state[key];Object.assign(state,emptyCompetition());syncActiveCompetition();save();renderPlayers();renderTournament();showTournament();await publishLiveTournament({notifyOnError:true})}
-$('#resetBtn').onclick=reset;$('#liveResetBtn').onclick=reset;$('#finishReset').onclick=reset;$('#renameEventBtn').onclick=renameEvent;registerAccess();applyTheme();applyTournamentDefaults();fillSeasonForm();renderPlayers();renderSettingsForm();renderNavigation();renderSeasonView();applyAppRoute();T20Cloud.init().finally(applyAppRoute);
+$('#resetBtn').onclick=reset;$('#endTournamentBtn').onclick=endTournamentEarly;$('#finishReset').onclick=reset;$('#renameEventBtn').onclick=renameEvent;registerAccess();applyTheme();applyTournamentDefaults();fillSeasonForm();renderPlayers();renderSettingsForm();renderNavigation();renderSeasonView();applyAppRoute();T20Cloud.init().finally(applyAppRoute);
