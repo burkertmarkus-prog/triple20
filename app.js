@@ -946,10 +946,15 @@ function exportSeasonJson(){const season=selectedSeason();if(!season)return;down
 function exportStandingsCsv(){const season=selectedSeason();if(!season)return;const rows=calculateSeasonStandings(season),head=['Platz','Spieler','Gesamtpunkte','Bereinigte Punkte','Turniere','Siege','Niederlagen','180er','Höchstes Checkout'];const csv=[head.join(';'),...rows.map((r,i)=>[i+1,r.name,r.totalPoints,r.cleanPoints,r.played,r.wins,r.losses,r.max180,r.checkout].map(v=>`"${String(v).replaceAll('"','""')}"`).join(';'))].join('\n');downloadFile(`${season.name.replaceAll(' ','_')}_rangliste.csv`,'text/csv;charset=utf-8',csv)}
 
 function publicDate(value){if(!value)return'Datum offen';const date=new Date(`${value}T12:00:00`);return Number.isNaN(date.getTime())?esc(value):date.toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'})}
+function publicTournamentKey(record={}){
+  const baseName=(record.eventName||record.name||'').trim().replace(/\s+[–-]\s+(Herren|Damen)$/i,'').replace(/\s+/g,' ').toLowerCase();
+  const competition=record.competition||(/damen/i.test(record.competitionLabel||record.name||'')?'women':/herren/i.test(record.competitionLabel||record.name||'')?'men':'open');
+  return `${record.date||''}|${baseName}|${competition}`;
+}
 function publicTournamentRecords(){
   const records=[...(seasonStore.seasons||[]).flatMap(season=>(season.tournaments||[]).map(tournament=>({...tournament,seasonName:season.name}))),...loadTournamentHistory()];
   const unique=new Map();
-  records.forEach(record=>{const key=record.id||`${record.date||''}|${record.name||record.eventName||''}|${record.competition||''}`;const old=unique.get(key);unique.set(key,{...(old||{}),...record})});
+  records.forEach(record=>{const key=publicTournamentKey(record),old=unique.get(key);unique.set(key,{...(old||{}),...record,seasonName:record.seasonName||old?.seasonName||''})});
   return [...unique.entries()].map(([key,value])=>({...value,_publicKey:key})).sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.name||'').localeCompare(b.name||'','de'));
 }
 function publicEventRow(tournament,status){
@@ -971,7 +976,7 @@ function deletePublicTournament(key){
   if(!isAdmin()||!key)return;
   const record=publicTournamentRecords().find(item=>item._publicKey===key);if(!record)return;
   if(!confirm(`„${record.name||record.eventName||'Spieltag'}“ vom ${publicDate(record.date)} wirklich löschen? Der Eintrag wird auch aus Saison und Turnierhistorie entfernt.`))return;
-  const same=item=>(item.id&&record.id?item.id===record.id:`${item.date||''}|${item.name||item.eventName||''}|${item.competition||''}`===key);
+  const same=item=>publicTournamentKey(item)===key;
   for(const season of seasonStore.seasons||[])season.tournaments=(season.tournaments||[]).filter(item=>!same(item));
   persistSeasons();localStorage.setItem(TOURNAMENT_HISTORY_KEY,JSON.stringify(loadTournamentHistory().filter(item=>!same(item))));renderSeasonView();renderPublicHome();
 }
@@ -984,7 +989,7 @@ function liveCompetitionCards(){
 }
 function renderPublicHome(){
   const status=$('#publicHomeStatus');if(!status)return;
-  const records=publicTournamentRecords(),today=todayIso(),upcoming=records.filter(item=>item.date&&item.date>today),past=records.filter(item=>!item.date||item.date<=today).sort((a,b)=>(b.date||'').localeCompare(a.date||'')),live=liveCompetitionCards();
+  const records=publicTournamentRecords(),today=todayIso(),upcoming=records.filter(item=>item.planned||(item.date&&item.date>today)),past=records.filter(item=>!item.planned&&(!item.date||item.date<=today)).sort((a,b)=>(b.date||'').localeCompare(a.date||'')),live=liveCompetitionCards();
   status.innerHTML=T20Cloud.authResolved?'':'<span class="public-loading">Aktuelle Vereinsdaten werden geladen …</span>';
   $('#publicAdminSchedule')?.classList.toggle('hidden',!isAdmin());
   if(isAdmin()){const select=$('#publicScheduleSeason');if(select)select.innerHTML=(seasonStore.seasons||[]).map(season=>`<option value="${esc(season.id)}" ${season.id===selectedSeason()?.id?'selected':''}>${esc(season.name)}${season.archived?' · Archiv':''}</option>`).join('')||'<option value="">Zuerst eine Saison erstellen</option>';const date=$('#publicScheduleDate');if(date&&!date.value)date.value=todayIso()}
