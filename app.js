@@ -62,7 +62,13 @@ function replaceTournamentState(next){Object.keys(state).forEach(key=>delete sta
 ensureTournamentDayState();loadActiveCompetition();
 function emptyMemberTournament(){return{players:[],playerProfileIds:{},started:false,matches:[],settings:{},memberLocal:true}}
 function loadMemberTournament(){return safeJsonParse(localStorage.getItem(MEMBER_TOURNAMENT_KEY)||'null')||emptyMemberTournament()}
-function save(){if(isMember()&&T20Cloud.tournamentViewMode==='live')return;syncActiveCompetition();if(isMember()||state.memberLocal){state.memberLocal=true;localStorage.setItem(MEMBER_TOURNAMENT_KEY,JSON.stringify(state));return}localStorage.setItem('dartTournament',JSON.stringify(state))}
+function save(){
+  if(isMember()&&T20Cloud.tournamentViewMode==='live')return;
+  syncActiveCompetition();
+  if(isMember()){state.memberLocal=true;localStorage.setItem(MEMBER_TOURNAMENT_KEY,JSON.stringify(state));return}
+  if(isAdmin()){delete state.memberLocal;delete state.guestLocal}
+  localStorage.setItem('dartTournament',JSON.stringify(state));
+}
 async function publishLiveTournament({notifyOnError=false}={}){
   if(!isAdmin())return false;
   if(!T20Cloud.client){if(notifyOnError)alert('Die Cloud-Verbindung ist noch nicht bereit. Bitte warte kurz und starte das Turnier anschließend erneut.');return false}
@@ -355,6 +361,11 @@ window.T20Cloud={
       }
       if(this.user&&state.guestLocal){Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,{players:[],playerProfileIds:{},started:false,matches:[],settings:{}});localStorage.removeItem('dartTournament');localStorage.removeItem('triple20_pending_sync');this.pendingSync=false}
       if(this.user)this.isAdmin=await this.checkAdmin(this.user.id);
+      if(this.isAdmin){
+        const stranded=loadMemberTournament(),hasStrandedLive=!!(stranded.started||Object.values(stranded.competitions||{}).some(competition=>competition?.started));
+        if(hasStrandedLive&&!state.started&&!Object.values(state.competitions||{}).some(competition=>competition?.started)){replaceTournamentState(structuredClone(stranded));delete state.memberLocal;delete state.guestLocal;localStorage.removeItem(MEMBER_TOURNAMENT_KEY);save()}
+        else if(state.memberLocal||state.guestLocal)save();
+      }
       if(this.user&&!this.isAdmin)this.tournamentViewMode='live';
       if(this.isAdmin&&localStorage.getItem('triple20_identity_pending')==='1'){this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');localStorage.removeItem('triple20_identity_pending')}
       if(this.user&&this.isAdmin)try{await this.loadAdminProfiles()}catch(error){console.warn('Mitgliederprofile konnten nach der Anmeldung nicht geladen werden:',error)}
