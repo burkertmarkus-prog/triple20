@@ -63,6 +63,14 @@ ensureTournamentDayState();loadActiveCompetition();
 function emptyMemberTournament(){return{players:[],playerProfileIds:{},started:false,matches:[],settings:{},memberLocal:true}}
 function loadMemberTournament(){return safeJsonParse(localStorage.getItem(MEMBER_TOURNAMENT_KEY)||'null')||emptyMemberTournament()}
 function save(){if(isMember()&&T20Cloud.tournamentViewMode==='live')return;syncActiveCompetition();if(isMember()||state.memberLocal){state.memberLocal=true;localStorage.setItem(MEMBER_TOURNAMENT_KEY,JSON.stringify(state));return}localStorage.setItem('dartTournament',JSON.stringify(state))}
+async function publishLiveTournament({notifyOnError=false}={}){
+  if(!isAdmin())return false;
+  if(!T20Cloud.client){if(notifyOnError)alert('Die Cloud-Verbindung ist noch nicht bereit. Bitte warte kurz und starte das Turnier anschließend erneut.');return false}
+  await T20Cloud.syncAll({force:true});
+  const published=!T20Cloud.pendingSync;
+  if(!published&&notifyOnError)alert('Das Turnier wurde auf diesem PC gestartet, konnte aber nicht in die Cloud veröffentlicht werden. Bitte prüfe die Internetverbindung und den Statusbalken.');
+  return published;
+}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function mergeSettings(base,stored){const out={...base,...(stored||{})};out.club={...base.club,...(stored?.club||{}),pointSystem:{...base.club.pointSystem,...(stored?.club?.pointSystem||{})}};out.tournament={...base.tournament,...(stored?.tournament||{})};out.theme={...base.theme,...(stored?.theme||{})};out.club.enabled=out.mode==='club';return out}
 function migrateFriendlyTheme(stored){const t=stored?.theme;if(t?.background==='#05070A'&&t?.card==='#111820'&&t?.text==='#F7F7F7')stored.theme={...defaultSettings.theme};return stored}
@@ -321,7 +329,7 @@ window.T20Cloud={
       }
       await this.setSession(session||null);
       renderCloudPanel();
-      this.loadCloud({initial:true}).catch(e=>console.warn('Cloud-Startladen fehlgeschlagen',e));
+      try{await this.loadCloud({initial:true});if(this.isAdmin&&state.started)await publishLiveTournament({notifyOnError:true})}catch(e){console.warn('Cloud-Startladen fehlgeschlagen',e)}
     }catch(error){
       console.warn('Session nach Start konnte nicht geladen werden:',error);
       this.authError=authRedirectErrorMessage()||`Anmeldung konnte nicht abgeschlossen werden: ${error?.message||'Bitte fordere einen neuen Link an.'}`;this.authMessage='';this.authRedirectPending=false;cleanAuthRedirectUrl();setSyncStatus('Nur Ansicht','view-only');showLogin();renderCloudPanel();
@@ -629,7 +637,7 @@ function makeMatches(){
   else addPairs(arr,shuffle(state.players),1,'upper');
   return arr;
 }
-$('#startBtn').addEventListener('click',()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value};state.matches=makeMatches();state.started=true;save();renderTournament()});
+$('#startBtn').addEventListener('click',async()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value};state.matches=makeMatches();state.started=true;save();renderTournament();await publishLiveTournament({notifyOnError:true})});
 
 function playerLosses(){const losses=Object.fromEntries(state.players.map(p=>[p,0]));state.matches.filter(m=>m.sa!==null&&m.b!=='Freilos').forEach(m=>{losses[m.sa>m.sb?m.b:m.a]++});return losses}
 function standingsFor(players,matches=state.matches){return players.map(name=>{const played=matches.filter(m=>m.sa!==null&&(m.a===name||m.b===name));let w=0,lf=0,la=0;played.forEach(m=>{const own=m.a===name?m.sa:m.sb,other=m.a===name?m.sb:m.sa;lf+=own;la+=other;if(own>other)w++});return{name,p:played.length,w,l:played.length-w,lf,la,pts:w*2}}).sort((a,b)=>b.pts-a.pts||(b.lf-b.la)-(a.lf-a.la)||b.lf-a.lf)}
@@ -724,7 +732,7 @@ function advanceElimination(){
     if(lowerEntrants.length)addPairs(state.matches,lowerEntrants,next,'lower');
   }
 }
-$('#matchList').addEventListener('click',e=>{const i=e.target.dataset.save;if(i===undefined)return;if(!assertTournamentAction())return;const a=$(`[data-sa="${i}"]`).value,b=$(`[data-sb="${i}"]`).value;if(a===''||b===''||a===b){alert('Bitte ein eindeutiges Ergebnis eintragen.');return}if(Math.max(+a,+b)!==state.settings.legs){alert(`Der Sieger benötigt ${state.settings.legs} Legs.`);return}state.matches[i].sa=+a;state.matches[i].sb=+b;advanceElimination();renderTournament()});
+$('#matchList').addEventListener('click',async e=>{const i=e.target.dataset.save;if(i===undefined)return;if(!assertTournamentAction())return;const a=$(`[data-sa="${i}"]`).value,b=$(`[data-sb="${i}"]`).value;if(a===''||b===''||a===b){alert('Bitte ein eindeutiges Ergebnis eintragen.');return}if(Math.max(+a,+b)!==state.settings.legs){alert(`Der Sieger benötigt ${state.settings.legs} Legs.`);return}state.matches[i].sa=+a;state.matches[i].sb=+b;advanceElimination();renderTournament();await publishLiveTournament()});
 $('#withdrawCard').addEventListener('click',e=>{
   if((e.target.id==='withdrawPlayerBtn'||e.target.id==='joinPlayerBtn')&&!assertTournamentAction())return;
   if(e.target.id==='withdrawPlayerBtn'){const name=$('#withdrawPlayerSelect')?.value;if(!name)return;if(!confirm(`${name} aus dem weiteren Turnier nehmen?`))return;withdrawSwissPlayer(name)}
@@ -1248,5 +1256,5 @@ function renameEvent(){
   if(state.seasonImportedTo&&state.seasonTournamentId){const season=seasonStore.seasons.find(item=>item.id===state.seasonImportedTo),record=season?.tournaments?.find(item=>item.id===state.seasonTournamentId);if(record){record.eventName=name;record.name=competitionTitle();record.settings={...(record.settings||{}),eventName:name,name:competitionTitle()};persistSeasons()}}
   save();renderTournament();renderNavigation();
 }
-function reset(){if(state.started&&!confirm(`Den Bewerb „${competitionLabel()}“ wirklich löschen? Der andere Bewerb bleibt erhalten.`))return;for(const key of COMPETITION_KEYS)delete state[key];Object.assign(state,emptyCompetition());syncActiveCompetition();save();renderPlayers();renderTournament();showTournament()}
+async function reset(){if(state.started&&!confirm(`Den Bewerb „${competitionLabel()}“ wirklich löschen? Der andere Bewerb bleibt erhalten.`))return;for(const key of COMPETITION_KEYS)delete state[key];Object.assign(state,emptyCompetition());syncActiveCompetition();save();renderPlayers();renderTournament();showTournament();await publishLiveTournament({notifyOnError:true})}
 $('#resetBtn').onclick=reset;$('#liveResetBtn').onclick=reset;$('#finishReset').onclick=reset;$('#renameEventBtn').onclick=renameEvent;registerAccess();applyTheme();applyTournamentDefaults();fillSeasonForm();renderPlayers();renderSettingsForm();renderNavigation();renderSeasonView();applyAppRoute();T20Cloud.init().finally(applyAppRoute);
