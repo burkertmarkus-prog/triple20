@@ -11,16 +11,41 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260803-2">
+  <link rel="stylesheet" href="styles.css?v=20260804-1">
 </head>
 <body>
   <header class="hero">
     <div class="brand"><button id="menuToggle" class="menu-toggle" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><div><strong>Triple<span>20</span></strong><small id="brandSubtitle">Turnierleitung</small></div></div>
-    <div class="main-actions"><button id="showTournamentBtn" class="ghost">Turnier</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="showShopBtn" class="ghost">Empfehlungen</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="showLoginBtn" class="ghost">Anmelden</button></div>
+    <div class="main-actions"><button id="showHomeBtn" class="ghost">Start</button><button id="showTournamentBtn" class="ghost">Spiele</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="showShopBtn" class="ghost">Empfehlungen</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="showLoginBtn" class="ghost">Anmelden</button></div>
   </header>
   <div id="syncStatusBar" class="sync-status view-only"><span id="syncStatusText">Nur Ansicht</span><small id="syncLastSaved">Noch nicht synchronisiert</small></div>
 
   <main>
+    <section id="publicHomeSection" class="public-home hidden" aria-labelledby="publicHomeTitle">
+      <div class="public-home-hero">
+        <p class="eyebrow">TRIPLE20 · ZUSCHAUERBEREICH</p>
+        <h1 id="publicHomeTitle">Alle Spiele.<br><em>Alle Ranglisten.</em></h1>
+        <p>Zukünftige Termine, laufende Bewerbe und vergangene Ergebnisse auf einen Blick.</p>
+      </div>
+      <div id="publicHomeStatus" class="public-home-status" role="status"></div>
+      <section class="public-home-block" aria-labelledby="publicLiveTitle">
+        <div class="public-home-heading"><div><span>LIVE</span><h2 id="publicLiveTitle">Laufende Spiele</h2></div><button class="secondary" type="button" data-public-nav="turnier">Spielplan öffnen</button></div>
+        <div id="publicLiveGames" class="public-event-grid"></div>
+      </section>
+      <section class="public-home-block" aria-labelledby="publicUpcomingTitle">
+        <div class="public-home-heading"><div><span>DEMNÄCHST</span><h2 id="publicUpcomingTitle">Zukünftige Spiele</h2></div></div>
+        <div id="publicUpcomingGames" class="public-event-list"></div>
+      </section>
+      <section class="public-home-block" aria-labelledby="publicPastTitle">
+        <div class="public-home-heading"><div><span>ERGEBNISSE</span><h2 id="publicPastTitle">Vergangene Spiele</h2></div></div>
+        <div id="publicPastGames" class="public-event-list"></div>
+      </section>
+      <section class="public-home-block" aria-labelledby="publicSeasonsTitle">
+        <div class="public-home-heading"><div><span>SAISONEN</span><h2 id="publicSeasonsTitle">Saisonranglisten</h2></div><button class="secondary" type="button" data-public-nav="saison">Alle Ranglisten öffnen</button></div>
+        <div id="publicSeasonRankings" class="public-ranking-grid"></div>
+      </section>
+    </section>
+
     <section id="shopSection" class="shop-section hidden" aria-labelledby="shopTitle">
       <div class="shop-hero">
         <h1 id="shopTitle">Triple20 Empfehlungen</h1>
@@ -86,7 +111,7 @@
       <div class="season-toolbar card slim-card">
         <div id="seasonCurrentSummary" class="season-current-summary"></div>
         <label>Saison laden<select id="seasonSelect"></select></label>
-        <label>Aktion<select id="seasonActionSelect"><option value="">Aktion wählen</option><option value="edit">Saison bearbeiten</option><option value="current">Aktuelle Saison erstellen</option><option value="archive">Saison archivieren</option><option value="delete">Saison löschen</option></select></label>
+        <label class="admin-only-control">Aktion<select id="seasonActionSelect"><option value="">Aktion wählen</option><option value="edit">Saison bearbeiten</option><option value="current">Aktuelle Saison erstellen</option><option value="archive">Saison archivieren</option><option value="delete">Saison löschen</option></select></label>
       </div>
       <form id="seasonForm" class="card slim-card hidden">
         <h3 id="seasonFormTitle">Saison erstellen / bearbeiten</h3>
@@ -142,6 +167,6 @@
   </main>
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260803-4"></script>
+  <script src="app.js?v=20260804-1"></script>
 </body>
 </html>
