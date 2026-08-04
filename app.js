@@ -642,6 +642,7 @@ function champion(){
   return active.length===1&&state.matches.every(m=>m.sa!==null)?active[0]:'';
 }
 function renderTournament(){
+  const route=new URLSearchParams(location.search);if(route.get('bereich')==='live')selectLiveCompetition(route.get('bewerb')||'men');
   renderTournamentSubnav();renderCompetitionNav();$('#memberLiveEmpty')?.classList.add('hidden');
   if(isMember()&&T20Cloud.tournamentViewMode==='live'&&!state.started){$('#setupSection').classList.add('hidden');$('#tournamentSection').classList.add('hidden');$('#memberLiveEmpty')?.classList.remove('hidden');renderReadonlyMode();return}
   if(!T20Cloud.user&&!state.started){$('#setupSection').classList.add('hidden');$('#tournamentSection').classList.add('hidden');$('#memberLiveEmpty')?.classList.remove('hidden');renderReadonlyMode();return}
@@ -650,6 +651,8 @@ function renderTournament(){
   $('#setupSection').classList.add('hidden');$('#tournamentSection').classList.remove('hidden');$('#bracketTab').classList.toggle('hidden',noBracket);
   if(noBracket&&$('#bracketTab').classList.contains('active')){document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelector('[data-tab="matches"]').classList.add('active');$('#matchesView').classList.remove('hidden');$('#bracketView').classList.add('hidden');$('#tableView').classList.add('hidden')}
   $('#liveCompetitionLabel').textContent=`${competitionLabel().toUpperCase()} · LIVE-TURNIER`;$('#liveTitle').textContent=state.eventName||state.settings.eventName||state.settings.name;$('#liveMeta').textContent=`${state.players.length} Teilnehmende · ${modeName()} · ${state.settings.start}`;
+  const refreshed=T20Cloud.lastSyncAt?new Date(T20Cloud.lastSyncAt).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'';$('#liveViewerStatus').textContent=refreshed?`Automatisch aktuell · zuletzt ${refreshed} Uhr`:'Automatische Aktualisierung alle 15 Sekunden';
+  $('#showLiveQrBtn')?.classList.toggle('hidden',!isAdmin());
   $('#renameEventBtn')?.classList.toggle('hidden',!isAdmin());
   const done=state.matches.filter(m=>m.sa!==null).length;$('#progressText').textContent=Math.round(done/state.matches.length*100)+'%';
   $('#matchList').innerHTML=state.matches.map((m,i)=>`<article class="match ${m.sa!==null?'done':''}"><div class="match-no">${m.group!==undefined?'Gruppe '+String.fromCharCode(65+m.group)+' · ':''}Runde ${m.round} · ${m.bracket==='lower'?'Verlierer':m.bracket==='grand'?'Finale':'Spiel'} ${String(i+1).padStart(2,'0')}</div><div class="players-match"><span class="${m.sa>m.sb?'winner-player':''}">${esc(m.a)}</span><b>${m.sa===null?'VS':m.sa+' : '+m.sb}</b><span class="${m.sb>m.sa?'winner-player':''}">${esc(m.b)}</span></div><div class="score-controls">${m.b==='Freilos'?'Weiter':`<select data-sa="${i}">${options(m.sa)}</select><span>:</span><select data-sb="${i}">${options(m.sb)}</select><button data-save="${i}">✓</button>`}</div></article>`).join('');
@@ -986,7 +989,7 @@ function liveCompetitionCards(){
   ensureTournamentDayState();
   return ['men','women'].map(key=>({key,label:competitionLabel(key),data:key===state.activeCompetition?competitionSnapshot(state):competitionSnapshot(state.competitions?.[key]||emptyCompetition())})).filter(item=>item.data.started).map(item=>{
     const tournament=item.data,done=(tournament.matches||[]).filter(match=>match.sa!==null).length,total=(tournament.matches||[]).length,next=(tournament.matches||[]).filter(match=>match.sa===null&&match.b!=='Freilos').slice(0,3);
-    return `<article class="public-live-card"><div><span class="live-dot">LIVE</span><small>${esc(item.label)}</small></div><h3>${esc(state.eventName||tournament.settings?.eventName||tournament.settings?.name||'Vereinsturnier')}</h3><p>${done} von ${total} Spielen beendet · ${tournament.players?.length||0} Teilnehmende</p><div class="public-live-matches">${next.map(match=>`<div><span>${esc(match.a)}</span><b>vs.</b><span>${esc(match.b)}</span></div>`).join('')||'<p>Alle Spiele dieses Bewerbs sind beendet.</p>'}</div></article>`;
+    return `<article class="public-live-card"><div><span class="live-dot">LIVE</span><small>${esc(item.label)}</small></div><h3>${esc(state.eventName||tournament.settings?.eventName||tournament.settings?.name||'Vereinsturnier')}</h3><p>${done} von ${total} Spielen beendet · ${tournament.players?.length||0} Teilnehmende</p><div class="public-live-matches">${next.map(match=>`<div><span>${esc(match.a)}</span><b>vs.</b><span>${esc(match.b)}</span></div>`).join('')||'<p>Alle Spiele dieses Bewerbs sind beendet.</p>'}</div><button class="secondary public-live-open" type="button" data-open-live="${item.key}">Vollständigen Spielplan öffnen</button></article>`;
   });
 }
 function renderPublicHome(){
@@ -1004,18 +1007,19 @@ function renderPublicHome(){
 function updateAppUrl(area,extras={},replace=false){
   if(applyingRoute)return;
   const url=new URL(location.href);url.searchParams.set('bereich',area);
-  ['produkt','kategorie'].forEach(key=>{const value=extras[key];if(value)url.searchParams.set(key,value);else url.searchParams.delete(key)});
+  ['produkt','kategorie','bewerb'].forEach(key=>{const value=extras[key];if(value)url.searchParams.set(key,value);else url.searchParams.delete(key)});
   const next=url.pathname+(url.searchParams.size?`?${url.searchParams}`:'')+url.hash;
   history[replace?'replaceState':'pushState']({},document.title,next);
 }
 async function applyAppRoute(){
-  const params=new URLSearchParams(location.search),area=params.get('bereich')||'start',product=params.get('produkt')||'',category=params.get('kategorie')||'';
+  const params=new URLSearchParams(location.search),area=params.get('bereich')||'start',product=params.get('produkt')||'',category=params.get('kategorie')||'',competition=params.get('bewerb')||'men';
   applyingRoute=true;
   try{
     if(area==='empfehlungen'||product){await showShop({productId:product,category,updateUrl:false});return}
     if(area==='saison'){showSeason(false);return}
     if(area==='konto'){showLogin(false);return}
     if(area==='einstellungen'){showSettings(false);return}
+    if(area==='live'){showLive(competition,false);return}
     if(area==='turnier'){showTournament(false);return}
     showHome(false);
   }finally{applyingRoute=false}
@@ -1052,6 +1056,21 @@ function renderDashboard(){
 }
 function showHome(updateUrl=true){hideMainSections();$('#publicHomeSection')?.classList.remove('hidden');renderPublicHome();renderNavigation();if(updateUrl)updateAppUrl('start')}
 function showDashboard(){showHome()}
+function selectLiveCompetition(key){
+  if(!['men','women'].includes(key)||key===state.activeCompetition)return;
+  syncActiveCompetition();state.activeCompetition=key;loadActiveCompetition();
+}
+function showLive(key='men',updateUrl=true){const competition=['men','women'].includes(key)?key:'men';if(updateUrl)updateAppUrl('live',{bewerb:competition});selectLiveCompetition(competition);showTournament(false)}
+function livePublicUrl(key=state.activeCompetition){const url=new URL(TRIPLE20_PUBLIC_URL);url.searchParams.set('bereich','live');url.searchParams.set('bewerb',['men','women'].includes(key)?key:'men');return url.href}
+function renderLiveQrCode(key=state.activeCompetition){
+  const box=$('#liveQrCode'),link=$('#liveQrLink'),url=livePublicUrl(key);if(link){link.href=url;link.textContent=url}if(!box)return;box.innerHTML='';
+  if(typeof QRCode==='function')new QRCode(box,{text:url,width:260,height:260,colorDark:'#07111f',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});else box.innerHTML='<p>Der QR-Code konnte nicht geladen werden. Bitte verwende den angezeigten Link.</p>';
+  document.querySelectorAll('[data-live-qr-competition]').forEach(button=>button.classList.toggle('active',button.dataset.liveQrCompetition===key));
+}
+function openLiveQr(){
+  if(!isAdmin())return;$('#liveQrOverlay')?.remove();
+  document.body.insertAdjacentHTML('beforeend',`<div id="liveQrOverlay" class="live-qr-overlay" role="dialog" aria-modal="true" aria-labelledby="liveQrTitle"><section class="live-qr-dialog"><button id="closeLiveQrBtn" class="live-qr-close" type="button" aria-label="QR-Code schließen">×</button><span class="eyebrow">ZUSCHAUER-LINK</span><h2 id="liveQrTitle">Live-Spielplan öffnen</h2><p>QR-Code scannen und den Spielplan ohne Anmeldung ansehen.</p><div class="live-qr-switch"><button class="secondary" type="button" data-live-qr-competition="men">Herren</button><button class="secondary" type="button" data-live-qr-competition="women">Damen</button></div><div id="liveQrCode" class="live-qr-code"></div><a id="liveQrLink" class="live-qr-link" href="#" target="_blank" rel="noopener"></a><button id="copyLiveQrLinkBtn" class="primary" type="button">LINK KOPIEREN <span>⧉</span></button></section></div>`);renderLiveQrCode(state.activeCompetition||'men');
+}
 function showLogin(updateUrl=true){hideMainSections();$('#authSection')?.classList.remove('hidden');renderCloudPanel();renderNavigation();if(updateUrl)updateAppUrl('konto')}
 function showSettings(updateUrl=true){if(!isAdmin()){showLogin(updateUrl);return}hideMainSections();$('#settingsSection').classList.remove('hidden');renderSettingsForm();renderNavigation();if(updateUrl)updateAppUrl('einstellungen')}
 function validPartnerUrl(value){try{const url=new URL(value);return url.protocol==='https:'&&/(^|\.)amazon\.de$/i.test(url.hostname)}catch{return false}}
@@ -1182,8 +1201,10 @@ document.addEventListener('click',e=>{if(e.target.id==='cancelAvatarCropBtn'||e.
 $('#showTournamentBtn').addEventListener('click',()=>showTournament());
 $('#showHomeBtn')?.addEventListener('click',()=>showHome());
 $('#publicHomeSection')?.addEventListener('submit',event=>{if(event.target.id!=='publicScheduleForm')return;event.preventDefault();createPublicSchedule()});
-$('#publicHomeSection')?.addEventListener('click',event=>{const remove=event.target.closest('[data-public-delete]');if(remove){deletePublicTournament(remove.dataset.publicDelete);return}const nav=event.target.closest('[data-public-nav]');if(nav?.dataset.publicNav==='turnier'){showTournament();return}if(nav?.dataset.publicNav==='saison'){showSeason();return}const seasonButton=event.target.closest('[data-season-open]');if(seasonButton){selectedSeasonId=seasonButton.dataset.seasonOpen;persistSeasons();showSeason()}});
-document.addEventListener('click',e=>{const modeButton=e.target.closest('[data-tournament-mode]');if(modeButton){setTournamentViewMode(modeButton.dataset.tournamentMode);return}const competitionButton=e.target.closest('[data-competition]');if(competitionButton)setActiveCompetition(competitionButton.dataset.competition)});
+$('#publicHomeSection')?.addEventListener('click',event=>{const live=event.target.closest('[data-open-live]');if(live){showLive(live.dataset.openLive);return}const remove=event.target.closest('[data-public-delete]');if(remove){deletePublicTournament(remove.dataset.publicDelete);return}const nav=event.target.closest('[data-public-nav]');if(nav?.dataset.publicNav==='turnier'){showTournament();return}if(nav?.dataset.publicNav==='saison'){showSeason();return}const seasonButton=event.target.closest('[data-season-open]');if(seasonButton){selectedSeasonId=seasonButton.dataset.seasonOpen;persistSeasons();showSeason()}});
+document.addEventListener('click',e=>{const modeButton=e.target.closest('[data-tournament-mode]');if(modeButton){setTournamentViewMode(modeButton.dataset.tournamentMode);return}const competitionButton=e.target.closest('[data-competition]');if(competitionButton){const liveRoute=new URLSearchParams(location.search).get('bereich')==='live';if(liveRoute||!isAdmin())showLive(competitionButton.dataset.competition);else setActiveCompetition(competitionButton.dataset.competition)}});
+$('#showLiveQrBtn')?.addEventListener('click',openLiveQr);
+document.addEventListener('click',async event=>{if(event.target.id==='closeLiveQrBtn'||event.target.id==='liveQrOverlay'){$('#liveQrOverlay')?.remove();return}const switchButton=event.target.closest('[data-live-qr-competition]');if(switchButton){renderLiveQrCode(switchButton.dataset.liveQrCompetition);return}const copyButton=event.target.closest('#copyLiveQrLinkBtn');if(copyButton){const value=$('#liveQrLink')?.href||'';try{await navigator.clipboard.writeText(value);copyButton.firstChild.textContent='LINK KOPIERT '}catch{prompt('Live-Link kopieren:',value)}}});
 $('#showSeasonBtn').addEventListener('click',()=>showSeason());
 $('#showShopBtn').addEventListener('click',()=>showShop());
 $('#showSettingsBtn').addEventListener('click',()=>showSettings());
