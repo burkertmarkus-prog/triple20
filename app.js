@@ -2,6 +2,7 @@ const $=s=>document.querySelector(s);
 const SETTINGS_KEY='triple20_settings';
 const TOURNAMENT_HISTORY_KEY='triple20_tournaments';
 const MEMBER_TOURNAMENT_KEY='triple20_member_tournament';
+const LIVE_RECOVERY_KEY='triple20_live_recovery';
 const ACCESS_COUNT_KEY='triple20_access_count';
 const ACCESS_DAILY_KEY='triple20_access_daily';
 const ACCESS_SESSION_KEY='triple20_access_counted';
@@ -28,6 +29,9 @@ const defaultSettings={
 };
 let appSettings=loadSettings();
 const state=JSON.parse(localStorage.getItem('dartTournament')||'null')||{players:[],started:false,matches:[],settings:{}};
+const liveRecovery=safeJsonParse(localStorage.getItem(LIVE_RECOVERY_KEY)||'null');
+const stateHasLive=!!(state.started||Object.values(state.competitions||{}).some(competition=>competition?.started)),recoveryHasLive=!!(liveRecovery?.started||Object.values(liveRecovery?.competitions||{}).some(competition=>competition?.started));
+if(!stateHasLive&&recoveryHasLive){Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,liveRecovery)}
 const SEASON_KEY='tripleTwentySeasons';
 const seasonStore=loadSeasons();
 let selectedSeasonId=localStorage.getItem('tripleTwentySelectedSeason')||'';
@@ -68,6 +72,7 @@ function save(){
   if(isMember()){state.memberLocal=true;localStorage.setItem(MEMBER_TOURNAMENT_KEY,JSON.stringify(state));return}
   if(isAdmin()){delete state.memberLocal;delete state.guestLocal}
   localStorage.setItem('dartTournament',JSON.stringify(state));
+  if(isAdmin()){const live=!!(state.started||Object.values(state.competitions||{}).some(competition=>competition?.started));if(live)localStorage.setItem(LIVE_RECOVERY_KEY,JSON.stringify(state));else localStorage.removeItem(LIVE_RECOVERY_KEY)}
 }
 async function publishLiveTournament({notifyOnError=false}={}){
   if(!isAdmin())return false;
@@ -359,13 +364,13 @@ window.T20Cloud={
         renderReadonlyMode();renderCloudPanel();setSyncStatus('Anmeldung bestätigt …','saving');
         if(this.authRedirectPending){this.authRedirectPending=false;cleanAuthRedirectUrl();showLogin();renderCloudPanel()}
       }
-      if(this.user&&state.guestLocal){Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,{players:[],playerProfileIds:{},started:false,matches:[],settings:{}});localStorage.removeItem('dartTournament');localStorage.removeItem('triple20_pending_sync');this.pendingSync=false}
       if(this.user)this.isAdmin=await this.checkAdmin(this.user.id);
       if(this.isAdmin){
         const stranded=loadMemberTournament(),hasStrandedLive=!!(stranded.started||Object.values(stranded.competitions||{}).some(competition=>competition?.started));
         if(hasStrandedLive&&!state.started&&!Object.values(state.competitions||{}).some(competition=>competition?.started)){replaceTournamentState(structuredClone(stranded));delete state.memberLocal;delete state.guestLocal;localStorage.removeItem(MEMBER_TOURNAMENT_KEY);save()}
         else if(state.memberLocal||state.guestLocal)save();
       }
+      if(this.user&&!this.isAdmin&&state.guestLocal){Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,{players:[],playerProfileIds:{},started:false,matches:[],settings:{}});localStorage.removeItem('dartTournament');localStorage.removeItem('triple20_pending_sync');this.pendingSync=false}
       if(this.user&&!this.isAdmin)this.tournamentViewMode='live';
       if(this.isAdmin&&localStorage.getItem('triple20_identity_pending')==='1'){this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');localStorage.removeItem('triple20_identity_pending')}
       if(this.user&&this.isAdmin)try{await this.loadAdminProfiles()}catch(error){console.warn('Mitgliederprofile konnten nach der Anmeldung nicht geladen werden:',error)}
