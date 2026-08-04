@@ -843,7 +843,7 @@ function calculateDropResults(entries,dropCount=0){
 }
 function calculateSeasonStandings(season=selectedSeason()){
   if(!isClubMode()||!season)return[];
-  const tournaments=season.tournaments||[],players=new Map(),knownIds=new Map();
+  const tournaments=(season.tournaments||[]).filter(tournament=>!tournament.planned&&(!tournament.date||tournament.date<=todayIso())),players=new Map(),knownIds=new Map();
   Object.entries(season.memberProfileIds||{}).forEach(([name,id])=>{if(id){knownIds.set(normalizedPlayerName(name),id);knownIds.set(normalizedPlayerName(currentMemberNickname(id,name)),id)}});
   for(const tournament of tournaments){Object.entries(tournament.playerProfileIds||{}).forEach(([name,id])=>{if(id){knownIds.set(normalizedPlayerName(name),id);knownIds.set(normalizedPlayerName(currentMemberNickname(id,name)),id)}});for(const result of tournament.results||[])if(result.profileId){knownIds.set(normalizedPlayerName(result.name),result.profileId);knownIds.set(normalizedPlayerName(currentMemberNickname(result.profileId,result.name)),result.profileId)}}
   const resolveId=(name,id='')=>id||knownIds.get(normalizedPlayerName(name))||memberIdForName(name),addPlayer=(name,id='')=>{id=resolveId(name,id);const display=id?currentMemberNickname(id,name):name,key=resultIdentity(display,id),displayKey=resultIdentity(display),existing=players.get(key)||players.get(displayKey)||[...players.values()].find(player=>normalizedPlayerName(player.name)===normalizedPlayerName(display));if(existing){if(id&&!existing.profileId){players.delete(existing.key);existing.key=key;existing.profileId=id;existing.name=display;players.set(key,existing)}return}players.set(key,{key,name:display,profileId:id})};
@@ -915,7 +915,7 @@ function tournamentMatchesHtml(tournament){
   return `<div class="season-pairings">${matches.map(m=>`<div class="season-pairing"><small>Runde ${m.round||1}</small><b>${esc(tournamentPlayerName(tournament,m.a))}</b><strong>${m.sa??'–'} : ${m.sb??'–'}</strong><b>${esc(tournamentPlayerName(tournament,m.b))}</b></div>`).join('')}</div>`;
 }
 function renderSeasonTournaments(season=selectedSeason()){
-  const tournaments=season?.tournaments||[],list=tournaments.length?`<div class="match-list">${tournaments.map(t=>`<article class="match season-match"><div class="match-no">${esc(t.date)} · ${t.participantCount} Teilnehmer${t.manual?' · Manuell':''}</div><div><b>${esc(t.name)}</b><p>Sieger: ${esc(tournamentPlayerName(t,t.winner)||'–')} · Top 3: ${(t.top3||[]).map(name=>esc(tournamentPlayerName(t,name))).join(', ')||'–'}</p><div class="season-detail hidden" id="details-${esc(t.id)}"><h4>Platzierungen</h4><div class="season-results">${(t.results||[]).sort((a,b)=>a.rank-b.rank).map(r=>`<span>${r.rank}. ${esc(tournamentPlayerName(t,r.name))} · ${r.wins}S/${r.losses}N${(r.byes??tournamentByes(r.name,t.matches||[]))?` · ${r.byes??tournamentByes(r.name,t.matches||[])} Freilos`:''} · ${r.points+(r.byes===undefined?tournamentByes(r.name,t.matches||[]):0)} Pkt.${r.max180?` · ${r.max180}x180`:''}${r.checkout?` · HF ${r.checkout}`:''}</span>`).join('')}</div><h4>Paarungen</h4>${tournamentMatchesHtml(t)}</div></div><div class="season-match-actions"><button class="secondary" data-tournament-detail="${esc(t.id)}">Details anzeigen</button>${isAdmin()?`<button class="secondary" data-rename-tournament="${esc(t.id)}">Spieltag umbenennen</button>`:''}<button class="danger" data-delete-tournament="${esc(t.id)}">Löschen</button></div></article>`).join('')}</div>`:'<div class="empty-card">Noch keine Turniere in dieser Saison.</div>';
+  const tournaments=season?.tournaments||[],list=tournaments.length?`<div class="match-list">${tournaments.map(t=>{const planned=!!t.planned,summary=planned?`Geplanter Termin · ${esc(t.competitionLabel||'Offen')}`:`Sieger: ${esc(tournamentPlayerName(t,t.winner)||'–')} · Top 3: ${(t.top3||[]).map(name=>esc(tournamentPlayerName(t,name))).join(', ')||'–'}`;return `<article class="match season-match"><div class="match-no">${esc(t.date)}${planned?' · Geplant':` · ${t.participantCount||0} Teilnehmer${t.manual?' · Manuell':''}`}</div><div><b>${esc(t.name)}</b><p>${summary}</p>${planned?'':`<div class="season-detail hidden" id="details-${esc(t.id)}"><h4>Platzierungen</h4><div class="season-results">${(t.results||[]).sort((a,b)=>a.rank-b.rank).map(r=>`<span>${r.rank}. ${esc(tournamentPlayerName(t,r.name))} · ${r.wins}S/${r.losses}N${(r.byes??tournamentByes(r.name,t.matches||[]))?` · ${r.byes??tournamentByes(r.name,t.matches||[])} Freilos`:''} · ${r.points+(r.byes===undefined?tournamentByes(r.name,t.matches||[]):0)} Pkt.${r.max180?` · ${r.max180}x180`:''}${r.checkout?` · HF ${r.checkout}`:''}</span>`).join('')}</div><h4>Paarungen</h4>${tournamentMatchesHtml(t)}</div>`}</div><div class="season-match-actions">${planned?'':`<button class="secondary" data-tournament-detail="${esc(t.id)}">Details anzeigen</button>`}${isAdmin()?`<button class="secondary" data-rename-tournament="${esc(t.id)}">Spieltag umbenennen</button>`:''}<button class="danger" data-delete-tournament="${esc(t.id)}">Löschen</button></div></article>`}).join('')}</div>`:'<div class="empty-card">Noch keine Turniere in dieser Saison.</div>';
   $('#seasonTournaments').innerHTML=renderManualTournamentForm(season)+list;
 }
 function renameSeasonTournament(tournamentId){
@@ -950,13 +950,30 @@ function publicTournamentRecords(){
   const records=[...(seasonStore.seasons||[]).flatMap(season=>(season.tournaments||[]).map(tournament=>({...tournament,seasonName:season.name}))),...loadTournamentHistory()];
   const unique=new Map();
   records.forEach(record=>{const key=record.id||`${record.date||''}|${record.name||record.eventName||''}|${record.competition||''}`;const old=unique.get(key);unique.set(key,{...(old||{}),...record})});
-  return [...unique.values()].sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.name||'').localeCompare(b.name||'','de'));
+  return [...unique.entries()].map(([key,value])=>({...value,_publicKey:key})).sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.name||'').localeCompare(b.name||'','de'));
 }
 function publicEventRow(tournament,status){
   const results=tournament.results||[],matches=tournament.matches||[],winner=tournament.winner||[...results].sort((a,b)=>(a.rank||999)-(b.rank||999))[0]?.name||'';
   const participantText=(tournament.participantCount||tournament.players?.length)?`${tournament.participantCount||tournament.players.length} Teilnehmende`:'';
   const meta=[tournament.seasonName,tournament.competitionLabel,participantText,matches.length?`${matches.length} Spiele`:''].filter(Boolean).join(' · ');
-  return `<article class="public-event-row"><time datetime="${esc(tournament.date||'')}">${publicDate(tournament.date)}</time><div><h3>${esc(tournament.name||tournament.eventName||'Spieltag')}</h3><p>${esc(meta||'Weitere Angaben folgen')}</p></div><strong>${status==='future'?'Geplant':winner?`Sieger: ${esc(winner)}`:'Beendet'}</strong></article>`;
+  const remove=isAdmin()?`<button class="danger public-delete-event" type="button" data-public-delete="${esc(tournament._publicKey||tournament.id||'')}">Löschen</button>`:'';
+  return `<article class="public-event-row"><time datetime="${esc(tournament.date||'')}">${publicDate(tournament.date)}</time><div><h3>${esc(tournament.name||tournament.eventName||'Spieltag')}</h3><p>${esc(meta||'Weitere Angaben folgen')}</p></div><div class="public-event-result"><strong>${status==='future'?'Geplant':winner?`Sieger: ${esc(winner)}`:'Beendet'}</strong>${remove}</div></article>`;
+}
+function createPublicSchedule(){
+  if(!isAdmin())return;
+  const season=seasonStore.seasons.find(item=>item.id===$('#publicScheduleSeason')?.value),date=$('#publicScheduleDate')?.value,name=$('#publicScheduleName')?.value.trim(),competition=$('#publicScheduleCompetition')?.value||'open';
+  if(!season||!date||!name){alert('Bitte Datum, Bezeichnung und Saison vollständig auswählen.');return}
+  if(date<todayIso()&&!confirm('Das gewählte Datum liegt in der Vergangenheit. Termin trotzdem eintragen?'))return;
+  const label=competition==='women'?'Damen':competition==='men'?'Herren':'Offen',record={id:`scheduled-${Date.now()}`,name,date,competition,competitionLabel:label,planned:true,players:[],participantCount:0,matches:[],results:[],createdAt:new Date().toISOString()};
+  season.tournaments=season.tournaments||[];season.tournaments.push(record);season.tournaments.sort((a,b)=>(a.date||'').localeCompare(b.date||''));saveSeason(season);renderPublicHome();$('#publicScheduleName').value='';alert('Der zukünftige Spieltermin wurde veröffentlicht.');
+}
+function deletePublicTournament(key){
+  if(!isAdmin()||!key)return;
+  const record=publicTournamentRecords().find(item=>item._publicKey===key);if(!record)return;
+  if(!confirm(`„${record.name||record.eventName||'Spieltag'}“ vom ${publicDate(record.date)} wirklich löschen? Der Eintrag wird auch aus Saison und Turnierhistorie entfernt.`))return;
+  const same=item=>(item.id&&record.id?item.id===record.id:`${item.date||''}|${item.name||item.eventName||''}|${item.competition||''}`===key);
+  for(const season of seasonStore.seasons||[])season.tournaments=(season.tournaments||[]).filter(item=>!same(item));
+  persistSeasons();localStorage.setItem(TOURNAMENT_HISTORY_KEY,JSON.stringify(loadTournamentHistory().filter(item=>!same(item))));renderSeasonView();renderPublicHome();
 }
 function liveCompetitionCards(){
   ensureTournamentDayState();
@@ -969,6 +986,8 @@ function renderPublicHome(){
   const status=$('#publicHomeStatus');if(!status)return;
   const records=publicTournamentRecords(),today=todayIso(),upcoming=records.filter(item=>item.date&&item.date>today),past=records.filter(item=>!item.date||item.date<=today).sort((a,b)=>(b.date||'').localeCompare(a.date||'')),live=liveCompetitionCards();
   status.innerHTML=T20Cloud.authResolved?'':'<span class="public-loading">Aktuelle Vereinsdaten werden geladen …</span>';
+  $('#publicAdminSchedule')?.classList.toggle('hidden',!isAdmin());
+  if(isAdmin()){const select=$('#publicScheduleSeason');if(select)select.innerHTML=(seasonStore.seasons||[]).map(season=>`<option value="${esc(season.id)}" ${season.id===selectedSeason()?.id?'selected':''}>${esc(season.name)}${season.archived?' · Archiv':''}</option>`).join('')||'<option value="">Zuerst eine Saison erstellen</option>';const date=$('#publicScheduleDate');if(date&&!date.value)date.value=todayIso()}
   $('#publicLiveGames').innerHTML=live.join('')||'<div class="public-empty"><span>○</span><p>Derzeit läuft kein Spiel. Sobald ein Turnier startet, erscheint es hier automatisch.</p></div>';
   $('#publicUpcomingGames').innerHTML=upcoming.map(item=>publicEventRow(item,'future')).join('')||'<div class="public-empty"><p>Derzeit sind keine zukünftigen Spieltage eingetragen.</p></div>';
   $('#publicPastGames').innerHTML=past.map(item=>publicEventRow(item,'past')).join('')||'<div class="public-empty"><p>Noch keine vergangenen Spiele vorhanden.</p></div>';
@@ -1155,7 +1174,8 @@ $('#cloudAdminPanel').addEventListener('change',e=>{if(e.target.id==='backupImpo
 document.addEventListener('click',e=>{if(e.target.id==='cancelAvatarCropBtn'||e.target.id==='avatarCropOverlay')closeAvatarCrop();if(e.target.id==='saveAvatarCropBtn')saveAvatarCrop()});
 $('#showTournamentBtn').addEventListener('click',()=>showTournament());
 $('#showHomeBtn')?.addEventListener('click',()=>showHome());
-$('#publicHomeSection')?.addEventListener('click',event=>{const nav=event.target.closest('[data-public-nav]');if(nav?.dataset.publicNav==='turnier'){showTournament();return}if(nav?.dataset.publicNav==='saison'){showSeason();return}const seasonButton=event.target.closest('[data-season-open]');if(seasonButton){selectedSeasonId=seasonButton.dataset.seasonOpen;persistSeasons();showSeason()}});
+$('#publicHomeSection')?.addEventListener('submit',event=>{if(event.target.id!=='publicScheduleForm')return;event.preventDefault();createPublicSchedule()});
+$('#publicHomeSection')?.addEventListener('click',event=>{const remove=event.target.closest('[data-public-delete]');if(remove){deletePublicTournament(remove.dataset.publicDelete);return}const nav=event.target.closest('[data-public-nav]');if(nav?.dataset.publicNav==='turnier'){showTournament();return}if(nav?.dataset.publicNav==='saison'){showSeason();return}const seasonButton=event.target.closest('[data-season-open]');if(seasonButton){selectedSeasonId=seasonButton.dataset.seasonOpen;persistSeasons();showSeason()}});
 document.addEventListener('click',e=>{const modeButton=e.target.closest('[data-tournament-mode]');if(modeButton){setTournamentViewMode(modeButton.dataset.tournamentMode);return}const competitionButton=e.target.closest('[data-competition]');if(competitionButton)setActiveCompetition(competitionButton.dataset.competition)});
 $('#showSeasonBtn').addEventListener('click',()=>showSeason());
 $('#showShopBtn').addEventListener('click',()=>showShop());

@@ -28,6 +28,16 @@
         <p>Zukünftige Termine, laufende Bewerbe und vergangene Ergebnisse auf einen Blick.</p>
       </div>
       <div id="publicHomeStatus" class="public-home-status" role="status"></div>
+      <section id="publicAdminSchedule" class="public-admin-schedule card slim-card hidden" aria-labelledby="publicScheduleTitle">
+        <div><span class="eyebrow">ADMINISTRATION</span><h2 id="publicScheduleTitle">Zukünftiges Spiel eintragen</h2><p>Der Termin erscheint sofort im öffentlichen Zuschauerbereich.</p></div>
+        <form id="publicScheduleForm">
+          <label>Datum<input id="publicScheduleDate" type="date" required></label>
+          <label>Bezeichnung<input id="publicScheduleName" maxlength="60" placeholder="z. B. Dienstagsturnier" required></label>
+          <label>Bewerb<select id="publicScheduleCompetition"><option value="men">Herren</option><option value="women">Damen</option><option value="open">Offen</option></select></label>
+          <label>Saison<select id="publicScheduleSeason" required></select></label>
+          <button class="primary" type="submit">TERMIN VERÖFFENTLICHEN <span>→</span></button>
+        </form>
+      </section>
       <section class="public-home-block" aria-labelledby="publicLiveTitle">
         <div class="public-home-heading"><div><span>LIVE</span><h2 id="publicLiveTitle">Laufende Spiele</h2></div><button class="secondary" type="button" data-public-nav="turnier">Spielplan öffnen</button></div>
         <div id="publicLiveGames" class="public-event-grid"></div>
