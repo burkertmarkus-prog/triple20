@@ -32,6 +32,7 @@
         <div><span class="eyebrow">ADMINISTRATION</span><h2 id="publicScheduleTitle">Zukünftiges Spiel eintragen</h2><p>Der Termin erscheint sofort im öffentlichen Zuschauerbereich.</p></div>
         <form id="publicScheduleForm">
           <label>Datum<input id="publicScheduleDate" type="date" required></label>
+          <label>Startzeit<input id="publicScheduleTime" type="time" value="19:00" required></label>
           <label>Bezeichnung<input id="publicScheduleName" maxlength="60" placeholder="z. B. Dienstagsturnier" required></label>
           <label>Bewerb<select id="publicScheduleCompetition"><option value="men">Herren</option><option value="women">Damen</option><option value="open">Offen</option></select></label>
           <label>Saison<select id="publicScheduleSeason" required></select></label>
@@ -177,6 +178,6 @@
   </main>
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260804-2"></script>
+  <script src="app.js?v=20260804-3"></script>
 </body>
 </html>

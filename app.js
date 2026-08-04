@@ -946,6 +946,7 @@ function exportSeasonJson(){const season=selectedSeason();if(!season)return;down
 function exportStandingsCsv(){const season=selectedSeason();if(!season)return;const rows=calculateSeasonStandings(season),head=['Platz','Spieler','Gesamtpunkte','Bereinigte Punkte','Turniere','Siege','Niederlagen','180er','Höchstes Checkout'];const csv=[head.join(';'),...rows.map((r,i)=>[i+1,r.name,r.totalPoints,r.cleanPoints,r.played,r.wins,r.losses,r.max180,r.checkout].map(v=>`"${String(v).replaceAll('"','""')}"`).join(';'))].join('\n');downloadFile(`${season.name.replaceAll(' ','_')}_rangliste.csv`,'text/csv;charset=utf-8',csv)}
 
 function publicDate(value){if(!value)return'Datum offen';const date=new Date(`${value}T12:00:00`);return Number.isNaN(date.getTime())?esc(value):date.toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'})}
+function publicStartTime(record={}){const value=record.startTime||record.settings?.startTime||record.settings?.start||'';return /^\d{2}:\d{2}$/.test(value)?`${value} Uhr`:''}
 function publicTournamentKey(record={}){
   const baseName=(record.eventName||record.name||'').trim().replace(/\s+[–-]\s+(Herren|Damen)$/i,'').replace(/\s+/g,' ').toLowerCase();
   const competition=record.competition||(/damen/i.test(record.competitionLabel||record.name||'')?'women':/herren/i.test(record.competitionLabel||record.name||'')?'men':'open');
@@ -962,14 +963,15 @@ function publicEventRow(tournament,status){
   const participantText=(tournament.participantCount||tournament.players?.length)?`${tournament.participantCount||tournament.players.length} Teilnehmende`:'';
   const meta=[tournament.seasonName,tournament.competitionLabel,participantText,matches.length?`${matches.length} Spiele`:''].filter(Boolean).join(' · ');
   const remove=isAdmin()?`<button class="danger public-delete-event" type="button" data-public-delete="${esc(tournament._publicKey||tournament.id||'')}">Löschen</button>`:'';
-  return `<article class="public-event-row"><time datetime="${esc(tournament.date||'')}">${publicDate(tournament.date)}</time><div><h3>${esc(tournament.name||tournament.eventName||'Spieltag')}</h3><p>${esc(meta||'Weitere Angaben folgen')}</p></div><div class="public-event-result"><strong>${status==='future'?'Geplant':winner?`Sieger: ${esc(winner)}`:'Beendet'}</strong>${remove}</div></article>`;
+  const startTime=publicStartTime(tournament),rawTime=tournament.startTime||tournament.settings?.startTime||tournament.settings?.start||'',dateTime=[tournament.date,rawTime].filter(Boolean).join('T');
+  return `<article class="public-event-row"><time datetime="${esc(dateTime)}"><span>${publicDate(tournament.date)}</span>${startTime?`<b>${esc(startTime)}</b>`:''}</time><div><h3>${esc(tournament.name||tournament.eventName||'Spieltag')}</h3><p>${esc(meta||'Weitere Angaben folgen')}</p></div><div class="public-event-result"><strong>${status==='future'?'Geplant':winner?`Sieger: ${esc(winner)}`:'Beendet'}</strong>${remove}</div></article>`;
 }
 function createPublicSchedule(){
   if(!isAdmin())return;
-  const season=seasonStore.seasons.find(item=>item.id===$('#publicScheduleSeason')?.value),date=$('#publicScheduleDate')?.value,name=$('#publicScheduleName')?.value.trim(),competition=$('#publicScheduleCompetition')?.value||'open';
-  if(!season||!date||!name){alert('Bitte Datum, Bezeichnung und Saison vollständig auswählen.');return}
+  const season=seasonStore.seasons.find(item=>item.id===$('#publicScheduleSeason')?.value),date=$('#publicScheduleDate')?.value,startTime=$('#publicScheduleTime')?.value,name=$('#publicScheduleName')?.value.trim(),competition=$('#publicScheduleCompetition')?.value||'open';
+  if(!season||!date||!startTime||!name){alert('Bitte Datum, Startzeit, Bezeichnung und Saison vollständig auswählen.');return}
   if(date<todayIso()&&!confirm('Das gewählte Datum liegt in der Vergangenheit. Termin trotzdem eintragen?'))return;
-  const label=competition==='women'?'Damen':competition==='men'?'Herren':'Offen',record={id:`scheduled-${Date.now()}`,name,date,competition,competitionLabel:label,planned:true,players:[],participantCount:0,matches:[],results:[],createdAt:new Date().toISOString()};
+  const label=competition==='women'?'Damen':competition==='men'?'Herren':'Offen',record={id:`scheduled-${Date.now()}`,name,date,startTime,competition,competitionLabel:label,planned:true,players:[],participantCount:0,matches:[],results:[],createdAt:new Date().toISOString()};
   season.tournaments=season.tournaments||[];season.tournaments.push(record);season.tournaments.sort((a,b)=>(a.date||'').localeCompare(b.date||''));saveSeason(season);renderPublicHome();$('#publicScheduleName').value='';alert('Der zukünftige Spieltermin wurde veröffentlicht.');
 }
 function deletePublicTournament(key){
