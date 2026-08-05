@@ -481,6 +481,7 @@ window.T20Cloud={
     finally{this.loginBusy=false;if(!failed)renderCloudPanel();if(!this.isAdmin&&$('#syncStatusText')?.textContent==='Wird angemeldet …')setSyncStatus('Nur Ansicht','view-only')}
   },
   async signOut(){
+    if(this.isAdmin&&this.client){clearTimeout(this.syncTimer);await this.syncAll({force:true});if(this.pendingSync){alert('Abmeldung abgebrochen: Die letzten Änderungen konnten noch nicht in der Cloud gespeichert werden. Bitte prüfe die Internetverbindung und versuche es erneut.');return}}
     try{await this.stopPresence();if(this.client)await this.client.auth.signOut()}catch(e){console.warn('Abmeldung fehlgeschlagen',e)}
     localStorage.removeItem('triple20_admin_uid');
     this.session=null;this.user=null;this.isAdmin=false;this.profile=null;this.avatarSignedUrl='';this.authMessage='';this.authError='';
@@ -506,9 +507,10 @@ window.T20Cloud={
     }catch(e){console.warn('Cloud laden fehlgeschlagen',e);this.online=false;setSyncStatus('Offline – lokale Kopie','offline')}
     finally{this.loadBusy=false}
   },
-  queueSync(key){if(!this.isAdmin||!this.client)return;clearTimeout(this.syncTimer);this.syncTimer=setTimeout(()=>this.syncAll(),700)},
+  queueSync(key){if(!this.isAdmin||!this.client)return;this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');setSyncStatus('Änderungen werden gespeichert …','saving');clearTimeout(this.syncTimer);this.syncTimer=setTimeout(()=>this.syncAll(),700)},
   async syncAll({force=false}={}){
     if(!this.isAdmin||!this.client)return;
+    clearTimeout(this.syncTimer);
     this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');
     setSyncStatus('Wird gespeichert …','saving');
     try{
@@ -996,21 +998,21 @@ function publicEventRow(tournament,status){
   const startTime=publicStartTime(tournament),rawTime=tournament.startTime||tournament.settings?.startTime||tournament.settings?.start||'',dateTime=[tournament.date,rawTime].filter(Boolean).join('T');
   return `<article class="public-event-row"><time datetime="${esc(dateTime)}"><span>${publicDate(tournament.date)}</span>${startTime?`<b>${esc(startTime)}</b>`:''}</time><div><h3>${esc(tournament.name||tournament.eventName||'Spieltag')}</h3><p>${esc(meta||'Weitere Angaben folgen')}</p></div><div class="public-event-result"><strong>${status==='future'?'Geplant':winner?`Sieger: ${esc(winner)}`:'Beendet'}</strong>${remove}</div></article>`;
 }
-function createPublicSchedule(){
+async function createPublicSchedule(){
   if(!isAdmin())return;
   const season=seasonStore.seasons.find(item=>item.id===$('#publicScheduleSeason')?.value),date=$('#publicScheduleDate')?.value,startTime=$('#publicScheduleTime')?.value,name=$('#publicScheduleName')?.value.trim(),competition=$('#publicScheduleCompetition')?.value||'open';
   if(!season||!date||!startTime||!name){alert('Bitte Datum, Startzeit, Bezeichnung und Saison vollständig auswählen.');return}
   if(date<todayIso()&&!confirm('Das gewählte Datum liegt in der Vergangenheit. Termin trotzdem eintragen?'))return;
   const label=competition==='women'?'Damen':competition==='men'?'Herren':'Offen',record={id:`scheduled-${Date.now()}`,name,date,startTime,competition,competitionLabel:label,planned:true,players:[],participantCount:0,matches:[],results:[],createdAt:new Date().toISOString()};
-  season.tournaments=season.tournaments||[];season.tournaments.push(record);season.tournaments.sort((a,b)=>(a.date||'').localeCompare(b.date||''));saveSeason(season);renderPublicHome();$('#publicScheduleName').value='';alert('Der zukünftige Spieltermin wurde veröffentlicht.');
+  season.tournaments=season.tournaments||[];season.tournaments.push(record);season.tournaments.sort((a,b)=>(a.date||'').localeCompare(b.date||''));saveSeason(season);renderPublicHome();await T20Cloud.syncAll({force:true});if(T20Cloud.pendingSync){alert('Der Termin ist lokal gespeichert, konnte aber noch nicht veröffentlicht werden. Bitte prüfe die Internetverbindung und melde dich noch nicht ab.');return}$('#publicScheduleName').value='';alert('Der zukünftige Spieltermin wurde veröffentlicht und online gespeichert.');
 }
-function deletePublicTournament(key){
+async function deletePublicTournament(key){
   if(!isAdmin()||!key)return;
   const record=publicTournamentRecords().find(item=>item._publicKey===key);if(!record)return;
   if(!confirm(`„${record.name||record.eventName||'Spieltag'}“ vom ${publicDate(record.date)} wirklich löschen? Der Eintrag wird auch aus Saison und Turnierhistorie entfernt.`))return;
   const same=item=>publicTournamentKey(item)===key;
   for(const season of seasonStore.seasons||[])season.tournaments=(season.tournaments||[]).filter(item=>!same(item));
-  persistSeasons();localStorage.setItem(TOURNAMENT_HISTORY_KEY,JSON.stringify(loadTournamentHistory().filter(item=>!same(item))));renderSeasonView();renderPublicHome();
+  persistSeasons();localStorage.setItem(TOURNAMENT_HISTORY_KEY,JSON.stringify(loadTournamentHistory().filter(item=>!same(item))));renderSeasonView();renderPublicHome();await T20Cloud.syncAll({force:true});if(T20Cloud.pendingSync)alert('Der Eintrag wurde lokal gelöscht, konnte aber noch nicht mit der Cloud synchronisiert werden. Bitte noch nicht abmelden.');
 }
 function liveCompetitionCards(){
   ensureTournamentDayState();
