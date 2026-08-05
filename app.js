@@ -1030,7 +1030,9 @@ function publicTournamentKey(record={}){
   return `${record.date||''}|${baseName}|${competition}`;
 }
 function publicTournamentRecords(){
-  const records=[...(seasonStore.seasons||[]).flatMap(season=>(season.tournaments||[]).map(tournament=>({...tournament,seasonName:season.name}))),...loadTournamentHistory()];
+  // Die Saisonfassung ist die offizielle Liste und überschreibt eine eventuell
+  // ältere lokale Turnierhistorie desselben Spieltags.
+  const records=[...loadTournamentHistory(),...(seasonStore.seasons||[]).flatMap(season=>(season.tournaments||[]).map(tournament=>({...tournament,seasonName:season.name})))];
   const unique=new Map();
   records.forEach(record=>{const key=publicTournamentKey(record),old=unique.get(key);unique.set(key,{...(old||{}),...record,seasonName:record.seasonName||old?.seasonName||''})});
   return [...unique.entries()].map(([key,value])=>({...value,_publicKey:key})).sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.name||'').localeCompare(b.name||'','de'));
@@ -1053,7 +1055,7 @@ function sharePublicEventOnWhatsApp(key){
   window.open(`https://wa.me/?text=${encodeURIComponent(message)}`,'_blank','noopener,noreferrer');
 }
 function resultGraphicPlayers(tournament={}){
-  const ranked=[...(tournament.results||[])].filter(item=>item?.name).sort((a,b)=>(a.rank||999)-(b.rank||999));if(ranked.length)return ranked.slice(0,3);
+  const ranked=[...(tournament.results||[])].filter(item=>item?.name).sort((a,b)=>(b.points||0)-(a.points||0)||(b.wins||0)-(a.wins||0)||(a.losses||0)-(b.losses||0)||((b.legsFor||0)-(b.legsAgainst||0))-((a.legsFor||0)-(a.legsAgainst||0))||(a.rank||999)-(b.rank||999)||String(a.name).localeCompare(String(b.name),'de'));if(ranked.length)return ranked.slice(0,3);
   const names=[tournament.winner,...(tournament.top3||[])].filter(Boolean);return [...new Set(names)].slice(0,3).map((name,index)=>({name,rank:index+1}));
 }
 function drawResultGraphic(tournament={}){
