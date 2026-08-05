@@ -223,7 +223,8 @@ function renderAdminMembers(){
     const adminProfile=profile.id===c.user?.id,name=profile.display_name||(adminProfile?'Turnierleitung':'Name noch nicht eingetragen'),nickname=profile.nickname||(adminProfile?'Administrator':'Spitzname fehlt'),initial=esc((profile.nickname||profile.display_name||(adminProfile?'A':'?')).trim().charAt(0).toUpperCase()||'?'),photo=c.adminProfileAvatars?.[profile.id],avatar=photo?`<img src="${esc(photo)}" alt="">`:initial;
     const joined=profile.created_at?new Date(profile.created_at).toLocaleDateString('de-AT'):'–';
     const online=c.onlineUserIds?.has(profile.id);
-    return `<article class="admin-member-card ${adminProfile?'admin-account':''}"><span class="profile-avatar">${avatar}</span><div><strong>${esc(nickname)} <i class="online-dot ${online?'is-online':''}" title="${online?'Online':'Offline'}"></i></strong><span>${esc(name)}</span><small>${adminProfile?'Administratorkonto · ':''}${online?'Jetzt online · ':''}Registriert seit ${esc(joined)}</small></div></article>`;
+    const lastSeen=online?'Jetzt online':profile.last_seen_at?`Zuletzt online: ${new Intl.DateTimeFormat('de-AT',{dateStyle:'medium',timeStyle:'short'}).format(new Date(profile.last_seen_at))}`:'Zuletzt online: noch nicht erfasst';
+    return `<article class="admin-member-card ${adminProfile?'admin-account':''}"><span class="profile-avatar">${avatar}</span><div><strong>${esc(nickname)} <i class="online-dot ${online?'is-online':''}" title="${online?'Online':'Offline'}"></i></strong><span>${esc(name)}</span><small>${adminProfile?'Administratorkonto · ':''}Registriert seit ${esc(joined)}</small><small>${esc(lastSeen)}</small></div></article>`;
   }).join('');
   return `<section class="admin-members"><div class="admin-section-heading"><div><h3>Registrierte Mitglieder</h3><p class="view-note">${profiles.length} Profil${profiles.length===1?'':'e'} vorhanden</p></div><button id="refreshMembersBtn" class="secondary" type="button" ${c.adminProfilesBusy?'disabled':''}>${c.adminProfilesBusy?'Wird geladen …':'Aktualisieren'}</button></div><div class="admin-member-grid">${cards||'<p class="view-note">Noch keine Mitgliederprofile vorhanden.</p>'}</div></section>`;
 }
@@ -321,7 +322,7 @@ function cleanAuthRedirectUrl(){
 window.T20Cloud={
   authResolved:false,
   liveTournamentState:null,tournamentViewMode:'local',
-  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,sessionProcessingPromise:null,authRedirectSessionPromise:null,authRedirectSessionResolve:null,loginBusy:false,magicLinkBusy:false,profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),authMessage:'',authError:'',loadBusy:false,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
+  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,sessionProcessingPromise:null,authRedirectSessionPromise:null,authRedirectSessionResolve:null,loginBusy:false,magicLinkBusy:false,profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),lastSeenTimer:null,lastSeenVisibilityBound:false,authMessage:'',authError:'',loadBusy:false,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
   async finishAuthRedirect(){cleanAuthRedirectUrl();this.authHandoffActive=false;this.authMessage='Anmeldung erfolgreich. Du kannst diesen Tab weiterverwenden.';showLogin();renderCloudPanel()},
   async init(){
     if(this.initPromise)return this.initPromise;
@@ -400,7 +401,7 @@ window.T20Cloud={
       if(this.isAdmin&&localStorage.getItem('triple20_identity_pending')==='1'){this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');localStorage.removeItem('triple20_identity_pending')}
       if(this.user&&this.isAdmin)try{await this.loadAdminProfiles()}catch(error){console.warn('Mitgliederprofile konnten nach der Anmeldung nicht geladen werden:',error)}
       if(this.user&&!this.isAdmin)try{this.profile=await this.loadProfile()}catch(error){console.warn('Profil konnte nach der Anmeldung nicht geladen werden:',error);this.profile={id:this.user.id,display_name:'',nickname:'',avatar_url:null};this.authError='Du bist angemeldet, aber dein Profil konnte noch nicht geladen werden. Bitte aktualisiere die Seite.'}
-      if(this.user)this.startPresence();
+      if(this.user){this.startPresence();this.startLastSeenTracking()}
       renderReadonlyMode();renderCloudPanel();
       if(!$('#setupSection')?.classList.contains('hidden')||!$('#tournamentSection')?.classList.contains('hidden'))showTournament();
       if(this.user&&!this.isAdmin){this.authMessage='';setSyncStatus('Angemeldet – Mitglied','view-only');renderCloudPanel();return}
@@ -416,7 +417,17 @@ window.T20Cloud={
     channel.on('presence',{event:'sync'},()=>{this.onlineUserIds=new Set(Object.keys(channel.presenceState()));if(this.isAdmin)renderCloudPanel()});
     channel.subscribe(async status=>{if(status==='SUBSCRIBED')await channel.track({user_id:this.user.id,nickname:this.profile?.nickname||this.user.email||'',online_at:new Date().toISOString()})});
   },
-  async stopPresence(){if(this.presenceChannel&&this.client)await this.client.removeChannel(this.presenceChannel);this.presenceChannel=null;this.onlineUserIds=new Set()},
+  async stopPresence(){clearInterval(this.lastSeenTimer);this.lastSeenTimer=null;if(this.presenceChannel&&this.client)await this.client.removeChannel(this.presenceChannel);this.presenceChannel=null;this.onlineUserIds=new Set()},
+  async touchLastSeen(){
+    if(!this.client||!this.user||document.visibilityState==='hidden')return;
+    const {error}=await this.client.rpc('triple20_touch_last_seen_v1');
+    if(error)console.warn('„Zuletzt online“ konnte nicht aktualisiert werden:',error);
+  },
+  startLastSeenTracking(){
+    clearInterval(this.lastSeenTimer);this.touchLastSeen();
+    this.lastSeenTimer=setInterval(()=>this.touchLastSeen(),5*60*1000);
+    if(!this.lastSeenVisibilityBound){document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&this.user)this.touchLastSeen()});this.lastSeenVisibilityBound=true}
+  },
   async checkAdmin(uid){try{const client=requireSupabaseClient();const {data,error}=await withTimeout(client.from('triple20_admins').select('user_id').eq('user_id',uid).maybeSingle(),10000,'Adminprüfung dauert zu lange.');if(error)throw error;const ok=data?.user_id===uid;if(ok)localStorage.setItem('triple20_admin_uid',uid);return ok}catch(e){console.warn('Adminprüfung fehlgeschlagen',e);return localStorage.getItem('triple20_admin_uid')===uid}},
   async loadPublicMembers(){
     if(!this.client)return[];
@@ -429,7 +440,7 @@ window.T20Cloud={
   },
   async loadAdminProfiles(){
     if(!this.isAdmin||!this.user)return[];
-    const client=requireSupabaseClient(),{data,error}=await client.from('triple20_profiles').select('id,display_name,nickname,avatar_url,created_at').order('nickname',{ascending:true,nullsFirst:false});
+    const client=requireSupabaseClient(),{data,error}=await client.from('triple20_profiles').select('id,display_name,nickname,avatar_url,created_at,last_seen_at').order('nickname',{ascending:true,nullsFirst:false});
     if(error)throw error;
     this.adminProfiles=data||[];this.adminProfileAvatars={};
     await Promise.all(this.adminProfiles.filter(profile=>profile.avatar_url).map(async profile=>{

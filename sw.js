@@ -1,5 +1,5 @@
-const CACHE_VERSION='triple20-shell-20260805-2';
-const DATA_CACHE='triple20-data-20260805-2';
+const CACHE_VERSION='triple20-shell-20260805-3';
+const DATA_CACHE='triple20-data-20260805-3';
 const APP_SHELL=[
   './','./index.html','./styles.css','./app.js','./pwa.js','./manifest.webmanifest','./shop-products.json',
   './icons/triple20-icon-192.png','./icons/triple20-icon-512.png','./icons/apple-touch-icon.png','./icons/triple20-icon.svg',
