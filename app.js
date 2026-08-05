@@ -13,7 +13,9 @@ let shopConfig=SHOP_FALLBACK,shopCategory='all',shopLoaded=false,shopProductTarg
 const SUPABASE_URL='https://hidjvylnxmtlvtiomktu.supabase.co';
 const TRIPLE20_PUBLIC_URL='https://burkertmarkus-prog.github.io/triple20/';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_IzH5CLw7baFsaU005Bqh7w_lRMlrMLo';
-const CLOUD_DATA_KEYS=['dartTournament','tripleTwentySeasons','tripleTwentySelectedSeason','triple20_settings','triple20_tournaments'];
+// Die geöffnete Saison ist eine persönliche Browser-Auswahl und darf nicht
+// durch den regelmäßigen Cloud-Abgleich anderer Geräte überschrieben werden.
+const CLOUD_DATA_KEYS=['dartTournament','tripleTwentySeasons','triple20_settings','triple20_tournaments'];
 let supabaseClient=null;
 let T20_SUPPRESS_SYNC=false;
 const nativeSetItem=localStorage.setItem.bind(localStorage),nativeRemoveItem=localStorage.removeItem.bind(localStorage);
