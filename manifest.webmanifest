@@ -1,7 +1,7 @@
 {
   "name": "Triple20",
   "short_name": "Triple20",
-  "description": "Dartturniere, Schweizer System und Saisonwertung",
+  "description": "Aktuelle Dartturniere, Live-Spiele, Ergebnisse und Saisonwertungen des DCA Achensee",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
