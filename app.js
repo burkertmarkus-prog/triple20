@@ -12,6 +12,9 @@ const SHOP_CATEGORIES=[['all','Alle'],['darts','Darts'],['autodarts','Autodarts'
 const SHOP_FALLBACK={products:[]};
 let shopConfig=SHOP_FALLBACK,shopCategory='all',shopLoaded=false,shopProductTarget='',shopAdminEditId='',shopAdminImage='',applyingRoute=false;
 let resultGraphicBlob=null,resultGraphicFilename='Triple20_Ergebnis.png';
+let tournamentRegistrationCounts={},tournamentRegistrations=[],registrationsLoading=false;
+let recommendationClickStats={},recommendationClicksLoading=false;
+const PENDING_RECOMMENDATION_CLICKS_KEY='triple20_pending_recommendation_clicks';
 const SUPABASE_URL='https://hidjvylnxmtlvtiomktu.supabase.co';
 const TRIPLE20_PUBLIC_URL='https://burkertmarkus-prog.github.io/triple20/';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_IzH5CLw7baFsaU005Bqh7w_lRMlrMLo';
@@ -1073,13 +1076,38 @@ async function openResultGraphic(key){
 function closeResultGraphic(){const image=$('#resultGraphicOverlay img');if(image?.src?.startsWith('blob:'))URL.revokeObjectURL(image.src);$('#resultGraphicOverlay')?.remove()}
 function downloadResultGraphic(){if(resultGraphicBlob)downloadFile(resultGraphicFilename,'image/png',resultGraphicBlob)}
 async function shareResultGraphic(){const file=resultGraphicBlob&&new File([resultGraphicBlob],resultGraphicFilename,{type:'image/png'});if(!file)return;if(navigator.share&&navigator.canShare?.({files:[file]})){try{await navigator.share({title:'Triple20 Ergebnis',text:'Aktuelles Ergebnis aus der Triple20-App',files:[file]});return}catch(error){if(error?.name==='AbortError')return}}downloadResultGraphic();alert('Die direkte Teilen-Funktion ist in diesem Browser nicht verfügbar. Die Grafik wurde deshalb als PNG gespeichert.')}
+function registrationEventKey(tournament={}){return String(tournament.id||tournament._publicKey||'').slice(0,160)}
+function registrationHtml(tournament={}){
+  const eventKey=registrationEventKey(tournament),count=tournamentRegistrationCounts[eventKey]||0,own=tournamentRegistrations.find(item=>item.event_key===eventKey&&item.user_id===T20Cloud.user?.id),adminRows=isAdmin()?tournamentRegistrations.filter(item=>item.event_key===eventKey):[];
+  const names=adminRows.length?`<details class="registration-names"><summary>${count} Anmeldung${count===1?'':'en'} anzeigen</summary><span>${adminRows.map(item=>esc(item.nickname||'Mitglied')).join(', ')}</span></details>`:`<small>${count} angemeldet</small>`;
+  if(isAdmin())return `<div class="event-registration admin-registration">${names}</div>`;
+  if(!T20Cloud.user)return `<div class="event-registration"><small>${count} angemeldet</small><button class="secondary" type="button" data-event-login>Zur Teilnahme anmelden</button></div>`;
+  return `<div class="event-registration"><small>${count} angemeldet${own?' · Du bist dabei':''}</small><button class="${own?'danger':'primary'}" type="button" data-event-registration="${esc(eventKey)}" data-registration-action="${own?'cancel':'join'}">${own?'Teilnahme absagen':'Ich bin dabei'}</button></div>`;
+}
+async function loadTournamentRegistrations(){
+  if(registrationsLoading||!T20Cloud.client)return;registrationsLoading=true;
+  try{
+    const [{data:counts,error:countError},{data:rows,error:rowError}]=await Promise.all([T20Cloud.client.rpc('triple20_registration_counts'),T20Cloud.user?T20Cloud.client.from('triple20_tournament_registrations').select('event_key,user_id,nickname,updated_at'):Promise.resolve({data:[]})]);
+    if(countError)throw countError;if(rowError)throw rowError;tournamentRegistrationCounts=Object.fromEntries((counts||[]).map(item=>[item.event_key,+item.registration_count||0]));tournamentRegistrations=rows||[];
+    if(!$('#publicHomeSection')?.classList.contains('hidden'))renderPublicHome({refreshRegistrations:false});
+  }catch(error){console.warn('Teilnahmeanmeldungen konnten nicht geladen werden:',error)}finally{registrationsLoading=false}
+}
+async function changeTournamentRegistration(eventKey,action){
+  if(!T20Cloud.user||isAdmin()){if(!T20Cloud.user)showLogin();return}if(!T20Cloud.client){alert('Die Anmeldung benötigt momentan eine Internetverbindung.');return}
+  const button=document.querySelector(`[data-event-registration="${CSS.escape(eventKey)}"]`);if(button)button.disabled=true;
+  try{
+    if(action==='cancel'){const {error}=await T20Cloud.client.from('triple20_tournament_registrations').delete().eq('event_key',eventKey).eq('user_id',T20Cloud.user.id);if(error)throw error}
+    else{const nickname=T20Cloud.profile?.nickname?.trim()||'Mitglied',{error}=await T20Cloud.client.from('triple20_tournament_registrations').upsert({event_key:eventKey,user_id:T20Cloud.user.id,nickname,updated_at:new Date().toISOString()},{onConflict:'event_key,user_id'});if(error)throw error}
+    while(registrationsLoading)await new Promise(resolve=>setTimeout(resolve,80));await loadTournamentRegistrations();
+  }catch(error){console.error('Teilnahmeanmeldung fehlgeschlagen:',error);alert('Die Teilnahme konnte nicht gespeichert werden. Bitte prüfe die Internetverbindung oder die Supabase-Einrichtung.')}finally{if(button)button.disabled=false}
+}
 function publicEventRow(tournament,status){
   const results=tournament.results||[],matches=tournament.matches||[],winner=tournament.winner||[...results].sort((a,b)=>(a.rank||999)-(b.rank||999))[0]?.name||'';
   const participantText=(tournament.participantCount||tournament.players?.length)?`${tournament.participantCount||tournament.players.length} Teilnehmende`:'';
   const meta=[tournament.seasonName,tournament.competitionLabel,participantText,matches.length?`${matches.length} Spiele`:''].filter(Boolean).join(' · ');
   const key=esc(tournament._publicKey||tournament.id||''),share=status==='future'?`<div class="public-event-share"><button class="secondary" type="button" data-public-calendar="${key}" aria-label="${esc(tournament.name||'Termin')} zum Kalender hinzufügen">Kalender</button><button class="secondary whatsapp-share" type="button" data-public-whatsapp="${key}" aria-label="${esc(tournament.name||'Termin')} über WhatsApp teilen">WhatsApp</button></div>`:`<button class="secondary result-graphic-button" type="button" data-result-graphic="${key}">Ergebnisgrafik</button>`,remove=isAdmin()?`<button class="danger public-delete-event" type="button" data-public-delete="${key}">Löschen</button>`:'';
   const startTime=publicStartTime(tournament),rawTime=tournament.startTime||tournament.settings?.startTime||tournament.settings?.start||'',dateTime=[tournament.date,rawTime].filter(Boolean).join('T');
-  return `<article class="public-event-row"><time datetime="${esc(dateTime)}"><span>${publicDate(tournament.date)}</span>${startTime?`<b>${esc(startTime)}</b>`:''}</time><div><h3>${esc(tournament.name||tournament.eventName||'Spieltag')}</h3><p>${esc(meta||'Weitere Angaben folgen')}</p></div><div class="public-event-result"><strong>${status==='future'?'Geplant':winner?`Sieger: ${esc(winner)}`:'Beendet'}</strong>${share}${remove}</div></article>`;
+  return `<article class="public-event-row"><time datetime="${esc(dateTime)}"><span>${publicDate(tournament.date)}</span>${startTime?`<b>${esc(startTime)}</b>`:''}</time><div><h3>${esc(tournament.name||tournament.eventName||'Spieltag')}</h3><p>${esc(meta||'Weitere Angaben folgen')}</p>${status==='future'?registrationHtml(tournament):''}</div><div class="public-event-result"><strong>${status==='future'?'Geplant':winner?`Sieger: ${esc(winner)}`:'Beendet'}</strong>${share}${remove}</div></article>`;
 }
 async function createPublicSchedule(){
   if(!isAdmin())return;
@@ -1093,6 +1121,7 @@ async function deletePublicTournament(key){
   if(!isAdmin()||!key)return;
   const record=publicTournamentRecords().find(item=>item._publicKey===key);if(!record)return;
   if(!confirm(`„${record.name||record.eventName||'Spieltag'}“ vom ${publicDate(record.date)} wirklich löschen? Der Eintrag wird auch aus Saison und Turnierhistorie entfernt.`))return;
+  const registrationKey=registrationEventKey(record);if(T20Cloud.client&&registrationKey)try{const {error}=await T20Cloud.client.from('triple20_tournament_registrations').delete().eq('event_key',registrationKey);if(error)throw error}catch(error){console.warn('Teilnahmeanmeldungen konnten beim Löschen des Termins nicht entfernt werden:',error)}
   const same=item=>publicTournamentKey(item)===key;
   for(const season of seasonStore.seasons||[])season.tournaments=(season.tournaments||[]).filter(item=>!same(item));
   persistSeasons();localStorage.setItem(TOURNAMENT_HISTORY_KEY,JSON.stringify(loadTournamentHistory().filter(item=>!same(item))));renderSeasonView();renderPublicHome();await T20Cloud.syncAll({force:true});if(T20Cloud.pendingSync)alert('Der Eintrag wurde lokal gelöscht, konnte aber noch nicht mit der Cloud synchronisiert werden. Bitte noch nicht abmelden.');
@@ -1104,7 +1133,7 @@ function liveCompetitionCards(){
     return `<article class="public-live-card"><div><span class="live-dot">LIVE</span><small>${esc(item.label)}</small></div><h3>${esc(state.eventName||tournament.settings?.eventName||tournament.settings?.name||'Vereinsturnier')}</h3><p>${done} von ${total} Spielen beendet · ${tournament.players?.length||0} Teilnehmende</p><div class="public-live-matches">${next.map(match=>`<div><span>${esc(match.a)}</span><b>vs.</b><span>${esc(match.b)}</span></div>`).join('')||'<p>Alle Spiele dieses Bewerbs sind beendet.</p>'}</div><button class="secondary public-live-open" type="button" data-open-live="${item.key}">Vollständigen Spielplan öffnen</button></article>`;
   });
 }
-function renderPublicHome(){
+function renderPublicHome({refreshRegistrations=true}={}){
   const status=$('#publicHomeStatus');if(!status)return;
   const records=publicTournamentRecords(),today=todayIso(),upcoming=records.filter(item=>item.planned||(item.date&&item.date>today)),past=records.filter(item=>!item.planned&&(!item.date||item.date<=today)).sort((a,b)=>(b.date||'').localeCompare(a.date||'')),live=liveCompetitionCards();
   status.innerHTML=T20Cloud.authResolved?'':'<span class="public-loading">Aktuelle Vereinsdaten werden geladen …</span>';
@@ -1114,6 +1143,7 @@ function renderPublicHome(){
   $('#publicUpcomingGames').innerHTML=upcoming.map(item=>publicEventRow(item,'future')).join('')||'<div class="public-empty"><p>Derzeit sind keine zukünftigen Spieltage eingetragen.</p></div>';
   $('#publicPastGames').innerHTML=past.map(item=>publicEventRow(item,'past')).join('')||'<div class="public-empty"><p>Noch keine vergangenen Spiele vorhanden.</p></div>';
   $('#publicSeasonRankings').innerHTML=(seasonStore.seasons||[]).map(season=>{const rows=calculateSeasonStandings(season);return `<article class="public-ranking-card"><div><span>${season.archived?'ARCHIV':'SAISON'}</span><h3>${esc(season.name)}</h3><small>${publicDate(season.startDate)} – ${publicDate(season.endDate)}</small></div>${rows.length?`<ol>${rows.slice(0,5).map(row=>`<li><span>${esc(row.name)}</span><b>${row.cleanPoints} Pkt.</b></li>`).join('')}</ol>`:'<p>Noch keine Wertung vorhanden.</p>'}<button class="link-btn" type="button" data-season-open="${esc(season.id)}">Vollständige Rangliste öffnen</button></article>`}).join('')||'<div class="public-empty"><p>Noch keine Saisonranglisten vorhanden.</p></div>';
+  if(refreshRegistrations)loadTournamentRegistrations();
 }
 
 function updateAppUrl(area,extras={},replace=false){
@@ -1188,6 +1218,18 @@ function showSettings(updateUrl=true){if(!isAdmin()){showLogin(updateUrl);return
 function validPartnerUrl(value){try{const url=new URL(value);return url.protocol==='https:'&&/(^|\.)amazon\.de$/i.test(url.hostname)}catch{return false}}
 function validProductImage(value){return typeof value==='string'&&(/^product-images\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)$/i.test(value)||/^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(value))}
 function shopIcon(icon='target'){return({target:'🎯',camera:'📷',club:'👥',starter:'✨',case:'💼',light:'💡',board:'◉',tools:'🔧'})[icon]||'🎯'}
+async function flushRecommendationClicks(){
+  const pending=safeJsonParse(localStorage.getItem(PENDING_RECOMMENDATION_CLICKS_KEY)||'[]',[]);if(!pending.length||!T20Cloud.client||!navigator.onLine)return;
+  try{const {error}=await T20Cloud.client.from('triple20_recommendation_clicks').insert(pending.map(productId=>({product_id:productId})));if(error)throw error;localStorage.removeItem(PENDING_RECOMMENDATION_CLICKS_KEY)}catch(error){console.warn('Empfehlungsklicks konnten noch nicht übertragen werden:',error)}
+}
+function trackRecommendationClick(productId){
+  if(!/^[a-z0-9-]{1,80}$/.test(productId||''))return;const pending=safeJsonParse(localStorage.getItem(PENDING_RECOMMENDATION_CLICKS_KEY)||'[]',[]);pending.push(productId);localStorage.setItem(PENDING_RECOMMENDATION_CLICKS_KEY,JSON.stringify(pending.slice(-100)));flushRecommendationClicks();
+}
+async function loadRecommendationClickStats(){
+  if(!isAdmin()||recommendationClicksLoading||!T20Cloud.client)return;recommendationClicksLoading=true;
+  try{await flushRecommendationClicks();const {data,error}=await T20Cloud.client.from('triple20_recommendation_clicks').select('product_id');if(error)throw error;recommendationClickStats={};for(const row of data||[])recommendationClickStats[row.product_id]=(recommendationClickStats[row.product_id]||0)+1;renderShopAdmin()}
+  catch(error){console.warn('Klickstatistik konnte nicht geladen werden:',error)}finally{recommendationClicksLoading=false}
+}
 async function loadShopConfig(){
   if(shopLoaded)return shopConfig;
   const legacy=safeJsonParse(localStorage.getItem(SHOP_DATA_KEY)||'null'),managed=Array.isArray(appSettings.recommendations?.products)?appSettings.recommendations:legacy;
@@ -1204,7 +1246,7 @@ function renderShop(){
   if(!products.length){grid.innerHTML='';status.innerHTML=`<div class="shop-empty"><span>🎯</span><h2>Noch keine Empfehlungen</h2><p>${isAdmin()?'Lege oben eine neue Empfehlung an.':'Weitere Empfehlungen folgen.'}</p></div>`;return}
   status.innerHTML='';grid.innerHTML=products.map(product=>{
     const hasLink=validPartnerUrl(product.url),tags=(product.tags||[]).slice(0,3).map(tag=>`<span>${esc(tag)}</span>`).join('');
-    const action=hasLink?`<a class="shop-link" href="${esc(product.url)}" target="_blank" rel="sponsored noopener noreferrer" aria-label="${esc(product.title)} bei Amazon ansehen (Werbung)">Bei Amazon ansehen <span>↗</span></a>`:'<span class="shop-link disabled" aria-disabled="true">Link folgt</span>';
+    const action=hasLink?`<a class="shop-link" href="${esc(product.url)}" target="_blank" rel="sponsored noopener noreferrer" data-shop-click="${esc(product.id||'')}" aria-label="${esc(product.title)} bei Amazon ansehen (Werbung)">Bei Amazon ansehen <span>↗</span></a>`:'<span class="shop-link disabled" aria-disabled="true">Link folgt</span>';
     const visual=validProductImage(product.image)?`<img src="${esc(product.image)}" alt="${esc(product.imageAlt||product.title||'Produktbild')}" loading="lazy">`:`<span aria-hidden="true">${shopIcon(product.icon)}</span>`;
     const productId=/^[a-z0-9-]+$/.test(product.id||'')?product.id:'';
     return `<article class="shop-product ${productId&&productId===shopProductTarget?'is-targeted':''}"${productId?` id="produkt-${productId}" data-shop-product="${productId}"`:''}><div class="shop-product-heading"><div class="shop-ad-label">WERBUNG · PARTNERLINK</div><p class="shop-product-kicker">${esc(SHOP_CATEGORIES.find(([id])=>id===product.category)?.[1]||'Empfehlung')}</p><h2>${esc(product.title||'Empfehlung')}</h2></div><div class="shop-product-visual">${visual}<small>${validProductImage(product.image)?'Eigenes Produktbild':'Eigene Empfehlung'}</small></div><div class="shop-product-body"><p>${esc(product.description||'')}</p><div class="shop-tags">${tags}</div>${action}</div></article>`
@@ -1213,10 +1255,10 @@ function renderShop(){
 }
 function shopProductId(title=''){const base=title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,48)||'empfehlung';let id=base,n=2;while((shopConfig.products||[]).some(product=>product.id===id&&product.id!==shopAdminEditId))id=`${base}-${n++}`;return id}
 function renderShopAdmin(){
-  const panel=$('#shopAdminPanel'),list=$('#shopAdminList');if(!panel||!list)return;
+  const panel=$('#shopAdminPanel'),list=$('#shopAdminList'),stats=$('#shopAdminClickStats');if(!panel||!list)return;
   panel.classList.toggle('hidden',!isAdmin());if(!isAdmin())return;
-  const products=shopConfig.products||[];
-  list.innerHTML=products.map((product,index)=>`<article class="shop-admin-item ${product.enabled===false?'is-disabled':''}"><span class="shop-admin-thumb">${validProductImage(product.image)?`<img src="${esc(product.image)}" alt="">`:`<i>${shopIcon(product.icon)}</i>`}</span><div><b>${esc(product.title||'Unbenannte Empfehlung')}</b><small>${esc(SHOP_CATEGORIES.find(([id])=>id===product.category)?.[1]||'Empfehlung')} · ${product.enabled===false?'Ausgeblendet':'Öffentlich'}</small></div><div class="shop-admin-item-actions"><button class="secondary" type="button" data-shop-move="up" data-shop-id="${esc(product.id)}" ${index===0?'disabled':''} aria-label="Nach oben">↑</button><button class="secondary" type="button" data-shop-move="down" data-shop-id="${esc(product.id)}" ${index===products.length-1?'disabled':''} aria-label="Nach unten">↓</button><button class="secondary" type="button" data-shop-edit="${esc(product.id)}">Bearbeiten</button><button class="danger" type="button" data-shop-delete="${esc(product.id)}">Löschen</button></div></article>`).join('')||'<p class="view-note">Noch keine Empfehlungen vorhanden.</p>';
+  const products=shopConfig.products||[],total=Object.values(recommendationClickStats).reduce((sum,value)=>sum+value,0);if(stats)stats.innerHTML=`<article><span>Partnerlink-Klicks insgesamt</span><b>${total}</b><small>Keine personenbezogenen Daten</small></article>`;
+  list.innerHTML=products.map((product,index)=>`<article class="shop-admin-item ${product.enabled===false?'is-disabled':''}"><span class="shop-admin-thumb">${validProductImage(product.image)?`<img src="${esc(product.image)}" alt="">`:`<i>${shopIcon(product.icon)}</i>`}</span><div><b>${esc(product.title||'Unbenannte Empfehlung')}</b><small>${esc(SHOP_CATEGORIES.find(([id])=>id===product.category)?.[1]||'Empfehlung')} · ${product.enabled===false?'Ausgeblendet':'Öffentlich'} · ${recommendationClickStats[product.id]||0} Klicks</small></div><div class="shop-admin-item-actions"><button class="secondary" type="button" data-shop-move="up" data-shop-id="${esc(product.id)}" ${index===0?'disabled':''} aria-label="Nach oben">↑</button><button class="secondary" type="button" data-shop-move="down" data-shop-id="${esc(product.id)}" ${index===products.length-1?'disabled':''} aria-label="Nach unten">↓</button><button class="secondary" type="button" data-shop-edit="${esc(product.id)}">Bearbeiten</button><button class="danger" type="button" data-shop-delete="${esc(product.id)}">Löschen</button></div></article>`).join('')||'<p class="view-note">Noch keine Empfehlungen vorhanden.</p>';
 }
 function resetShopAdminForm(){shopAdminEditId='';shopAdminImage='';$('#shopAdminForm')?.reset();if($('#shopAdminProductId'))$('#shopAdminProductId').value='';if($('#shopAdminEnabled'))$('#shopAdminEnabled').checked=true;$('#shopAdminImagePreview').innerHTML='<span>🎯</span>';$('#shopAdminForm')?.classList.add('hidden')}
 function openShopAdminForm(id=''){
@@ -1242,6 +1284,7 @@ async function showShop({productId='',category='',updateUrl=true}={}){
   hideMainSections();$('#shopSection')?.classList.remove('hidden');renderNavigation();await loadShopConfig();
   const target=(shopConfig.products||[]).find(product=>product.enabled!==false&&product.id===productId);
   shopProductTarget=target?.id||'';shopCategory=target?.category||(SHOP_CATEGORIES.some(([id])=>id===category)?category:'all');renderShop();
+  if(isAdmin())loadRecommendationClickStats();else flushRecommendationClicks();
   if(updateUrl)updateAppUrl('empfehlungen',{produkt:shopProductTarget,kategorie:shopProductTarget?'':shopCategory==='all'?'':shopCategory});
 }
 function renderSettingsForm(){
@@ -1345,7 +1388,7 @@ document.addEventListener('click',e=>{if(e.target.id==='cancelAvatarCropBtn'||e.
 $('#showTournamentBtn').addEventListener('click',()=>showTournament());
 $('#showHomeBtn')?.addEventListener('click',()=>showHome());
 $('#publicHomeSection')?.addEventListener('submit',event=>{if(event.target.id!=='publicScheduleForm')return;event.preventDefault();createPublicSchedule()});
-$('#publicHomeSection')?.addEventListener('click',event=>{const live=event.target.closest('[data-open-live]');if(live){showLive(live.dataset.openLive);return}const calendar=event.target.closest('[data-public-calendar]');if(calendar){addPublicEventToCalendar(calendar.dataset.publicCalendar);return}const whatsapp=event.target.closest('[data-public-whatsapp]');if(whatsapp){sharePublicEventOnWhatsApp(whatsapp.dataset.publicWhatsapp);return}const graphic=event.target.closest('[data-result-graphic]');if(graphic){openResultGraphic(graphic.dataset.resultGraphic);return}const remove=event.target.closest('[data-public-delete]');if(remove){deletePublicTournament(remove.dataset.publicDelete);return}const nav=event.target.closest('[data-public-nav]');if(nav?.dataset.publicNav==='turnier'){showTournament();return}if(nav?.dataset.publicNav==='saison'){showSeason();return}const seasonButton=event.target.closest('[data-season-open]');if(seasonButton){selectedSeasonId=seasonButton.dataset.seasonOpen;persistSeasons();showSeason()}});
+$('#publicHomeSection')?.addEventListener('click',event=>{const live=event.target.closest('[data-open-live]');if(live){showLive(live.dataset.openLive);return}if(event.target.closest('[data-event-login]')){showLogin();return}const registration=event.target.closest('[data-event-registration]');if(registration){changeTournamentRegistration(registration.dataset.eventRegistration,registration.dataset.registrationAction);return}const calendar=event.target.closest('[data-public-calendar]');if(calendar){addPublicEventToCalendar(calendar.dataset.publicCalendar);return}const whatsapp=event.target.closest('[data-public-whatsapp]');if(whatsapp){sharePublicEventOnWhatsApp(whatsapp.dataset.publicWhatsapp);return}const graphic=event.target.closest('[data-result-graphic]');if(graphic){openResultGraphic(graphic.dataset.resultGraphic);return}const remove=event.target.closest('[data-public-delete]');if(remove){deletePublicTournament(remove.dataset.publicDelete);return}const nav=event.target.closest('[data-public-nav]');if(nav?.dataset.publicNav==='turnier'){showTournament();return}if(nav?.dataset.publicNav==='saison'){showSeason();return}const seasonButton=event.target.closest('[data-season-open]');if(seasonButton){selectedSeasonId=seasonButton.dataset.seasonOpen;persistSeasons();showSeason()}});
 document.addEventListener('click',event=>{if(event.target.id==='closeResultGraphicBtn'||event.target.id==='resultGraphicOverlay'){closeResultGraphic();return}if(event.target.id==='downloadResultGraphicBtn'){downloadResultGraphic();return}if(event.target.closest('#shareResultGraphicBtn'))shareResultGraphic()});
 document.addEventListener('click',e=>{const modeButton=e.target.closest('[data-tournament-mode]');if(modeButton){setTournamentViewMode(modeButton.dataset.tournamentMode);return}const competitionButton=e.target.closest('[data-competition]');if(competitionButton){const liveRoute=new URLSearchParams(location.search).get('bereich')==='live';if(liveRoute||!isAdmin())showLive(competitionButton.dataset.competition);else setActiveCompetition(competitionButton.dataset.competition)}});
 $('#showLiveQrBtn')?.addEventListener('click',openLiveQr);
@@ -1354,6 +1397,7 @@ $('#showSeasonBtn').addEventListener('click',()=>showSeason());
 $('#showShopBtn').addEventListener('click',()=>showShop());
 $('#showSettingsBtn').addEventListener('click',()=>showSettings());
 $('#shopCategoryFilters')?.addEventListener('click',e=>{const button=e.target.closest('[data-shop-category]');if(!button)return;shopProductTarget='';shopCategory=button.dataset.shopCategory;renderShop();updateAppUrl('empfehlungen',{kategorie:shopCategory==='all'?'':shopCategory})});
+$('#shopProductGrid')?.addEventListener('click',event=>{const link=event.target.closest('[data-shop-click]');if(link)trackRecommendationClick(link.dataset.shopClick)});
 $('#shopAdminPanel')?.addEventListener('submit',event=>{if(event.target.id!=='shopAdminForm')return;event.preventDefault();saveShopAdminProduct()});
 $('#shopAdminPanel')?.addEventListener('click',event=>{
   const edit=event.target.closest('[data-shop-edit]'),remove=event.target.closest('[data-shop-delete]'),move=event.target.closest('[data-shop-move]');

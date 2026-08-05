@@ -11,13 +11,14 @@
     if(!online){window.setSyncStatus?.('Offline – sicher auf diesem Gerät gespeichert','offline');return}
     if(window.T20Cloud?.isAdmin&&window.T20Cloud.pendingSync){window.setSyncStatus?.('Verbindung wiederhergestellt – synchronisiere …','saving');window.T20Cloud.syncAll().catch(()=>{})}
     else if(window.T20Cloud?.ready)window.T20Cloud.loadCloud().catch(()=>{});
+    window.flushRecommendationClicks?.();window.loadTournamentRegistrations?.();
   }
   async function register(){
     setConnectionState(navigator.onLine);
     if(navigator.storage?.persist)navigator.storage.persist().catch(()=>{});
     if(!('serviceWorker'in navigator)||location.protocol==='file:')return;
     try{
-      const registration=await navigator.serviceWorker.register('./sw.js?v=20260805-1',{scope:'./'});state.registration=registration;
+      const registration=await navigator.serviceWorker.register('./sw.js?v=20260805-2',{scope:'./'});state.registration=registration;
       if(registration.waiting)showUpdate(registration);
       registration.addEventListener('updatefound',()=>{const worker=registration.installing;if(!worker)return;worker.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)showUpdate(registration)})});
       navigator.serviceWorker.addEventListener('controllerchange',()=>{if(state.refreshing)location.reload()});
