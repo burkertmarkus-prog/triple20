@@ -34,7 +34,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260805-2">
+  <link rel="stylesheet" href="styles.css?v=20260805-4">
 </head>
 <body>
   <header class="hero">
@@ -213,10 +213,10 @@
     </section>
 
     <section id="tournamentSection" class="hidden">
-      <div class="tournament-head"><div><p class="eyebrow" id="liveCompetitionLabel">LIVE-TURNIER</p><h2 id="liveTitle"></h2><p id="liveMeta"></p><p id="liveViewerStatus" class="live-viewer-status"></p><div class="live-tournament-actions"><button id="showLiveQrBtn" class="secondary hidden" type="button">QR-Code anzeigen</button><button id="renameEventBtn" class="secondary hidden" type="button">Spieltag umbenennen</button><button id="endTournamentBtn" class="danger hidden" type="button">Turnier beenden</button></div></div><div class="progress-ring"><strong id="progressText">0%</strong><span>gespielt</span></div></div>
+      <div class="tournament-head"><div><p class="eyebrow" id="liveCompetitionLabel">LIVE-TURNIER</p><h2 id="liveTitle"></h2><p id="liveMeta"></p><p id="liveViewerStatus" class="live-viewer-status"></p><div class="live-tournament-actions"><button id="showLiveQrBtn" class="secondary hidden" type="button">QR-Code anzeigen</button><button id="renameEventBtn" class="secondary hidden" type="button">Spieltag umbenennen</button><button id="undoLastScoreBtn" class="secondary hidden" type="button">Letztes Ergebnis rückgängig</button><button id="endTournamentBtn" class="danger hidden" type="button">Turnier beenden</button></div></div><div class="progress-ring"><strong id="progressText">0%</strong><span>gespielt</span></div></div>
       <div id="withdrawCard" class="withdraw-card hidden"></div>
       <div class="tabs"><button class="tab active" data-tab="matches">Spielplan</button><button id="bracketTab" class="tab hidden" data-tab="bracket">Turnierbaum</button><button class="tab" data-tab="table">Tabelle</button></div>
-      <div id="matchesView"><div id="matchList" class="match-list"></div></div>
+      <div id="matchesView"><div id="matchList" class="match-list"></div><section id="scoreHistoryCard" class="score-history-card hidden"></section></div>
       <div id="bracketView" class="hidden"><div id="bracketGrid" class="bracket-board"></div></div>
       <div id="tableView" class="hidden"><div class="table-wrap"><table><thead><tr><th>#</th><th>Spieler</th><th>Sp.</th><th>S</th><th>N</th><th>Legs</th><th>Pkt.</th></tr></thead><tbody id="standingsBody"></tbody></table></div></div>
       <div id="qualificationCard" class="qualification hidden"><p>GRUPPENPHASE BEENDET</p><h2>Finalrunde starten</h2><div id="qualifiedPlayers"></div><div class="final-actions"><button data-finals="knockout">K.-O. STARTEN</button><button data-finals="double">DOPPEL-K.-O. STARTEN</button></div></div>
@@ -226,6 +226,6 @@
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <script src="app.js?v=20260805-6"></script>
+  <script src="app.js?v=20260805-9"></script>
 </body>
 </html>
