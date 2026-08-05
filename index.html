@@ -34,7 +34,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260805-1">
+  <link rel="stylesheet" href="styles.css?v=20260805-2">
 </head>
 <body>
   <header class="hero">
@@ -89,6 +89,30 @@
         <strong>WERBUNG · PARTNERLINKS</strong>
         <p>Einige Empfehlungen enthalten Partnerlinks.</p>
       </aside>
+      <section id="shopAdminPanel" class="shop-admin card slim-card hidden" aria-labelledby="shopAdminTitle">
+        <div class="shop-admin-heading">
+          <div><span class="eyebrow">ADMINISTRATION</span><h2 id="shopAdminTitle">Empfehlungen verwalten</h2><p>Produkte bearbeiten und sofort für alle Besucher veröffentlichen.</p></div>
+          <button id="shopAdminNewBtn" class="primary" type="button">+ NEUE EMPFEHLUNG</button>
+        </div>
+        <form id="shopAdminForm" class="shop-admin-form hidden">
+          <input id="shopAdminProductId" type="hidden">
+          <div class="grid">
+            <label>Produktname<input id="shopAdminTitleInput" maxlength="80" required></label>
+            <label>Kategorie<select id="shopAdminCategory"><option value="darts">Darts</option><option value="autodarts">Autodarts</option></select></label>
+          </div>
+          <label>Eigene Beschreibung<textarea id="shopAdminDescription" rows="4" maxlength="600" required></textarea></label>
+          <label>Merkmale <small>Mit Kommas trennen, maximal drei</small><input id="shopAdminTags" maxlength="120" placeholder="z. B. Steeldart, griffiges Barrel, 24 g"></label>
+          <label>Amazon-Partnerlink<input id="shopAdminUrl" type="url" inputmode="url" placeholder="https://www.amazon.de/…" required></label>
+          <div class="shop-admin-image-row">
+            <label class="secondary shop-image-upload">Eigenes Produktbild auswählen<input id="shopAdminImageInput" type="file" accept="image/*,.heic,.heif"></label>
+            <div id="shopAdminImagePreview" class="shop-admin-image-preview"><span>🎯</span></div>
+            <p>Das Bild wird automatisch quadratisch aufbereitet und verkleinert. Es werden keine Amazon-Bilder übernommen.</p>
+          </div>
+          <label class="shop-enabled"><input id="shopAdminEnabled" type="checkbox" checked> Empfehlung öffentlich anzeigen</label>
+          <div class="shop-admin-form-actions"><button id="shopAdminCancelBtn" class="secondary" type="button">Abbrechen</button><button class="primary" type="submit">EMPFEHLUNG SPEICHERN <span>→</span></button></div>
+        </form>
+        <div id="shopAdminList" class="shop-admin-list"></div>
+      </section>
       <div id="shopCategoryFilters" class="shop-filters" aria-label="Empfehlungen filtern"></div>
       <div id="shopStatus" class="shop-status" role="status"></div>
       <div id="shopProductGrid" class="shop-product-grid"></div>
@@ -202,6 +226,6 @@
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <script src="app.js?v=20260805-3"></script>
+  <script src="app.js?v=20260805-5"></script>
 </body>
 </html>
