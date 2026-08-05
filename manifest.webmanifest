@@ -1,10 +1,12 @@
 {
   "name": "Triple20",
   "short_name": "Triple20",
+  "id": "./",
   "description": "Aktuelle Dartturniere, Live-Spiele, Ergebnisse und Saisonwertungen des DCA Achensee",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "background_color": "#02050A",
   "theme_color": "#0E6BFF",
   "orientation": "portrait-primary",

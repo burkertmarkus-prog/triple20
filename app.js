@@ -529,7 +529,7 @@ window.T20Cloud={
     }catch(e){console.warn('Cloud laden fehlgeschlagen',e);this.online=false;setSyncStatus('Offline – lokale Kopie','offline')}
     finally{this.loadBusy=false}
   },
-  queueSync(key){if(!this.isAdmin||!this.client)return;this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');setSyncStatus('Änderungen werden gespeichert …','saving');clearTimeout(this.syncTimer);this.syncTimer=setTimeout(()=>this.syncAll(),700)},
+  queueSync(key){if(!this.isAdmin)return;this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');clearTimeout(this.syncTimer);if(!this.client||!navigator.onLine){setSyncStatus('Offline – sicher auf diesem Gerät gespeichert','offline');return}setSyncStatus('Änderungen werden gespeichert …','saving');this.syncTimer=setTimeout(()=>this.syncAll(),700)},
   async syncAll({force=false}={}){
     if(!this.isAdmin||!this.client)return;
     clearTimeout(this.syncTimer);
