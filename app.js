@@ -16,7 +16,7 @@ const TRIPLE20_PUBLIC_URL='https://burkertmarkus-prog.github.io/triple20/';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_IzH5CLw7baFsaU005Bqh7w_lRMlrMLo';
 // Die geöffnete Saison ist eine persönliche Browser-Auswahl und darf nicht
 // durch den regelmäßigen Cloud-Abgleich anderer Geräte überschrieben werden.
-const CLOUD_DATA_KEYS=['dartTournament','tripleTwentySeasons','triple20_settings','triple20_tournaments',SHOP_DATA_KEY];
+const CLOUD_DATA_KEYS=['dartTournament','tripleTwentySeasons','triple20_settings','triple20_tournaments'];
 let supabaseClient=null;
 let T20_SUPPRESS_SYNC=false;
 const nativeSetItem=localStorage.setItem.bind(localStorage),nativeRemoveItem=localStorage.removeItem.bind(localStorage);
@@ -31,6 +31,8 @@ const defaultSettings={
   theme:{background:'#EEF5FF',card:'#FFFFFF',primary:'#0E6BFF',accent:'#55A7FF',text:'#122033'}
 };
 let appSettings=loadSettings();
+const legacyShopConfig=safeJsonParse(localStorage.getItem(SHOP_DATA_KEY)||'null');
+if(!Array.isArray(appSettings.recommendations?.products)&&Array.isArray(legacyShopConfig?.products)){appSettings={...appSettings,recommendations:legacyShopConfig};saveSettings()}
 const state=JSON.parse(localStorage.getItem('dartTournament')||'null')||{players:[],started:false,matches:[],settings:{}};
 const liveRecovery=safeJsonParse(localStorage.getItem(LIVE_RECOVERY_KEY)||'null');
 const stateHasLive=!!(state.started||Object.values(state.competitions||{}).some(competition=>competition?.started)),recoveryHasLive=!!(liveRecovery?.started||Object.values(liveRecovery?.competitions||{}).some(competition=>competition?.started));
@@ -167,9 +169,9 @@ function applyTriple20Data(data){
   Object.keys(state).forEach(k=>delete state[k]);Object.assign(state,incomingState);ensureTournamentDayState();loadActiveCompetition();
   const seasons=loadSeasons();seasonStore.seasons=seasons.seasons||[];
   selectedSeasonId=localStorage.getItem('tripleTwentySelectedSeason')||'';
-  const recommendations=safeJsonParse(localStorage.getItem(SHOP_DATA_KEY)||'null');
-  if(Array.isArray(recommendations?.products)){shopConfig=recommendations;shopLoaded=true}
   appSettings=loadSettings();
+  const legacyRecommendations=safeJsonParse(localStorage.getItem(SHOP_DATA_KEY)||'null'),recommendations=Array.isArray(appSettings.recommendations?.products)?appSettings.recommendations:legacyRecommendations;
+  if(Array.isArray(recommendations?.products)){shopConfig=recommendations;shopLoaded=true}
   linkKnownMemberIds();
   applyTheme();applyTournamentDefaults();renderPlayers();renderSettingsForm();renderSeasonView();renderTournament();
   if(!$('#shopSection')?.classList.contains('hidden'))renderShop();
@@ -1117,7 +1119,7 @@ function validProductImage(value){return typeof value==='string'&&(/^product-ima
 function shopIcon(icon='target'){return({target:'🎯',camera:'📷',club:'👥',starter:'✨',case:'💼',light:'💡',board:'◉',tools:'🔧'})[icon]||'🎯'}
 async function loadShopConfig(){
   if(shopLoaded)return shopConfig;
-  const managed=safeJsonParse(localStorage.getItem(SHOP_DATA_KEY)||'null');
+  const legacy=safeJsonParse(localStorage.getItem(SHOP_DATA_KEY)||'null'),managed=Array.isArray(appSettings.recommendations?.products)?appSettings.recommendations:legacy;
   if(Array.isArray(managed?.products)){shopConfig=managed;shopLoaded=true;return shopConfig}
   try{const response=await fetch(`${SHOP_CONFIG_URL}?v=2`,{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.json();shopConfig={products:Array.isArray(data.products)?data.products:[]}}
   catch(error){shopConfig=SHOP_FALLBACK;console.info('Empfehlungen konnten nicht geladen werden.',error)}
@@ -1156,7 +1158,7 @@ async function prepareShopImage(file){
   const bitmap=await decodeAvatarImage(file),size=900,canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;const context=canvas.getContext('2d');context.fillStyle='#f7f8fa';context.fillRect(0,0,size,size);const scale=Math.min((size-60)/bitmap.width,(size-60)/bitmap.height),width=bitmap.width*scale,height=bitmap.height*scale;context.drawImage(bitmap,(size-width)/2,(size-height)/2,width,height);bitmap.close?.();return canvas.toDataURL('image/webp',.82)
 }
 function persistShopConfig(){
-  if(!isAdmin())return false;localStorage.setItem(SHOP_DATA_KEY,JSON.stringify({products:shopConfig.products||[]}));shopLoaded=true;renderShop();return true
+  if(!isAdmin())return false;appSettings={...appSettings,recommendations:{products:shopConfig.products||[]}};saveSettings();localStorage.removeItem(SHOP_DATA_KEY);shopLoaded=true;renderShop();return true
 }
 function saveShopAdminProduct(){
   if(!isAdmin())return;const title=$('#shopAdminTitleInput').value.trim(),url=$('#shopAdminUrl').value.trim();if(!title)return;if(!validPartnerUrl(url)){alert('Bitte einen gültigen Amazon.de-Partnerlink eintragen.');return}
