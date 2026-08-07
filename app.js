@@ -261,6 +261,13 @@ const PushNotifications={
     try{const result=await this.invoke({action:'send',title:title.trim(),body:body.trim(),url:url?.trim()||'/'});this.message=`Nachricht versendet: ${result.sent||0} Geräte erreicht${result.removed?`, ${result.removed} alte Anmeldung entfernt`:''}.`;this.subscriberCount=result.subscriberCount??this.subscriberCount}
     catch(error){console.error('Push-Versand fehlgeschlagen:',error);this.error=error?.context?.message||error?.message||'Nachricht konnte nicht versendet werden.'}
     finally{this.busy=false;renderCloudPanel()}
+  },
+  async sendLiveTournament(){
+    if(!isAdmin())return;
+    const eventKey=`${state.scheduledEventId||`${todayIso()}|${state.eventName||'dartturnier'}`}|${state.activeCompetition||'open'}`;
+    const title=`Jetzt live: ${state.eventName||'Dartturnier'}`,body=`Der Bewerb ${competitionLabel()} wurde gestartet. Spielplan und Ergebnisse sind jetzt live verfügbar.`;
+    try{await this.invoke({action:'live',eventKey,title,body,url:'/?bereich=live'})}
+    catch(error){console.warn('Automatische Live-Nachricht konnte nicht versendet werden:',error)}
   }
 };
 window.PushNotifications=PushNotifications;
@@ -762,7 +769,7 @@ function makeMatches(){
   else addPairs(arr,shuffle(state.players),1,'upper');
   return arr;
 }
-$('#startBtn').addEventListener('click',async()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];state.scoreAudit=[];state.scoreUndoStack=[];delete state.endedEarly;delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value};state.matches=makeMatches();state.started=true;save();renderTournament();await publishLiveTournament({notifyOnError:true})});
+$('#startBtn').addEventListener('click',async()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];state.scoreAudit=[];state.scoreUndoStack=[];delete state.endedEarly;delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value};state.matches=makeMatches();state.started=true;save();renderTournament();const published=await publishLiveTournament({notifyOnError:true});if(published)await PushNotifications.sendLiveTournament()});
 
 function playerLosses(){const losses=Object.fromEntries(state.players.map(p=>[p,0]));state.matches.filter(m=>m.sa!==null&&m.b!=='Freilos').forEach(m=>{losses[m.sa>m.sb?m.b:m.a]++});return losses}
 function standingsFor(players,matches=state.matches){return players.map(name=>{const played=matches.filter(m=>m.sa!==null&&(m.a===name||m.b===name));let w=0,lf=0,la=0;played.forEach(m=>{const own=m.a===name?m.sa:m.sb,other=m.a===name?m.sb:m.sa;lf+=own;la+=other;if(own>other)w++});return{name,p:played.length,w,l:played.length-w,lf,la,pts:w*2}}).sort((a,b)=>b.pts-a.pts||(b.lf-b.la)-(a.lf-a.la)||b.lf-a.lf)}
