@@ -1,5 +1,5 @@
-const CACHE_VERSION='triple20-shell-20260807-3';
-const DATA_CACHE='triple20-data-20260807-3';
+const CACHE_VERSION='triple20-shell-20260807-4';
+const DATA_CACHE='triple20-data-20260807-4';
 const APP_SHELL=[
   './','./index.html','./styles.css','./app.js','./pwa.js','./manifest.webmanifest','./shop-products.json',
   './icons/triple20-icon-192.png','./icons/triple20-icon-512.png','./icons/apple-touch-icon.png','./icons/triple20-icon.svg',
@@ -14,9 +14,11 @@ const OPTIONAL_EXTERNAL=[
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE_VERSION).then(async cache=>{
-    await cache.addAll(APP_SHELL);
+    // Eine einzelne fehlende oder vorübergehend nicht erreichbare Datei darf
+    // die komplette PWA- und Push-Installation nicht mehr verhindern.
+    await Promise.allSettled(APP_SHELL.map(async url=>{const request=new Request(url,{cache:'reload'}),response=await fetch(request);if(response.ok)await cache.put(request,response)}));
     await Promise.allSettled(OPTIONAL_EXTERNAL.map(async url=>{const request=new Request(url,{mode:'no-cors'}),response=await fetch(request);await cache.put(request,response)}));
-  }));
+  }).then(()=>self.skipWaiting()));
 });
 
 self.addEventListener('activate',event=>{
