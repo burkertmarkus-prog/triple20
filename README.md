@@ -52,4 +52,4 @@ Die aktuell geladene Saison wird oben kompakt angezeigt. Über „Saison bearbei
 ## Start
 
 `index.html` direkt im Browser öffnen oder im Ordner einen lokalen Webserver starten.
-Letzte Veröffentlichung: 07.08.2026
+Letzte Veröffentlichung: 08.08.2026
