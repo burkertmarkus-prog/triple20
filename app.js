@@ -281,20 +281,17 @@ function urlBase64ToUint8Array(value){const padding='='.repeat((4-value.length%4
 function renderMemberPush(){const p=PushNotifications,ios=/iphone|ipad|ipod/i.test(navigator.userAgent),standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;if(!p.supported)return `<section class="push-card"><div><span class="eyebrow">BENACHRICHTIGUNGEN</span><h3>Auf diesem Browser nicht verfügbar</h3><p>Bitte verwende einen aktuellen Browser.${ios&&!standalone?' Auf iPhone und iPad muss Triple20 zuerst zum Home-Bildschirm hinzugefügt werden.':''}</p></div></section>`;return `<section class="push-card ${p.enabled?'is-enabled':''}"><div><span class="eyebrow">BENACHRICHTIGUNGEN</span><h3>${p.enabled?'Push ist aktiviert':'Nichts mehr verpassen'}</h3><p>${p.enabled?'Dieses Gerät erhält Hinweise zu Spieltagen und wichtigen Vereinsmeldungen.':'Erhalte Hinweise zu neuen Spieltagen, Änderungen und wichtigen Vereinsmeldungen.'}</p>${ios&&!standalone?'<small>Auf iPhone/iPad: Triple20 zuerst über „Teilen → Zum Home-Bildschirm“ installieren und dort öffnen.</small>':''}</div><button id="${p.enabled?'disablePushBtn':'enablePushBtn'}" class="${p.enabled?'secondary':'primary'}" type="button" ${p.busy?'disabled':''}>${p.busy?'BITTE WARTEN …':p.enabled?'Deaktivieren':'PUSH AKTIVIEREN'}</button>${p.error?`<p class="login-error">${esc(p.error)}</p>`:''}${p.message?`<p class="login-success">${esc(p.message)}</p>`:''}</section>`}
 function renderAdminPush(){const p=PushNotifications,count=p.subscriberCount===null?'–':p.subscriberCount;return `<section class="admin-push"><div class="admin-section-heading"><div><span class="eyebrow">PUSH-NACHRICHTEN</span><h3>Mitglieder direkt informieren</h3><p class="view-note">${count} aktivierte${count===1?'s Gerät':' Geräte'} erreichbar</p></div></div><form id="adminPushForm" class="admin-push-form"><label>Titel<input id="pushTitle" maxlength="60" value="Triple20" required></label><label>Nachricht<textarea id="pushBody" maxlength="180" placeholder="z. B. Anmeldung für Freitag ist geöffnet." required></textarea></label><label>Ziel in der App<select id="pushUrl"><option value="/">Startseite</option><option value="/?bereich=saison">Saisonwertung</option><option value="/?bereich=live">Live-Turnier</option><option value="/?bereich=konto">Konto</option></select></label><button class="primary" type="submit" ${p.busy?'disabled':''}>${p.busy?'WIRD GESENDET …':'AN ALLE SENDEN'}</button></form>${p.error?`<p class="login-error">${esc(p.error)}</p>`:''}${p.message?`<p class="login-success">${esc(p.message)}</p>`:''}</section>`}
 function upcomingAdminEvents(){
-  const today=todayIso();return publicTournamentRecords().filter(item=>(item.planned||item.date>=today)&&item.date>=today).sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.startTime||'').localeCompare(b.startTime||''));
+  const today=todayIso(),activeScheduleIds=new Set([state.scheduledEventId,...Object.values(state.competitions||{}).map(competition=>competition?.scheduledEventId)].filter(Boolean));return publicTournamentRecords().filter(item=>!activeScheduleIds.has(item.id)&&(item.planned||item.date>=today)&&item.date>=today).sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.startTime||'').localeCompare(b.startTime||''));
 }
-function adminCheckInStore(){return safeJsonParse(localStorage.getItem(CHECKIN_STORAGE_KEY)||'{}',{})}
-function saveAdminCheckIn(eventKey,data){const store=adminCheckInStore();store[eventKey]=data;localStorage.setItem(CHECKIN_STORAGE_KEY,JSON.stringify(store))}
 function checkInData(event){
-  const eventKey=registrationEventKey(event),saved=adminCheckInStore()[eventKey],registered=tournamentRegistrations.filter(row=>row.event_key===eventKey);
-  return{ids:registered.map(row=>row.user_id),guests:Array.isArray(saved?.guests)?saved.guests:[]};
+  const eventKey=registrationEventKey(event),registered=tournamentRegistrations.filter(row=>row.event_key===eventKey);
+  return{ids:registered.map(row=>row.user_id)};
 }
 function renderAdminCheckIn(){
   if(!adminCheckInEventKey)return'';
   const event=upcomingAdminEvents().find(item=>registrationEventKey(item)===adminCheckInEventKey);if(!event)return'';
   const data=checkInData(event),registeredCount=data.ids.length;
-  const guests=data.guests.map((name,index)=>`<span class="checkin-guest">${esc(name)}<button type="button" data-checkin-remove-guest="${index}" aria-label="${esc(name)} entfernen">×</button></span>`).join('');
-  return `<section class="admin-checkin"><div class="admin-section-heading"><div><span class="eyebrow">TURNIER VORBEREITEN</span><h3>${esc(event.name||'Spieltag')}</h3><p class="view-note">${publicDate(event.date)}${publicStartTime(event)?` · ${esc(publicStartTime(event))}`:''} · ${esc(event.competitionLabel||'Offen')}</p></div><button class="secondary" type="button" data-checkin-close>Schließen</button></div><div class="checkin-summary"><b>${registeredCount}</b><span>${registeredCount===1?'Anmeldung':'Anmeldungen'}</span><small>werden automatisch übernommen</small></div><p class="view-note">Die endgültige Spielerauswahl erfolgt anschließend unter „Turnier einrichten“. Dort kannst du gespeicherte Mitglieder hinzufügen oder Teilnehmende entfernen.</p><form id="checkInGuestForm" class="checkin-guest-form"><input id="checkInGuestName" maxlength="30" placeholder="Optionalen Gast hinzufügen"><button class="secondary" type="submit">Hinzufügen</button></form>${guests?`<div class="checkin-guests">${guests}</div>`:''}<button class="primary checkin-transfer" type="button" data-checkin-transfer>TURNIER EINRICHTEN <span>→</span></button></section>`;
+  return `<section class="admin-checkin"><div class="admin-section-heading"><div><span class="eyebrow">TURNIER VORBEREITEN</span><h3>${esc(event.name||'Spieltag')}</h3><p class="view-note">${publicDate(event.date)}${publicStartTime(event)?` · ${esc(publicStartTime(event))}`:''} · ${esc(event.competitionLabel||'Offen')}</p></div><button class="secondary" type="button" data-checkin-close>Schließen</button></div><div class="checkin-summary"><b>${registeredCount}</b><span>${registeredCount===1?'Anmeldung':'Anmeldungen'}</span><small>werden automatisch übernommen</small></div><p class="view-note">Die endgültige Spielerauswahl erfolgt anschließend unter „Turnier einrichten“. Dort kannst du gespeicherte Mitglieder und Gäste hinzufügen oder Teilnehmende entfernen.</p><button class="primary checkin-transfer" type="button" data-checkin-transfer>TURNIER EINRICHTEN <span>→</span></button></section>`;
 }
 function renderAdminDashboard(){
   const upcoming=upcomingAdminEvents(),next=upcoming[0],nextKey=next?registrationEventKey(next):'',registered=next?tournamentRegistrationCounts[nextKey]||0:0,live=Object.values(state.competitions||{}).filter(item=>item?.started).length,online=T20Cloud.onlineUserIds?.size||0,lastSync=T20Cloud.lastSyncAt?new Date(T20Cloud.lastSyncAt).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'}):'–';
@@ -1156,8 +1153,8 @@ function publicTournamentRecords(){
   // Eine abgeschlossene Turnierfassung hat Vorrang vor dem ursprünglich
   // geplanten Termin. Abgeschlossene Saisonfassungen bleiben weiterhin die
   // offizielle Quelle gegenüber einer älteren lokalen Historie.
-  const history=loadTournamentHistory(),completedScheduleIds=new Set(history.map(record=>record.scheduledEventId).filter(Boolean));
-  const seasonRecords=(seasonStore.seasons||[]).flatMap(season=>(season.tournaments||[]).filter(tournament=>!tournament.planned||!completedScheduleIds.has(tournament.id)).map(tournament=>({...tournament,seasonName:season.name})));
+  const history=loadTournamentHistory(),completedScheduleIds=new Set(history.map(record=>record.scheduledEventId).filter(Boolean)),activeScheduleIds=new Set([state.scheduledEventId,...Object.values(state.competitions||{}).map(competition=>competition?.scheduledEventId)].filter(Boolean));
+  const seasonRecords=(seasonStore.seasons||[]).flatMap(season=>(season.tournaments||[]).filter(tournament=>!tournament.planned||(!completedScheduleIds.has(tournament.id)&&!activeScheduleIds.has(tournament.id))).map(tournament=>({...tournament,seasonName:season.name})));
   const records=[...history,...seasonRecords];
   const unique=new Map();
   records.forEach(record=>{const key=publicTournamentKey(record),old=unique.get(key),completedBeatsPlanned=old&&!old.planned&&record.planned,next=completedBeatsPlanned?{...record,...old}:{...(old||{}),...record};unique.set(key,{...next,seasonName:record.seasonName||old?.seasonName||''})});
@@ -1225,16 +1222,9 @@ async function changeTournamentRegistration(eventKey,action){
     while(registrationsLoading)await new Promise(resolve=>setTimeout(resolve,80));await loadTournamentRegistrations();
   }catch(error){console.error('Teilnahmeanmeldung fehlgeschlagen:',error);alert('Die Teilnahme konnte nicht gespeichert werden. Bitte prüfe die Internetverbindung oder die Supabase-Einrichtung.')}finally{if(button)button.disabled=false}
 }
-function addAdminCheckInGuest(name){
-  const event=upcomingAdminEvents().find(item=>registrationEventKey(item)===adminCheckInEventKey),clean=(name||'').trim().replace(/\s+/g,' ');if(!event||!clean)return;
-  const data=checkInData(event);if(data.guests.some(item=>item.toLowerCase()===clean.toLowerCase()))return;data.guests.push(clean);saveAdminCheckIn(adminCheckInEventKey,data);renderCloudPanel();
-}
-function removeAdminCheckInGuest(index){
-  const event=upcomingAdminEvents().find(item=>registrationEventKey(item)===adminCheckInEventKey);if(!event)return;const data=checkInData(event);data.guests.splice(index,1);saveAdminCheckIn(adminCheckInEventKey,data);renderCloudPanel();
-}
 function transferAdminCheckInToTournament(){
   if(!isAdmin())return;const event=upcomingAdminEvents().find(item=>registrationEventKey(item)===adminCheckInEventKey);if(!event)return;
-  const data=checkInData(event),profiles=new Map((T20Cloud.adminProfiles||[]).map(profile=>[profile.id,profile])),members=data.ids.map(id=>profiles.get(id)).filter(Boolean).map(profile=>({id:profile.id,name:(profile.nickname||profile.display_name||'').trim()})).filter(item=>item.name),guests=data.guests.map(name=>({id:'',name:name.trim()})).filter(item=>item.name),unique=new Map([...members,...guests].map(item=>[item.name.toLowerCase(),item])),players=[...unique.values()];
+  const data=checkInData(event),profiles=new Map((T20Cloud.adminProfiles||[]).map(profile=>[profile.id,profile])),members=data.ids.map(id=>profiles.get(id)).filter(Boolean).map(profile=>({id:profile.id,name:(profile.nickname||profile.display_name||'').trim()})).filter(item=>item.name),unique=new Map(members.map(item=>[item.name.toLowerCase(),item])),players=[...unique.values()];
   const targetCompetition=['men','women'].includes(event.competition)?event.competition:(state.activeCompetition||'men');ensureTournamentDayState();const targetState=targetCompetition===state.activeCompetition?competitionSnapshot(state):competitionSnapshot(state.competitions?.[targetCompetition]||emptyCompetition());
   if((targetState.started||targetState.players?.length||targetState.matches?.length)&&!confirm(`Der vorbereitete Bewerb „${competitionLabel(targetCompetition)}“ wird durch den Check-in ersetzt. Fortfahren?`))return;
   syncActiveCompetition();state.activeCompetition=targetCompetition;loadActiveCompetition();
@@ -1513,7 +1503,6 @@ $('#cloudAdminPanel').addEventListener('submit',e=>{
   if(e.target.id==='memberCodeForm')T20Cloud.verifyLoginCode($('#memberOtpCode').value);
   if(e.target.id==='memberProfileForm')T20Cloud.saveProfile($('#profileDisplayName').value,$('#profileNickname').value);
   if(e.target.id==='adminPushForm')PushNotifications.send($('#pushTitle').value,$('#pushBody').value,$('#pushUrl').value);
-  if(e.target.id==='checkInGuestForm')addAdminCheckInGuest($('#checkInGuestName')?.value||'');
 });
 $('#cloudAdminPanel').addEventListener('click',e=>{
   const memberProfile=e.target.closest('[data-member-profile]');if(memberProfile){showPlayerProfile(memberProfile.dataset.memberProfile);return}
@@ -1528,7 +1517,6 @@ $('#cloudAdminPanel').addEventListener('click',e=>{
   if(e.target.id==='disablePushBtn')PushNotifications.disable();
   const checkIn=e.target.closest('[data-admin-checkin]');if(checkIn){adminCheckInEventKey=checkIn.dataset.adminCheckin;renderCloudPanel();return}
   if(e.target.closest('[data-checkin-close]')){adminCheckInEventKey='';renderCloudPanel();return}
-  const removeGuest=e.target.closest('[data-checkin-remove-guest]');if(removeGuest){removeAdminCheckInGuest(+removeGuest.dataset.checkinRemoveGuest);return}
   if(e.target.closest('[data-checkin-transfer]')){transferAdminCheckInToTournament();return}
   if(e.target.closest('[data-admin-home]')){showHome();return}
   if(e.target.closest('[data-admin-tournament]')){showTournament();return}
