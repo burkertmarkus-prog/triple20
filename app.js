@@ -215,7 +215,8 @@ function renderReadonlyMode(){
 function replaceCloudPanelHtml(panel,html){
   const active=document.activeElement,activeId=active?.id||'',selection=active&&typeof active.selectionStart==='number'?[active.selectionStart,active.selectionEnd]:null;
   const values=Object.fromEntries([...panel.querySelectorAll('input[id]')].filter(input=>input.type!=='file').map(input=>[input.id,input.value]));
-  panel.innerHTML=html;
+  panel.innerHTML=html.replaceAll('sechsstelligen','achtstelligen').replaceAll('sechsstellige','achtstellige');
+  const otpInput=panel.querySelector('#memberOtpCode');if(otpInput){otpInput.maxLength=8;otpInput.pattern='[0-9]{8}';otpInput.placeholder='8-stelliger Code'}
   Object.entries(values).forEach(([id,value])=>{const input=panel.querySelector(`#${id}`);if(input)input.value=value});
   const nextActive=activeId?panel.querySelector(`#${activeId}`):null;
   if(nextActive){nextActive.focus({preventScroll:true});if(selection&&typeof nextActive.setSelectionRange==='function')nextActive.setSelectionRange(selection[0],selection[1])}
@@ -546,7 +547,7 @@ window.T20Cloud={
     finally{this.magicLinkBusy=false;renderCloudPanel();setTimeout(()=>$('#memberOtpCode')?.focus(),0)}
   },
   async verifyLoginCode(token){
-    if(this.otpVerifyBusy||!this.otpEmail)return;const cleanToken=String(token||'').replace(/\D/g,'');if(cleanToken.length!==6){this.authError='Bitte den vollständigen sechsstelligen Code eingeben.';this.authMessage='';renderCloudPanel();return}
+    if(this.otpVerifyBusy||!this.otpEmail)return;const cleanToken=String(token||'').replace(/\D/g,'');if(cleanToken.length!==8){this.authError='Bitte den vollständigen achtstelligen Code eingeben.';this.authMessage='';renderCloudPanel();return}
     this.otpVerifyBusy=true;this.authError='';this.authMessage='Code wird geprüft …';renderCloudPanel();
     try{if(!this.ready||!this.client)await this.init();const {data,error}=await withTimeout(this.client.auth.verifyOtp({email:this.otpEmail,token:cleanToken,type:'email'}),15000,'Die Prüfung dauert zu lange. Bitte erneut versuchen.');if(error)throw error;if(!data?.session)throw new Error('Keine gültige Anmeldung erhalten.');this.otpEmail='';this.authMessage='Anmeldung erfolgreich.';await this.setSession(data.session)}
     catch(error){console.error('Anmeldecode prüfen fehlgeschlagen:',error);this.authMessage='';this.authError=`Code ungültig oder abgelaufen: ${error?.message||'Bitte einen neuen Code anfordern.'}`}
