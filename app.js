@@ -263,8 +263,11 @@ const PushNotifications={
     finally{this.busy=false;renderCloudPanel()}
   },
   async sendLiveTournament(){
-    if(!isAdmin())return;
-    const eventKey=`${state.scheduledEventId||`${todayIso()}|${state.eventName||'dartturnier'}`}|${state.activeCompetition||'open'}`;
+    // Nur ein über den offiziellen Admin-Check-in übernommener Termin besitzt
+    // eine scheduledEventId. Frei gestartete Trainings- und Testturniere lösen
+    // bewusst keine Nachricht an alle Mitglieder aus.
+    if(!isAdmin()||!state.scheduledEventId)return;
+    const eventKey=`${state.scheduledEventId}|${state.activeCompetition||'open'}`;
     const title=`Jetzt live: ${state.eventName||'Dartturnier'}`,body=`Der Bewerb ${competitionLabel()} wurde gestartet. Spielplan und Ergebnisse sind jetzt live verfügbar.`;
     try{await this.invoke({action:'live',eventKey,title,body,url:'/?bereich=live'})}
     catch(error){console.warn('Automatische Live-Nachricht konnte nicht versendet werden:',error)}
