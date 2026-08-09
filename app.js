@@ -225,7 +225,14 @@ function replaceCloudPanelHtml(panel,html){
   if(nextActive){nextActive.focus({preventScroll:true});if(selection&&typeof nextActive.setSelectionRange==='function')nextActive.setSelectionRange(selection[0],selection[1])}
 }
 function renderAdminMembers(){
-  const c=T20Cloud,profiles=c.adminProfiles||[];
+  const c=T20Cloud,profiles=[...(c.adminProfiles||[])].sort((a,b)=>{
+    const aOnline=c.onlineUserIds?.has(a.id)?1:0,bOnline=c.onlineUserIds?.has(b.id)?1:0;
+    if(aOnline!==bOnline)return bOnline-aOnline;
+    const aLastSeen=Date.parse(a.last_seen_at||'')||0,bLastSeen=Date.parse(b.last_seen_at||'')||0;
+    if(aLastSeen!==bLastSeen)return bLastSeen-aLastSeen;
+    const aName=a.nickname||a.display_name||'',bName=b.nickname||b.display_name||'';
+    return aName.localeCompare(bName,'de',{sensitivity:'base'});
+  });
   const cards=profiles.map(profile=>{
     const adminProfile=profile.id===c.user?.id,name=profile.display_name||(adminProfile?'Turnierleitung':'Name noch nicht eingetragen'),nickname=profile.nickname||(adminProfile?'Administrator':'Spitzname fehlt'),initial=esc((profile.nickname||profile.display_name||(adminProfile?'A':'?')).trim().charAt(0).toUpperCase()||'?'),photo=c.adminProfileAvatars?.[profile.id],avatar=photo?`<img src="${esc(photo)}" alt="">`:initial;
     const joined=profile.created_at?new Date(profile.created_at).toLocaleDateString('de-AT'):'–';
