@@ -481,7 +481,7 @@ window.T20Cloud={
       if(this.user&&!this.isAdmin)this.tournamentViewMode='live';
       if(this.isAdmin&&localStorage.getItem('triple20_identity_pending')==='1'){this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');localStorage.removeItem('triple20_identity_pending')}
       if(this.user&&this.isAdmin)try{await this.loadAdminProfiles()}catch(error){console.warn('Mitgliederprofile konnten nach der Anmeldung nicht geladen werden:',error)}
-      if(this.user&&this.isAdmin)try{await loadTournamentRegistrations()}catch(error){console.warn('Turnieranmeldungen konnten nach der Anmeldung nicht geladen werden:',error)}
+      if(this.user)try{await loadTournamentRegistrations()}catch(error){console.warn('Turnieranmeldungen konnten nach der Anmeldung nicht geladen werden:',error)}
       if(this.user&&!this.isAdmin)try{this.profile=await this.loadProfile()}catch(error){console.warn('Profil konnte nach der Anmeldung nicht geladen werden:',error);this.profile={id:this.user.id,display_name:'',nickname:'',avatar_url:null};this.authError='Du bist angemeldet, aber dein Profil konnte noch nicht geladen werden. Bitte aktualisiere die Seite.'}
       if(this.user){this.startPresence();this.startLastSeenTracking()}
       renderReadonlyMode();renderCloudPanel();
@@ -1240,8 +1240,8 @@ function downloadResultGraphic(){if(resultGraphicBlob)downloadFile(resultGraphic
 async function shareResultGraphic(){const file=resultGraphicBlob&&new File([resultGraphicBlob],resultGraphicFilename,{type:'image/png'});if(!file)return;if(navigator.share&&navigator.canShare?.({files:[file]})){try{await navigator.share({title:'Triple20 Ergebnis',text:'Aktuelles Ergebnis aus der Triple20-App',files:[file]});return}catch(error){if(error?.name==='AbortError')return}}downloadResultGraphic();alert('Die direkte Teilen-Funktion ist in diesem Browser nicht verfügbar. Die Grafik wurde deshalb als PNG gespeichert.')}
 function registrationEventKey(tournament={}){return String(tournament.id||tournament._publicKey||'').slice(0,160)}
 function registrationHtml(tournament={}){
-  const eventKey=registrationEventKey(tournament),count=tournamentRegistrationCounts[eventKey]||0,own=tournamentRegistrations.find(item=>item.event_key===eventKey&&item.user_id===T20Cloud.user?.id),adminRows=isAdmin()?tournamentRegistrations.filter(item=>item.event_key===eventKey):[];
-  const names=adminRows.length?`<details class="registration-names"><summary>${count} Anmeldung${count===1?'':'en'} anzeigen</summary><span>${adminRows.map(item=>esc(item.nickname||'Mitglied')).join(', ')}</span></details>`:`<small>${count} angemeldet</small>`;
+  const eventKey=registrationEventKey(tournament),count=tournamentRegistrationCounts[eventKey]||0,own=tournamentRegistrations.find(item=>item.event_key===eventKey&&item.user_id===T20Cloud.user?.id),visibleRows=T20Cloud.user?tournamentRegistrations.filter(item=>item.event_key===eventKey).sort((a,b)=>(a.nickname||'').localeCompare(b.nickname||'','de')):[];
+  const names=visibleRows.length?`<details class="registration-names"><summary>${count} Anmeldung${count===1?'':'en'} anzeigen</summary><span>${visibleRows.map(item=>esc(item.nickname||'Mitglied')).join(', ')}</span></details>`:`<small>${count} angemeldet</small>`;
   if(isAdmin())return `<div class="event-registration admin-registration">${names}</div>`;
   if(!T20Cloud.user)return `<div class="event-registration"><small>${count} angemeldet</small><button class="secondary" type="button" data-event-login>Zur Teilnahme anmelden</button></div>`;
   return `<div class="event-registration"><small>${count} angemeldet${own?' · Du bist dabei':''}</small><button class="${own?'danger':'primary'}" type="button" data-event-registration="${esc(eventKey)}" data-registration-action="${own?'cancel':'join'}">${own?'Teilnahme absagen':'Ich bin dabei'}</button></div>`;
