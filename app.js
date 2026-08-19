@@ -1244,7 +1244,7 @@ function registrationHtml(tournament={}){
   const names=visibleRows.length?`<details class="registration-names"><summary>${count} Anmeldung${count===1?'':'en'} anzeigen</summary><span>${visibleRows.map(item=>esc(item.nickname||'Mitglied')).join(', ')}</span></details>`:`<small>${count} angemeldet</small>`;
   if(isAdmin())return `<div class="event-registration admin-registration">${names}</div>`;
   if(!T20Cloud.user)return `<div class="event-registration"><small>${count} angemeldet</small><button class="secondary" type="button" data-event-login>Zur Teilnahme anmelden</button></div>`;
-  return `<div class="event-registration"><small>${count} angemeldet${own?' · Du bist dabei':''}</small><button class="${own?'danger':'primary'}" type="button" data-event-registration="${esc(eventKey)}" data-registration-action="${own?'cancel':'join'}">${own?'Teilnahme absagen':'Ich bin dabei'}</button></div>`;
+  return `<div class="event-registration member-registration"><div>${names}${own?'<small>Du bist angemeldet.</small>':''}</div><button class="${own?'danger':'primary'}" type="button" data-event-registration="${esc(eventKey)}" data-registration-action="${own?'cancel':'join'}">${own?'Teilnahme absagen':'Ich bin dabei'}</button></div>`;
 }
 async function loadTournamentRegistrations(){
   if(registrationsLoading||!T20Cloud.client)return;registrationsLoading=true;
