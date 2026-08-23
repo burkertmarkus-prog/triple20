@@ -928,6 +928,13 @@ function assignedSeasonForTournament(tournament=state){return seasonStore.season
 function repairScheduledTournamentAssignments(){
   const completed=(seasonStore.seasons||[]).flatMap(source=>(source.tournaments||[]).filter(tournament=>!tournament.planned&&tournament.scheduledEventId).map(tournament=>({source,tournament}))),affected=new Set();let changed=false;
   for(const {source,tournament} of completed){const target=seasonForScheduledEvent(tournament.scheduledEventId);if(!target||target.id===source.id)continue;const plannedIndex=(target.tournaments||[]).findIndex(item=>item.planned&&String(item.id)===String(tournament.scheduledEventId));if(plannedIndex<0)continue;const planned=target.tournaments[plannedIndex];source.tournaments=source.tournaments.filter(item=>item!==tournament);tournament.date=tournament.date||planned.date;tournament.startTime=tournament.startTime||planned.startTime;tournament.scheduledSeasonId=target.id;target.tournaments.splice(plannedIndex,1,tournament);affected.add(source);affected.add(target);changed=true}
+  const womenPlayed=new Set((seasonStore.seasons||[]).filter(season=>/damen/i.test(season.name||'')).flatMap(season=>(season.tournaments||[]).filter(tournament=>!tournament.planned).flatMap(tournament=>tournament.players||[])).map(normalizedPlayerName));
+  for(const season of seasonStore.seasons||[]){
+    if(!/herren/i.test(season.name||'')||!womenPlayed.size)continue;
+    const menPlayed=new Set((season.tournaments||[]).filter(tournament=>!tournament.planned).flatMap(tournament=>tournament.players||[]).map(normalizedPlayerName)),ghosts=new Set([...(season.members||[])].map(normalizedPlayerName).filter(name=>womenPlayed.has(name)&&!menPlayed.has(name)));
+    if(!ghosts.size)continue;
+    season.members=(season.members||[]).filter(name=>!ghosts.has(normalizedPlayerName(name)));season.players=(season.players||[]).filter(name=>!ghosts.has(normalizedPlayerName(name)));for(const name of Object.keys(season.memberProfileIds||{}))if(ghosts.has(normalizedPlayerName(name)))delete season.memberProfileIds[name];affected.add(season);changed=true;
+  }
   if(changed){for(const season of affected){season.tournaments.sort((a,b)=>(a.date||'').localeCompare(b.date||''));season.stats=calculateSeasonStatisticsSummary(season)}persistSeasons()}
   return changed;
 }

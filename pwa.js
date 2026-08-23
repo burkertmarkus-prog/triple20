@@ -18,7 +18,7 @@
     if(navigator.storage?.persist)navigator.storage.persist().catch(()=>{});
     if(!('serviceWorker'in navigator)||location.protocol==='file:')return;
     try{
-      const registration=await navigator.serviceWorker.register('./sw.js?v=20260819-18',{scope:'./'});state.registration=registration;
+      const registration=await navigator.serviceWorker.register('./sw.js?v=20260823-19',{scope:'./'});state.registration=registration;
       if(registration.waiting)showUpdate(registration);
       registration.addEventListener('updatefound',()=>{const worker=registration.installing;if(!worker)return;worker.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)showUpdate(registration)})});
       navigator.serviceWorker.addEventListener('controllerchange',()=>{if(state.refreshing)location.reload()});
