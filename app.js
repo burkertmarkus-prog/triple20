@@ -799,6 +799,11 @@ function champion(){
   const limit=state.settings.mode==='double'?2:1,losses=playerLosses(),active=state.players.filter(p=>losses[p]<limit);
   return active.length===1&&state.matches.every(m=>m.sa!==null)?active[0]:'';
 }
+function eliminationMatchType(match,index,matches=state.matches){
+  if(match.bracket==='lower')return'Verliererrunde';
+  if(match.bracket==='grand'){const finalNumber=matches.slice(0,index+1).filter(item=>item.bracket==='grand').length;return finalNumber>1?'Entscheidungsfinale':'Großes Finale'}
+  return'Spiel';
+}
 function renderTournament(){
   const route=new URLSearchParams(location.search);if(route.get('bereich')==='live')selectLiveCompetition(route.get('bewerb')||'men');
   renderTournamentSubnav();renderCompetitionNav();$('#memberLiveEmpty')?.classList.add('hidden');
@@ -818,7 +823,7 @@ function renderTournament(){
   $('#endTournamentBtn')?.classList.toggle('hidden',!isAdmin()||!!champion());
   const done=state.matches.filter(m=>m.sa!==null).length;$('#progressText').textContent=(state.matches.length?Math.round(done/state.matches.length*100):0)+'%';
   const indexedMatches=state.matches.map((match,index)=>({match,index})),viewerOrder=isAdmin()?indexedMatches:[...indexedMatches].sort((a,b)=>Number(a.match.sa!==null)-Number(b.match.sa!==null)||a.index-b.index),firstOpenIndex=viewerOrder.find(item=>item.match.sa===null&&item.match.b!=='Freilos')?.index;
-  $('#matchList').innerHTML=viewerOrder.map(({match:m,index:i})=>{const current=!isAdmin()&&i===firstOpenIndex,completed=m.sa!==null;return `<article class="match ${completed?'done':''} ${current?'current-live-match':''}">${current?'<div class="current-live-label">AKTUELL · NÄCHSTES SPIEL</div>':''}<div class="match-no">${m.group!==undefined?'Gruppe '+String.fromCharCode(65+m.group)+' · ':''}Runde ${m.round} · ${m.bracket==='lower'?'Verlierer':m.bracket==='grand'?'Finale':'Spiel'} ${String(i+1).padStart(2,'0')}</div><div class="players-match"><span class="${m.sa>m.sb?'winner-player':''}">${esc(m.a)}</span><b>${completed?m.sa+' : '+m.sb:'VS'}</b><span class="${m.sb>m.sa?'winner-player':''}">${esc(m.b)}</span></div><div class="score-controls">${m.b==='Freilos'?'Weiter':`<select data-sa="${i}">${options(m.sa)}</select><span>:</span><select data-sb="${i}">${options(m.sb)}</select><button data-save="${i}" aria-label="${completed?'Ergebnis korrigieren':'Ergebnis speichern'}" title="${completed?'Ergebnis korrigieren':'Ergebnis speichern'}">${completed?'Ändern':'✓'}</button>`}</div></article>`}).join('');
+  $('#matchList').innerHTML=viewerOrder.map(({match:m,index:i})=>{const current=!isAdmin()&&i===firstOpenIndex,completed=m.sa!==null;return `<article class="match ${completed?'done':''} ${current?'current-live-match':''}">${current?'<div class="current-live-label">AKTUELL · NÄCHSTES SPIEL</div>':''}<div class="match-no">${m.group!==undefined?'Gruppe '+String.fromCharCode(65+m.group)+' · ':''}Runde ${m.round} · ${eliminationMatchType(m,i)} ${String(i+1).padStart(2,'0')}</div><div class="players-match"><span class="${m.sa>m.sb?'winner-player':''}">${esc(m.a)}</span><b>${completed?m.sa+' : '+m.sb:'VS'}</b><span class="${m.sb>m.sa?'winner-player':''}">${esc(m.b)}</span></div><div class="score-controls">${m.b==='Freilos'?'Weiter':`<select data-sa="${i}">${options(m.sa)}</select><span>:</span><select data-sb="${i}">${options(m.sb)}</select><button data-save="${i}" aria-label="${completed?'Ergebnis korrigieren':'Ergebnis speichern'}" title="${completed?'Ergebnis korrigieren':'Ergebnis speichern'}">${completed?'Ändern':'✓'}</button>`}</div></article>`}).join('');
   renderScoreHistory();renderTable();renderBracket();renderQualification();renderWithdrawCard();const winner=champion();$('#winnerCard').classList.toggle('hidden',!winner);if(winner){$('#winnerName').textContent=winner;saveTournamentToHistory()}renderSeasonImport(winner);save();renderReadonlyMode();
 }
 function options(current){let s='<option value="">–</option>';for(let i=0;i<=state.settings.legs;i++)s+=`<option ${current===i?'selected':''}>${i}</option>`;return s}
@@ -875,15 +880,19 @@ function advanceElimination(){
     const next=round+1;
     const winners=matches=>matches.map(m=>m.sa>m.sb?m.a:m.b);
     if(state.settings.mode==='knockout'){addPairs(state.matches,winners(current),next,'upper');continue}
-    if(active.length===2){const ordered=[...active].sort((a,b)=>losses[a]-losses[b]);addPairs(state.matches,ordered,next,'grand');continue}
+    const upperActive=state.players.filter(player=>losses[player]===0),lowerActive=state.players.filter(player=>losses[player]===1),completedGrand=state.matches.some(match=>match.bracket==='grand'&&match.sa!==null);
+    if(active.length===2&&completedGrand){const previousGrand=state.matches.filter(match=>match.bracket==='grand').at(-1),ordered=previousGrand?[previousGrand.a,previousGrand.b]:active;addPairs(state.matches,ordered,next,'grand');continue}
+    if(active.length===2&&upperActive.length===1&&lowerActive.length===1){addPairs(state.matches,[upperActive[0],lowerActive[0]],next,'grand');continue}
     const upperGames=current.filter(m=>m.bracket==='upper'),lowerGames=current.filter(m=>m.bracket==='lower');
     const upperWinners=winners(upperGames),lowerWinners=winners(lowerGames);
     const upperLosers=upperGames.filter(m=>m.b!=='Freilos').map(m=>m.sa>m.sb?m.b:m.a);
-    if(upperWinners.length)addPairs(state.matches,upperWinners,next,'upper');
-    const lowerEntrants=[];
-    if(lowerWinners.length){const max=Math.max(lowerWinners.length,upperLosers.length);for(let i=0;i<max;i++){if(lowerWinners[i])lowerEntrants.push(lowerWinners[i]);if(upperLosers[i])lowerEntrants.push(upperLosers[i])}}
-    else lowerEntrants.push(...upperLosers);
-    if(lowerEntrants.length)addPairs(state.matches,lowerEntrants,next,'lower');
+    const orderedPool=(activePlayers,preferred)=>[...new Set([...preferred,...activePlayers])].filter(player=>activePlayers.includes(player));
+    const upperEntrants=orderedPool(upperActive,upperWinners),lowerPreferred=[];
+    for(let i=0,max=Math.max(lowerWinners.length,upperLosers.length);i<max;i++){if(lowerWinners[i])lowerPreferred.push(lowerWinners[i]);if(upperLosers[i])lowerPreferred.push(upperLosers[i])}
+    const lowerEntrants=orderedPool(lowerActive,lowerPreferred);
+    if(upperEntrants.length>1)addPairs(state.matches,upperEntrants,next,'upper');
+    if(lowerEntrants.length>1)addPairs(state.matches,lowerEntrants,next,'lower');
+    if(upperEntrants.length<2&&lowerEntrants.length<2)return;
   }
 }
 function scoreMatchLabel(match,index){return `Runde ${match.round||1} · ${match.a} gegen ${match.b} · Spiel ${index+1}`}
@@ -1393,8 +1402,9 @@ function tvKnockoutBracketHtml(tournament,{finals=false}={}){
 }
 function tvDoubleBracketHtml(tournament,{finals=false}={}){
   const matches=tournament.matches||[],playerCount=tournament.players?.length||0,upperCount=Math.max(1,Math.ceil(Math.log2(Math.max(2,playerCount)))),lowerCount=Math.max(1,upperCount*2-2),upper=tvBracketRounds(matches,'upper',upperCount,playerCount),lower=tvBracketRounds(matches,'lower',lowerCount,playerCount),grand=matches.filter(match=>match.bracket==='grand');
-  if(finals){const upperFinal=upper.at(-1)?.matches?.at(-1),lowerFinal=lower.at(-1)?.matches?.at(-1),grandFinal=grand.at(-1);return `<div class="tv-final-stage"><section><h3>Gewinner-Finale</h3>${tvBracketGame(upperFinal,'Gewinnerbaum')}</section><section><h3>Verlierer-Finale</h3>${tvBracketGame(lowerFinal,'Verliererbaum')}</section><section class="grand"><h3>Großes Finale</h3>${tvBracketGame(grandFinal,'Finalist')}</section></div>`}
-  return `<div class="tv-double-bracket"><section class="tv-bracket-lane"><div>${tvBracketColumns(upper,{limit:3})||'<p>Noch offen</p>'}</div></section><section class="tv-bracket-lane loser"><div>${tvBracketColumns(lower,{limit:3})||'<p>Beginnt nach den ersten Niederlagen</p>'}</div></section>${grand.length?`<section class="tv-grand-final"><h3>Finale</h3>${tvBracketGame(grand.at(-1),'Finalist')}</section>`:''}</div>`;
+  const upperFinal=matches.filter(match=>match.bracket==='upper'&&match.b!=='Freilos').sort((a,b)=>(+a.round||1)-(+b.round||1)).at(-1),lowerFinal=matches.filter(match=>match.bracket==='lower'&&match.b!=='Freilos').sort((a,b)=>(+a.round||1)-(+b.round||1)).at(-1),grandFinal=grand.at(-1),grandTitle=grand.length>1?'Entscheidungsfinale':'Großes Finale';
+  if(finals)return `<div class="tv-final-stage"><section><h3>Gewinner-Finale</h3>${tvBracketGame(upperFinal,'Gewinnerbaum')}</section><section><h3>Verlierer-Finale</h3>${tvBracketGame(lowerFinal,'Verliererbaum')}</section><section class="grand"><h3>${grandTitle}</h3>${tvBracketGame(grandFinal,'Finalist')}</section></div>`;
+  return `<div class="tv-double-bracket"><section class="tv-bracket-lane"><div>${tvBracketColumns(upper,{limit:3})||'<p>Noch offen</p>'}</div></section><section class="tv-bracket-lane loser"><div>${tvBracketColumns(lower,{limit:3})||'<p>Beginnt nach den ersten Niederlagen</p>'}</div></section>${grand.length?`<section class="tv-grand-final"><h3>${grandTitle}</h3>${tvBracketGame(grandFinal,'Finalist')}</section>`:''}</div>`;
 }
 function tvBracketHtml(tournament,displayMode){
   const mode=tournament.settings?.mode;if(mode==='double')return tvDoubleBracketHtml(tournament,{finals:displayMode==='finals'});if(mode==='knockout')return tvKnockoutBracketHtml(tournament,{finals:displayMode==='finals'});return tvStandingsHtml(tournament);
