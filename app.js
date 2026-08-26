@@ -187,7 +187,7 @@ function applyTriple20Data(data){
   linkKnownMemberIds();
   applyTheme();applyTournamentDefaults();renderPlayers();renderSettingsForm();renderSeasonView();renderTournament();
   if(!$('#shopSection')?.classList.contains('hidden'))renderShop();
-  if(visibleSection==='tvSection')showTv(false);
+  if(visibleSection==='tvSection')refreshVisibleTv();
   else if(visibleSection==='publicHomeSection')showHome(false);
   else if(visibleSection==='authSection')showLogin();
   else if(visibleSection==='settingsSection')showSettings();
@@ -216,6 +216,9 @@ function renderReadonlyMode(){
   $('#showSeasonBtn')?.classList.remove('hidden');
   const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=admin?'Konto':member?'Mein Profil':'Anmelden';
   renderNavigation();
+  // Die Adminrolle wird asynchron geladen. Deshalb die TV-Steuerung auch hier
+  // erneut auswerten, damit sie nicht im vorigen Gast-/Mitgliedsstatus verborgen bleibt.
+  renderTvDisplayControls();
   if(readonly&&$('#settingsSection')&&!$('#settingsSection').classList.contains('hidden'))showLogin();
 }
 function replaceCloudPanelHtml(panel,html){
@@ -808,6 +811,7 @@ function renderTournament(){
   $('#liveCompetitionLabel').textContent=`${competitionLabel().toUpperCase()} · LIVE-TURNIER`;$('#liveTitle').textContent=competitionEventName()||state.settings.name;$('#liveMeta').textContent=`${state.players.length} Teilnehmende · ${modeName()} · ${state.settings.start}`;
   const refreshed=T20Cloud.lastSyncAt?new Date(T20Cloud.lastSyncAt).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'';$('#liveViewerStatus').textContent=refreshed?`Automatisch aktuell · zuletzt ${refreshed} Uhr`:'Automatische Aktualisierung alle 15 Sekunden';
   $('#openTvViewBtn')?.classList.toggle('hidden',!isAdmin());
+  renderTvDisplayControls();
   $('#showLiveQrBtn')?.classList.toggle('hidden',!isAdmin());
   $('#renameEventBtn')?.classList.toggle('hidden',!isAdmin());
   $('#undoLastScoreBtn')?.classList.toggle('hidden',!isAdmin()||!(state.scoreUndoStack||[]).length||!!state.seasonImportedTo);
@@ -1329,28 +1333,93 @@ function renderPublicHome({refreshRegistrations=true}={}){
   if(refreshRegistrations)loadTournamentRegistrations();
 }
 
-let tvRefreshTimer=null,tvWakeLock=null;
+const TV_ALTERNATE_DURATION=60000,TV_AUTO_PAIRINGS_DURATION=45000,TV_AUTO_ALTERNATE_DURATION=15000;
+let tvRefreshTimer=null,tvWakeLock=null,tvDisplayReturnTimer=null;
 function tvPublicUrl(){const url=new URL(location.href);url.search='';url.hash='';url.searchParams.set('bereich','tv');return url.href}
 function tvCompetitionData(key){ensureTournamentDayState();return key===state.activeCompetition?competitionSnapshot(state):competitionSnapshot(state.competitions?.[key]||emptyCompetition())}
 function tvModeLabel(settings={}){return settings.mode==='swiss'?'Schweizer System':settings.mode==='roundrobin'?'Jeder gegen jeden':settings.mode==='double'?'Doppel-K.-o.':settings.mode==='knockout'?'K.-o.':'Turnier'}
-function tvCompetitionHtml(key,tournament){
+function normalizedTvDisplayMode(mode=state.tvDisplayMode){return['matches','standings','bracket','finals','auto'].includes(mode)?mode:'matches'}
+function liveTvCompetitions(){return['men','women'].map(key=>({key,tournament:tvCompetitionData(key)})).filter(item=>item.tournament.started)}
+function tvHasElimination(live=liveTvCompetitions()){return live.some(({tournament})=>['knockout','double'].includes(tournament.settings?.mode))}
+function tvHasDoubleElimination(live=liveTvCompetitions()){return live.some(({tournament})=>tournament.settings?.mode==='double')}
+function tvAlternateMode(live=liveTvCompetitions()){return tvHasElimination(live)?'bracket':'standings'}
+function effectiveTvDisplayMode(now=Date.now()){
+  const mode=normalizedTvDisplayMode();
+  if(mode==='bracket'&&!tvHasElimination())return'matches';
+  if(mode==='finals'&&!tvHasDoubleElimination())return'matches';
+  if(mode==='standings'&&tvHasElimination())return'matches';
+  if(['standings','bracket','finals'].includes(mode))return Number(state.tvDisplayUntil||0)>now?mode:'matches';
+  if(mode==='auto'){const cycle=TV_AUTO_PAIRINGS_DURATION+TV_AUTO_ALTERNATE_DURATION,elapsed=Math.max(0,now-Number(state.tvDisplayChangedAt||now))%cycle;return elapsed<TV_AUTO_PAIRINGS_DURATION?'matches':tvAlternateMode()}
+  return'matches';
+}
+function renderTvDisplayControls(){
+  const controls=$('#tvDisplayControls');if(!controls)return;
+  const live=liveTvCompetitions(),activeTournament=state.started?{key:state.activeCompetition||'men',tournament:competitionSnapshot(state)}:null,controlCompetitions=live.length?live:(activeTournament?[activeTournament]:[]),hasLive=controlCompetitions.length>0,hasElimination=tvHasElimination(controlCompetitions),hasDouble=tvHasDoubleElimination(controlCompetitions);controls.classList.toggle('hidden',!isAdmin()||!hasLive);if(!isAdmin()||!hasLive)return;
+  controls.querySelector('[data-tv-display="standings"]')?.classList.toggle('hidden',hasElimination);
+  controls.querySelector('[data-tv-display="bracket"]')?.classList.toggle('hidden',!hasElimination);
+  controls.querySelector('[data-tv-display="finals"]')?.classList.toggle('hidden',!hasDouble);
+  const stored=normalizedTvDisplayMode(),active=['standings','bracket','finals'].includes(stored)&&effectiveTvDisplayMode()==='matches'?'matches':stored;controls.querySelectorAll('[data-tv-display]').forEach(button=>button.classList.toggle('active',button.dataset.tvDisplay===active));
+  const help=$('#tvDisplayHelp');if(help)help.textContent=hasElimination?'„Raster“ und „Finalphase“ kehren nach 60 Sekunden zu den Paarungen zurück.':'„Top 10“ kehrt nach 60 Sekunden zu den Paarungen zurück.';
+}
+function scheduleTvDisplayReturn(){
+  clearTimeout(tvDisplayReturnTimer);tvDisplayReturnTimer=null;
+  if(!['standings','bracket','finals'].includes(normalizedTvDisplayMode()))return;
+  const remaining=Math.max(0,Number(state.tvDisplayUntil||0)-Date.now());tvDisplayReturnTimer=setTimeout(()=>{renderTvDisplayControls();renderTvView()},remaining+50);
+}
+function setTvDisplayMode(mode){
+  if(!isAdmin())return;state.tvDisplayMode=normalizedTvDisplayMode(mode);state.tvDisplayChangedAt=Date.now();if(['standings','bracket','finals'].includes(state.tvDisplayMode))state.tvDisplayUntil=Date.now()+TV_ALTERNATE_DURATION;else delete state.tvDisplayUntil;save();renderTvDisplayControls();renderTvView();scheduleTvDisplayReturn();
+}
+function tvStandingsHtml(tournament){
+  const rows=standingsFor(tournament.players||[],tournament.matches||[]).slice(0,10);if(!rows.length)return'<div class="tv-empty"><div><b>Noch keine Tabelle</b><span>Sobald Spieler eingetragen sind, erscheint hier die Rangliste.</span></div></div>';
+  return `<div class="tv-table-wrap"><table class="tv-standings"><thead><tr><th>#</th><th>Spieler</th><th>Sp.</th><th>S</th><th>N</th><th>Legs</th><th>Pkt.</th></tr></thead><tbody>${rows.map((row,index)=>`<tr><td class="tv-rank">${index+1}</td><td>${esc(row.name)}</td><td>${row.p}</td><td>${row.w}</td><td>${row.l}</td><td>${row.lf}:${row.la}</td><td><b>${row.pts}</b></td></tr>`).join('')}</tbody></table></div>`;
+}
+function tvBracketGame(match,label='Noch offen'){
+  if(!match)return`<div class="tv-bracket-game placeholder"><span>${esc(label)}</span><b>–</b><span>${esc(label)}</span><b>–</b></div>`;
+  const done=match.sa!==null,winner=done?(match.sa>match.sb?'a':'b'):'';
+  return `<div class="tv-bracket-game ${done?'done':'open'}"><span class="${winner==='a'?'winner':''}">${esc(match.a||label)}</span><b>${done?match.sa:'–'}</b><span class="${winner==='b'?'winner':''}">${esc(match.b||label)}</span><b>${done?match.sb:'–'}</b></div>`;
+}
+function tvBracketRounds(matches=[],kind='upper',stageCount=0,playerCount=0){
+  const filtered=matches.filter(match=>match.bracket===kind),roundNumbers=[...new Set(filtered.map(match=>+match.round||1))].sort((a,b)=>a-b),count=Math.max(stageCount,roundNumbers.length);
+  return Array.from({length:count},(_,index)=>{const round=roundNumbers[index],planned=kind==='lower'?Math.max(1,2**(Math.max(1,Math.ceil(Math.log2(playerCount)))-1-Math.ceil((index+1)/2))):Math.max(1,Math.ceil(playerCount/2**(index+1)));return{round,label:kind==='lower'?`Verliererrunde ${index+1}`:index===count-1?'Finale':`Runde ${index+1}`,matches:round===undefined?[]:filtered.filter(match=>(+match.round||1)===round),planned}});
+}
+function tvBracketColumns(rounds,{finals=false,limit=5}={}){
+  const lastActual=rounds.reduce((last,stage,index)=>stage.matches.length?index:last,-1),start=lastActual<0?0:Math.max(0,Math.min(Math.max(0,rounds.length-limit),lastActual-1)),visible=finals?rounds.slice(-2):rounds.slice(start,start+limit);
+  return visible.map(stage=>`<section class="tv-bracket-round ${Math.max(stage.matches.length,stage.planned||0)>4?'dense':''}"><h3>${esc(stage.label)}</h3><div>${stage.matches.length?stage.matches.map(match=>tvBracketGame(match)).join(''):Array.from({length:stage.planned||1},()=>tvBracketGame(null,stage.label==='Finale'?'Finalist':'Sieger aus Vorrunde')).join('')}</div></section>`).join('');
+}
+function tvKnockoutBracketHtml(tournament,{finals=false}={}){
+  const playerCount=tournament.players?.length||0,total=Math.max(1,Math.ceil(Math.log2(Math.max(2,playerCount)))),rounds=tvBracketRounds(tournament.matches||[],'upper',total,playerCount);
+  if(!rounds.length)return'<div class="tv-empty"><div><b>Noch kein Raster</b><span>Der Turnierbaum erscheint nach der Auslosung.</span></div></div>';
+  return `<div class="tv-ko-bracket ${finals?'finals':''}">${tvBracketColumns(rounds,{finals,limit:5})}</div>`;
+}
+function tvDoubleBracketHtml(tournament,{finals=false}={}){
+  const matches=tournament.matches||[],playerCount=tournament.players?.length||0,upperCount=Math.max(1,Math.ceil(Math.log2(Math.max(2,playerCount)))),lowerCount=Math.max(1,upperCount*2-2),upper=tvBracketRounds(matches,'upper',upperCount,playerCount),lower=tvBracketRounds(matches,'lower',lowerCount,playerCount),grand=matches.filter(match=>match.bracket==='grand');
+  if(finals){const upperFinal=upper.at(-1)?.matches?.at(-1),lowerFinal=lower.at(-1)?.matches?.at(-1),grandFinal=grand.at(-1);return `<div class="tv-final-stage"><section><h3>Gewinner-Finale</h3>${tvBracketGame(upperFinal,'Gewinnerbaum')}</section><section><h3>Verlierer-Finale</h3>${tvBracketGame(lowerFinal,'Verliererbaum')}</section><section class="grand"><h3>Großes Finale</h3>${tvBracketGame(grandFinal,'Finalist')}</section></div>`}
+  return `<div class="tv-double-bracket"><section class="tv-bracket-lane"><h3>Gewinnerrunde</h3><div>${tvBracketColumns(upper,{limit:3})||'<p>Noch offen</p>'}</div></section><section class="tv-bracket-lane loser"><h3>Verliererrunde</h3><div>${tvBracketColumns(lower,{limit:3})||'<p>Beginnt nach den ersten Niederlagen</p>'}</div></section>${grand.length?`<section class="tv-grand-final"><h3>Finale</h3>${tvBracketGame(grand.at(-1),'Finalist')}</section>`:''}</div>`;
+}
+function tvBracketHtml(tournament,displayMode){
+  const mode=tournament.settings?.mode;if(mode==='double')return tvDoubleBracketHtml(tournament,{finals:displayMode==='finals'});if(mode==='knockout')return tvKnockoutBracketHtml(tournament,{finals:displayMode==='finals'});return tvStandingsHtml(tournament);
+}
+function tvCompetitionHtml(key,tournament,displayMode){
   const matches=(tournament.matches||[]).filter(match=>match.b!=='Freilos'),open=matches.filter(match=>match.sa===null),rounds=open.map(match=>+match.round||1),currentRound=rounds.length?Math.min(...rounds):Math.max(1,...matches.map(match=>+match.round||1)),current=open.filter(match=>(+match.round||1)===currentRound),done=matches.filter(match=>match.sa!==null).length,progress=matches.length?Math.round(done/matches.length*100):0,title=competitionEventName(tournament),mode=tvModeLabel(tournament.settings);
-  const matchHtml=current.length?`<div class="tv-match-grid">${current.map(match=>`<article class="tv-match"><span>${esc(match.a)}</span><b>VS</b><span>${esc(match.b)}</span></article>`).join('')}</div>`:`<div class="tv-empty"><div><b>${matches.length?'Bewerb abgeschlossen':'Noch keine Paarungen'}</b><span>${matches.length?'Alle Ergebnisse dieser Konkurrenz sind eingetragen.':'Die Turnierleitung bereitet den Bewerb vor.'}</span></div></div>`;
-  return `<article class="tv-competition"><div class="tv-competition-head"><div><span class="tv-competition-label">${esc(competitionLabel(key).toUpperCase())}</span><h2>${esc(title)}</h2></div><div class="tv-round"><span>${open.length?'RUNDE':'STATUS'}</span><b>${open.length?currentRound:'✓'}</b></div></div><div class="tv-progress"><i style="width:${progress}%"></i></div><div class="tv-meta"><span>${esc(mode)} · ${tournament.players?.length||0} Teilnehmende</span><span>${done}/${matches.length} Spiele</span></div>${matchHtml}</article>`;
+  const bracketDisplay=['bracket','finals'].includes(displayMode)&&['knockout','double'].includes(tournament.settings?.mode),content=bracketDisplay?tvBracketHtml(tournament,displayMode):displayMode==='standings'?tvStandingsHtml(tournament):current.length?`<div class="tv-match-grid">${current.map(match=>`<article class="tv-match"><span>${esc(match.a)}</span><b>VS</b><span>${esc(match.b)}</span></article>`).join('')}</div>`:`<div class="tv-empty"><div><b>${matches.length?'Bewerb abgeschlossen':'Noch keine Paarungen'}</b><span>${matches.length?'Alle Ergebnisse dieser Konkurrenz sind eingetragen.':'Die Turnierleitung bereitet den Bewerb vor.'}</span></div></div>`;
+  const viewName=displayMode==='standings'?'TOP 10':displayMode==='finals'?'FINALPHASE':displayMode==='bracket'?'RASTER':'',badge=viewName?`<div class="tv-round tv-view-badge"><span>ANZEIGE</span><b>${viewName}</b></div>`:`<div class="tv-round"><span>${open.length?'RUNDE':'STATUS'}</span><b>${open.length?currentRound:'✓'}</b></div>`;
+  return `<article class="tv-competition${displayMode==='standings'?' tv-standings-view':''}${bracketDisplay?' tv-bracket-view':''}"><div class="tv-competition-head"><div><span class="tv-competition-label">${esc(competitionLabel(key).toUpperCase())}</span><h2>${esc(title)}</h2></div>${badge}</div><div class="tv-progress"><i style="width:${progress}%"></i></div><div class="tv-meta"><span>${esc(mode)} · ${tournament.players?.length||0} Teilnehmende</span><span>${done}/${matches.length} Spiele</span></div>${content}</article>`;
 }
 function renderTvView(){
   const container=$('#tvCompetitions');if(!container)return;
-  const live=['men','women'].map(key=>({key,tournament:tvCompetitionData(key)})).filter(item=>item.tournament.started);
-  container.classList.toggle('single',live.length===1);container.innerHTML=live.length?live.map(item=>tvCompetitionHtml(item.key,item.tournament)).join(''):'<div class="tv-no-live"><div><b>Derzeit läuft kein Turnier</b><p>Die Anzeige aktualisiert sich automatisch, sobald ein Bewerb gestartet wird.</p></div></div>';
+  const live=liveTvCompetitions();
+  const displayMode=effectiveTvDisplayMode();container.classList.toggle('single',live.length===1);container.innerHTML=live.length?live.map(item=>tvCompetitionHtml(item.key,item.tournament,displayMode)).join(''):'<div class="tv-no-live"><div><b>Derzeit läuft kein Turnier</b><p>Die Anzeige aktualisiert sich automatisch, sobald ein Bewerb gestartet wird.</p></div></div>';
+  const footerMessage=$('#tvFooterMessage');if(footerMessage)footerMessage.textContent=displayMode==='standings'?'Aktuelle Top 10 der laufenden Bewerbe':displayMode==='bracket'?'Aktueller Turnierraster':displayMode==='finals'?'Entscheidende Spiele der Finalphase':'Offene Paarungen der aktuellen Runde';
   const updated=$('#tvUpdatedAt'),stamp=T20Cloud.lastSyncAt?new Date(T20Cloud.lastSyncAt):new Date();if(updated)updated.textContent=`Automatisch aktuell · ${stamp.toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit',second:'2-digit'})} Uhr`;
 }
 function stopTvRefresh(){if(tvRefreshTimer){clearInterval(tvRefreshTimer);tvRefreshTimer=null}}
-function startTvRefresh(){stopTvRefresh();tvRefreshTimer=setInterval(()=>{if($('#tvSection')?.classList.contains('hidden'))return;T20Cloud.loadCloud().catch(error=>console.warn('TV-Daten konnten nicht aktualisiert werden:',error))},3000)}
+function startTvRefresh(){stopTvRefresh();tvRefreshTimer=setInterval(()=>{if($('#tvSection')?.classList.contains('hidden'))return;renderTvView();T20Cloud.loadCloud().catch(error=>console.warn('TV-Daten konnten nicht aktualisiert werden:',error))},3000)}
 async function toggleTvFullscreen(){
   try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen()}catch(error){console.warn('Vollbild konnte nicht aktiviert werden:',error)}
   if('wakeLock'in navigator&&!tvWakeLock)try{tvWakeLock=await navigator.wakeLock.request('screen');tvWakeLock.addEventListener('release',()=>{tvWakeLock=null})}catch(error){console.warn('Bildschirm-Wachhaltefunktion ist nicht verfügbar:',error)}
 }
 function showTv(updateUrl=true){hideMainSections();document.body.classList.add('tv-mode');$('#tvSection')?.classList.remove('hidden');renderTvView();startTvRefresh();if(updateUrl)updateAppUrl('tv')}
+function refreshVisibleTv(){document.body.classList.add('tv-mode');$('#tvSection')?.classList.remove('hidden');renderTvView();if(!tvRefreshTimer)startTvRefresh()}
 
 function updateAppUrl(area,extras={},replace=false){
   if(applyingRoute)return;
@@ -1613,6 +1682,7 @@ document.addEventListener('click',event=>{if(event.target.id==='closeResultGraph
 document.addEventListener('click',e=>{const modeButton=e.target.closest('[data-tournament-mode]');if(modeButton){setTournamentViewMode(modeButton.dataset.tournamentMode);return}const competitionButton=e.target.closest('[data-competition]');if(competitionButton){const liveRoute=new URLSearchParams(location.search).get('bereich')==='live';if(liveRoute||!isAdmin())showLive(competitionButton.dataset.competition);else setActiveCompetition(competitionButton.dataset.competition)}});
 $('#showLiveQrBtn')?.addEventListener('click',openLiveQr);
 $('#openTvViewBtn')?.addEventListener('click',()=>window.open(tvPublicUrl(),'_blank','noopener'));
+$('#tvDisplayControls')?.addEventListener('click',event=>{const button=event.target.closest('[data-tv-display]');if(button)setTvDisplayMode(button.dataset.tvDisplay)});
 $('#tvFullscreenBtn')?.addEventListener('click',toggleTvFullscreen);
 $('#tvRefreshBtn')?.addEventListener('click',()=>T20Cloud.loadCloud().then(renderTvView).catch(error=>console.warn('TV-Aktualisierung fehlgeschlagen:',error)));
 window.addEventListener('storage',event=>{if(event.key!=='dartTournament'||$('#tvSection')?.classList.contains('hidden')||!event.newValue)return;const next=safeJsonParse(event.newValue);if(!next)return;Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,next);ensureTournamentDayState();loadActiveCompetition();renderTvView()});
