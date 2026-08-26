@@ -187,7 +187,7 @@ function applyTriple20Data(data){
   linkKnownMemberIds();
   applyTheme();applyTournamentDefaults();renderPlayers();renderSettingsForm();renderSeasonView();renderTournament();
   if(!$('#shopSection')?.classList.contains('hidden'))renderShop();
-  if(visibleSection==='tvSection')showTv(false);
+  if(visibleSection==='tvSection')refreshVisibleTv();
   else if(visibleSection==='publicHomeSection')showHome(false);
   else if(visibleSection==='authSection')showLogin();
   else if(visibleSection==='settingsSection')showSettings();
@@ -1363,12 +1363,13 @@ function tvCompetitionHtml(key,tournament,displayMode){
   const matches=(tournament.matches||[]).filter(match=>match.b!=='Freilos'),open=matches.filter(match=>match.sa===null),rounds=open.map(match=>+match.round||1),currentRound=rounds.length?Math.min(...rounds):Math.max(1,...matches.map(match=>+match.round||1)),current=open.filter(match=>(+match.round||1)===currentRound),done=matches.filter(match=>match.sa!==null).length,progress=matches.length?Math.round(done/matches.length*100):0,title=competitionEventName(tournament),mode=tvModeLabel(tournament.settings);
   const content=displayMode==='standings'?tvStandingsHtml(tournament):current.length?`<div class="tv-match-grid">${current.map(match=>`<article class="tv-match"><span>${esc(match.a)}</span><b>VS</b><span>${esc(match.b)}</span></article>`).join('')}</div>`:`<div class="tv-empty"><div><b>${matches.length?'Bewerb abgeschlossen':'Noch keine Paarungen'}</b><span>${matches.length?'Alle Ergebnisse dieser Konkurrenz sind eingetragen.':'Die Turnierleitung bereitet den Bewerb vor.'}</span></div></div>`;
   const badge=displayMode==='standings'?'<div class="tv-round tv-view-badge"><span>ANZEIGE</span><b>TOP 10</b></div>':`<div class="tv-round"><span>${open.length?'RUNDE':'STATUS'}</span><b>${open.length?currentRound:'✓'}</b></div>`;
-  return `<article class="tv-competition"><div class="tv-competition-head"><div><span class="tv-competition-label">${esc(competitionLabel(key).toUpperCase())}</span><h2>${esc(title)}</h2></div>${badge}</div><div class="tv-progress"><i style="width:${progress}%"></i></div><div class="tv-meta"><span>${esc(mode)} · ${tournament.players?.length||0} Teilnehmende</span><span>${done}/${matches.length} Spiele</span></div>${content}</article>`;
+  return `<article class="tv-competition${displayMode==='standings'?' tv-standings-view':''}"><div class="tv-competition-head"><div><span class="tv-competition-label">${esc(competitionLabel(key).toUpperCase())}</span><h2>${esc(title)}</h2></div>${badge}</div><div class="tv-progress"><i style="width:${progress}%"></i></div><div class="tv-meta"><span>${esc(mode)} · ${tournament.players?.length||0} Teilnehmende</span><span>${done}/${matches.length} Spiele</span></div>${content}</article>`;
 }
 function renderTvView(){
   const container=$('#tvCompetitions');if(!container)return;
   const live=['men','women'].map(key=>({key,tournament:tvCompetitionData(key)})).filter(item=>item.tournament.started);
   const displayMode=effectiveTvDisplayMode();container.classList.toggle('single',live.length===1);container.innerHTML=live.length?live.map(item=>tvCompetitionHtml(item.key,item.tournament,displayMode)).join(''):'<div class="tv-no-live"><div><b>Derzeit läuft kein Turnier</b><p>Die Anzeige aktualisiert sich automatisch, sobald ein Bewerb gestartet wird.</p></div></div>';
+  const footerMessage=$('#tvFooterMessage');if(footerMessage)footerMessage.textContent=displayMode==='standings'?'Aktuelle Top 10 der laufenden Bewerbe':'Offene Paarungen der aktuellen Runde';
   const updated=$('#tvUpdatedAt'),stamp=T20Cloud.lastSyncAt?new Date(T20Cloud.lastSyncAt):new Date();if(updated)updated.textContent=`Automatisch aktuell · ${stamp.toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit',second:'2-digit'})} Uhr`;
 }
 function stopTvRefresh(){if(tvRefreshTimer){clearInterval(tvRefreshTimer);tvRefreshTimer=null}}
@@ -1378,6 +1379,7 @@ async function toggleTvFullscreen(){
   if('wakeLock'in navigator&&!tvWakeLock)try{tvWakeLock=await navigator.wakeLock.request('screen');tvWakeLock.addEventListener('release',()=>{tvWakeLock=null})}catch(error){console.warn('Bildschirm-Wachhaltefunktion ist nicht verfügbar:',error)}
 }
 function showTv(updateUrl=true){hideMainSections();document.body.classList.add('tv-mode');$('#tvSection')?.classList.remove('hidden');renderTvView();startTvRefresh();if(updateUrl)updateAppUrl('tv')}
+function refreshVisibleTv(){document.body.classList.add('tv-mode');$('#tvSection')?.classList.remove('hidden');renderTvView();if(!tvRefreshTimer)startTvRefresh()}
 
 function updateAppUrl(area,extras={},replace=false){
   if(applyingRoute)return;

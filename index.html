@@ -34,7 +34,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260826-21">
+  <link rel="stylesheet" href="styles.css?v=20260826-23">
 </head>
 <body>
   <header class="hero">
@@ -86,7 +86,7 @@
         <div class="tv-header-actions"><button id="tvRefreshBtn" type="button">Aktualisieren</button><button id="tvFullscreenBtn" type="button">Vollbild</button></div>
       </header>
       <div id="tvCompetitions" class="tv-competitions" aria-live="polite"></div>
-      <footer class="tv-footer"><span>Offene Paarungen der aktuellen Runde</span><strong>Good darts!</strong></footer>
+      <footer class="tv-footer"><span id="tvFooterMessage">Offene Paarungen der aktuellen Runde</span><strong>Good darts!</strong></footer>
     </section>
 
     <section id="playerProfileSection" class="public-player-profile hidden" aria-labelledby="playerProfileTitle">
@@ -240,7 +240,7 @@
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <script src="app.js?v=20260826-21"></script>
-  <script src="pwa.js?v=20260826-21"></script>
+  <script src="app.js?v=20260826-23"></script>
+  <script src="pwa.js?v=20260826-23"></script>
 </body>
 </html>
