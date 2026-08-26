@@ -1376,7 +1376,7 @@ function tvStandingsHtml(tournament){
 function tvBracketGame(match,label='Noch offen'){
   if(!match)return`<div class="tv-bracket-game placeholder"><span>${esc(label)}</span><b>–</b><span>${esc(label)}</span><b>–</b></div>`;
   const done=match.sa!==null,winner=done?(match.sa>match.sb?'a':'b'):'';
-  return `<div class="tv-bracket-game ${done?'done':'open'}"><span class="${winner==='a'?'winner':''}">${esc(match.a||label)}</span><b>${done?match.sa:'–'}</b><span class="${winner==='b'?'winner':''}">${esc(match.b||label)}</span><b>${done?match.sb:'–'}</b></div>`;
+  return `<div class="tv-bracket-game ${done?'done':'open'}"><span class="${winner==='a'?'is-winner':''}">${esc(match.a||label)}</span><b>${done?match.sa:'–'}</b><span class="${winner==='b'?'is-winner':''}">${esc(match.b||label)}</span><b>${done?match.sb:'–'}</b></div>`;
 }
 function tvBracketRounds(matches=[],kind='upper',stageCount=0,playerCount=0){
   const filtered=matches.filter(match=>match.bracket===kind),roundNumbers=[...new Set(filtered.map(match=>+match.round||1))].sort((a,b)=>a-b),count=Math.max(stageCount,roundNumbers.length);
@@ -1384,7 +1384,7 @@ function tvBracketRounds(matches=[],kind='upper',stageCount=0,playerCount=0){
 }
 function tvBracketColumns(rounds,{finals=false,limit=5}={}){
   const lastActual=rounds.reduce((last,stage,index)=>stage.matches.length?index:last,-1),start=lastActual<0?0:Math.max(0,Math.min(Math.max(0,rounds.length-limit),lastActual-1)),visible=finals?rounds.slice(-2):rounds.slice(start,start+limit);
-  return visible.map(stage=>`<section class="tv-bracket-round ${Math.max(stage.matches.length,stage.planned||0)>4?'dense':''}"><h3>${esc(stage.label)}</h3><div>${stage.matches.length?stage.matches.map(match=>tvBracketGame(match)).join(''):Array.from({length:stage.planned||1},()=>tvBracketGame(null,stage.label==='Finale'?'Finalist':'Sieger aus Vorrunde')).join('')}</div></section>`).join('');
+  return visible.map(stage=>{const placeholder=stage.label==='Finale'?'Finalist':stage.label.startsWith('Verliererrunde')?'Teilnehmer aus Vorrunde':'Sieger aus Vorrunde';return `<section class="tv-bracket-round ${Math.max(stage.matches.length,stage.planned||0)>4?'dense':''}"><h3>${esc(stage.label)}</h3><div>${stage.matches.length?stage.matches.map(match=>tvBracketGame(match)).join(''):Array.from({length:stage.planned||1},()=>tvBracketGame(null,placeholder)).join('')}</div></section>`}).join('');
 }
 function tvKnockoutBracketHtml(tournament,{finals=false}={}){
   const playerCount=tournament.players?.length||0,total=Math.max(1,Math.ceil(Math.log2(Math.max(2,playerCount)))),rounds=tvBracketRounds(tournament.matches||[],'upper',total,playerCount);
