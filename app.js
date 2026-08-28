@@ -1375,8 +1375,8 @@ function scheduleTvDisplayReturn(){
   if(!['standings','bracket','finals'].includes(normalizedTvDisplayMode()))return;
   const remaining=Math.max(0,Number(state.tvDisplayUntil||0)-Date.now());tvDisplayReturnTimer=setTimeout(()=>{renderTvDisplayControls();renderTvView()},remaining+50);
 }
-function setTvDisplayMode(mode){
-  if(!isAdmin())return;state.tvDisplayMode=normalizedTvDisplayMode(mode);state.tvDisplayChangedAt=Date.now();if(['standings','bracket','finals'].includes(state.tvDisplayMode))state.tvDisplayUntil=Date.now()+TV_ALTERNATE_DURATION;else delete state.tvDisplayUntil;save();renderTvDisplayControls();renderTvView();scheduleTvDisplayReturn();
+async function setTvDisplayMode(mode){
+  if(!isAdmin())return;state.tvDisplayMode=normalizedTvDisplayMode(mode);state.tvDisplayChangedAt=Date.now();if(['standings','bracket','finals'].includes(state.tvDisplayMode))state.tvDisplayUntil=Date.now()+TV_ALTERNATE_DURATION;else delete state.tvDisplayUntil;save();renderTvDisplayControls();renderTvView();scheduleTvDisplayReturn();await publishLiveTournament({notifyOnError:true});
 }
 function tvStandingsHtml(tournament){
   const rows=standingsFor(tournament.players||[],tournament.matches||[]).slice(0,10);if(!rows.length)return'<div class="tv-empty"><div><b>Noch keine Tabelle</b><span>Sobald Spieler eingetragen sind, erscheint hier die Rangliste.</span></div></div>';
