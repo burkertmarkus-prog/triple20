@@ -34,7 +34,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260828-32">
+  <link rel="stylesheet" href="styles.css?v=20260828-36">
 </head>
 <body>
   <header class="hero">
@@ -227,7 +227,8 @@
     </section>
 
     <section id="tournamentSection" class="hidden">
-      <div class="tournament-head"><div><p class="eyebrow" id="liveCompetitionLabel">LIVE-TURNIER</p><h2 id="liveTitle"></h2><p id="liveMeta"></p><p id="liveViewerStatus" class="live-viewer-status"></p><div class="live-tournament-actions"><button id="openTvViewBtn" class="secondary hidden" type="button">TV-Ansicht öffnen</button><button id="showLiveQrBtn" class="secondary hidden" type="button">QR-Code anzeigen</button><button id="renameEventBtn" class="secondary hidden" type="button">Spieltag umbenennen</button><button id="undoLastScoreBtn" class="secondary hidden" type="button">Letztes Ergebnis rückgängig</button><button id="endTournamentBtn" class="danger hidden" type="button">Turnier beenden</button></div><div id="tvDisplayControls" class="tv-display-controls hidden"><strong>TV-Ansicht steuern</strong><span>Anzeige auf dem verbundenen Fernseher</span><div><button type="button" data-tv-display="matches">Paarungen</button><button type="button" data-tv-display="standings">Top 10</button><button type="button" data-tv-display="bracket">Raster</button><button type="button" data-tv-display="finals">Finalphase</button><button type="button" data-tv-display="auto">Automatisch</button></div><small id="tvDisplayHelp">Die automatische Anzeige wechselt passend zum Turniermodus.</small></div></div><div class="progress-ring"><strong id="progressText">0%</strong><span>gespielt</span></div></div>
+      <div class="tournament-head"><div><p class="eyebrow" id="liveCompetitionLabel">LIVE-TURNIER</p><h2 id="liveTitle"></h2><p id="liveMeta"></p><p id="liveViewerStatus" class="live-viewer-status"></p><div class="live-tournament-actions"><details id="tournamentActionsMenu" class="tournament-actions-menu hidden"><summary>Turnier-Aktionen</summary><div><button id="openTvViewBtn" class="secondary hidden" type="button">TV-Ansicht öffnen</button><button id="showLiveQrBtn" class="secondary hidden" type="button">QR-Code anzeigen</button><button id="renameEventBtn" class="secondary hidden" type="button">Spieltag umbenennen</button><button id="undoLastScoreBtn" class="secondary hidden" type="button">Letztes Ergebnis rückgängig</button><button id="endTournamentBtn" class="danger hidden" type="button">Turnier beenden</button></div></details></div></div><div class="progress-ring"><strong id="progressText">0%</strong><span>gespielt</span></div></div>
+      <div id="tvDisplayControls" class="tv-display-controls hidden"><strong>TV-Ansicht steuern</strong><span>Anzeige auf dem verbundenen Fernseher</span><div><button type="button" data-tv-display="matches">Paarungen</button><button type="button" data-tv-display="standings">Top 10</button><button type="button" data-tv-display="bracket">Raster</button><button type="button" data-tv-display="finals">Finalphase</button><button type="button" data-tv-display="auto">Automatisch</button></div><small id="tvDisplayHelp">Die automatische Anzeige wechselt passend zum Turniermodus.</small></div>
       <div id="withdrawCard" class="withdraw-card hidden"></div>
       <div class="tabs"><button class="tab active" data-tab="matches">Spielplan</button><button id="bracketTab" class="tab hidden" data-tab="bracket">Turnierbaum</button><button class="tab" data-tab="table">Tabelle</button></div>
       <div id="matchesView"><div id="matchList" class="match-list"></div><section id="scoreHistoryCard" class="score-history-card hidden"></section></div>
@@ -240,7 +241,7 @@
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <script src="app.js?v=20260828-32"></script>
-  <script src="pwa.js?v=20260828-32"></script>
+  <script src="app.js?v=20260828-36"></script>
+  <script src="pwa.js?v=20260828-36"></script>
 </body>
 </html>
