@@ -94,8 +94,7 @@ function save(){
 async function publishLiveTournament({notifyOnError=false}={}){
   if(!isAdmin())return false;
   if(!T20Cloud.client){if(notifyOnError)alert('Die Cloud-Verbindung ist noch nicht bereit. Bitte warte kurz und starte das Turnier anschließend erneut.');return false}
-  await T20Cloud.syncAll({force:true});
-  const published=!T20Cloud.pendingSync;
+  const published=await T20Cloud.syncDataKeys(['dartTournament'],{force:true});
   if(!published&&notifyOnError)alert('Das Turnier wurde auf diesem PC gestartet, konnte aber nicht in die Cloud veröffentlicht werden. Bitte prüfe die Internetverbindung und den Statusbalken.');
   return published;
 }
@@ -407,7 +406,7 @@ function cleanAuthRedirectUrl(){
 window.T20Cloud={
   authResolved:false,
   liveTournamentState:null,tournamentViewMode:'local',
-  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,sessionProcessingPromise:null,authRedirectSessionPromise:null,authRedirectSessionResolve:null,loginBusy:false,magicLinkBusy:false,otpVerifyBusy:false,otpEmail:'',profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),lastSeenTimer:null,lastSeenVisibilityBound:false,authMessage:'',authError:'',loadBusy:false,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
+  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,syncChain:null,pendingSyncKeys:new Set(),liveLoadBusy:false,authBusy:false,sessionProcessingPromise:null,authRedirectSessionPromise:null,authRedirectSessionResolve:null,loginBusy:false,magicLinkBusy:false,otpVerifyBusy:false,otpEmail:'',profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),lastSeenTimer:null,lastSeenVisibilityBound:false,authMessage:'',authError:'',loadBusy:false,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
   async finishAuthRedirect(){cleanAuthRedirectUrl();this.authHandoffActive=false;this.authMessage='Anmeldung erfolgreich. Du kannst diesen Tab weiterverwenden.';showLogin();renderCloudPanel()},
   async init(){
     if(this.initPromise)return this.initPromise;
@@ -619,7 +618,7 @@ window.T20Cloud={
     if(state.memberLocal)replaceTournamentState({players:[],playerProfileIds:{},started:false,matches:[],settings:{},guestLocal:true});
     renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only');showHome();
   },
-  async fetchCloud(){const client=requireSupabaseClient();const {data,error}=await client.from('triple20_data').select('data_key,data,updated_at').in('data_key',CLOUD_DATA_KEYS);if(error)throw error;this.online=true;return data||[]},
+  async fetchCloud(keys=CLOUD_DATA_KEYS){const requested=[...new Set(keys)].filter(key=>CLOUD_DATA_KEYS.includes(key));if(!requested.length)return[];const client=requireSupabaseClient(),result=await withTimeout(client.from('triple20_data').select('data_key,data,updated_at').in('data_key',requested),10000,'Die Cloud antwortet beim Laden nicht rechtzeitig.');const {data,error}=result;if(error)throw error;this.online=true;return data||[]},
   rowsToObject(rows){return Object.fromEntries(CLOUD_DATA_KEYS.map(k=>{const row=rows.find(r=>r.data_key===k);if(row?.updated_at)this.cloudUpdated[k]=row.updated_at;return[k,row?row.data:null]}))},
   async loadCloud({initial=false}={}){
     if(this.loadBusy)return;
@@ -638,35 +637,35 @@ window.T20Cloud={
     }catch(e){console.warn('Cloud laden fehlgeschlagen',e);this.online=false;setSyncStatus('Offline – lokale Kopie','offline')}
     finally{this.loadBusy=false}
   },
-  queueSync(key){if(!this.isAdmin)return;this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');clearTimeout(this.syncTimer);if(!this.client||!navigator.onLine){setSyncStatus('Offline – sicher auf diesem Gerät gespeichert','offline');return}setSyncStatus('Änderungen werden gespeichert …','saving');this.syncTimer=setTimeout(()=>this.syncAll(),700)},
-  async syncAll({force=false}={}){
-    if(!this.isAdmin||!this.client)return;
-    clearTimeout(this.syncTimer);
-    this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');
-    setSyncStatus('Wird gespeichert …','saving');
+  async loadLiveTournament(){
+    if(this.liveLoadBusy||!this.client)return;
+    this.liveLoadBusy=true;
     try{
-      const rows=await this.fetchCloud();
-      if(!force){
-        const changed=rows.some(r=>this.cloudUpdated[r.data_key]&&r.updated_at&&r.updated_at!==this.cloudUpdated[r.data_key]);
-        if(changed){
-          setSyncStatus('Konflikt erkannt','conflict');
-          const choice=prompt('Die Online-Daten wurden zwischenzeitlich auf einem anderen Gerät geändert.\n\n1 = Online-Version laden\n2 = lokale Version als JSON sichern\n3 = lokale Version trotzdem überschreiben','1');
-          if(choice==='1'){await this.loadCloudConfirmed();return}
-          if(choice==='2'){backupTriple20Data('triple20_konflikt_lokal');return}
-          if(choice!=='3'||!confirm('Lokale Version wirklich trotzdem in der Cloud überschreiben?'))return;
-          backupTriple20Data('triple20_konflikt_lokal');
-        }
-      }
-      const payload=CLOUD_DATA_KEYS.map(k=>({data_key:k,data:localValueForKey(k)}));
-      const client=requireSupabaseClient();
-      const {data,error}=await client.from('triple20_data').upsert(payload,{onConflict:'data_key'}).select('data_key,updated_at');
-      if(error)throw error;(data||[]).forEach(r=>this.cloudUpdated[r.data_key]=r.updated_at);
-      this.pendingSync=false;localStorage.removeItem('triple20_pending_sync');this.lastSyncAt=new Date().toISOString();localStorage.setItem('triple20_last_sync',this.lastSyncAt);setSyncStatus('Online gespeichert','saved');renderCloudPanel();
-    }catch(e){console.warn('Cloud speichern fehlgeschlagen',e);this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');setSyncStatus('Offline – lokale Kopie','offline')}
+      const rows=await this.fetchCloud(['dartTournament']),row=rows.find(item=>item.data_key==='dartTournament');if(!row?.data)return;
+      if(row.updated_at)this.cloudUpdated.dartTournament=row.updated_at;this.loadedCloudData={...(this.loadedCloudData||{}),dartTournament:row.data};
+      T20_SUPPRESS_SYNC=true;try{localStorage.setItem('dartTournament',JSON.stringify(row.data))}finally{T20_SUPPRESS_SYNC=false}
+      replaceTournamentState(structuredClone(row.data));this.lastSyncAt=new Date().toISOString();localStorage.setItem('triple20_last_sync',this.lastSyncAt);this.online=true;
+    }catch(error){console.warn('Live-Turnier konnte nicht aktualisiert werden:',error);this.online=false}
+    finally{this.liveLoadBusy=false}
   },
+  queueSync(key){if(!this.isAdmin)return;this.pendingSyncKeys.add(key);this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');clearTimeout(this.syncTimer);if(!this.client||!navigator.onLine){setSyncStatus('Offline – sicher auf diesem Gerät gespeichert','offline');return}setSyncStatus('Änderungen werden gespeichert …','saving');this.syncTimer=setTimeout(()=>this.syncDataKeys([...this.pendingSyncKeys]),700)},
+  async enqueueCloudWrite(task){const previous=this.syncChain||Promise.resolve(),current=previous.catch(()=>{}).then(task);this.syncChain=current;this.syncing=true;try{return await current}finally{if(this.syncChain===current){this.syncChain=null;this.syncing=false}}},
+  async syncDataKeys(keys,{force=false}={}){
+    if(!this.isAdmin||!this.client)return false;
+    const requested=[...new Set(keys)].filter(key=>CLOUD_DATA_KEYS.includes(key));if(!requested.length)return true;requested.forEach(key=>this.pendingSyncKeys.delete(key));if(!this.pendingSyncKeys.size)clearTimeout(this.syncTimer);
+    this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');setSyncStatus('Wird gespeichert …','saving');
+    return this.enqueueCloudWrite(async()=>{
+      try{
+        if(!force){const rows=await this.fetchCloud(requested),changed=rows.some(r=>this.cloudUpdated[r.data_key]&&r.updated_at&&r.updated_at!==this.cloudUpdated[r.data_key]);if(changed){setSyncStatus('Konflikt erkannt','conflict');const choice=prompt('Die Online-Daten wurden zwischenzeitlich auf einem anderen Gerät geändert.\n\n1 = Online-Version laden\n2 = lokale Version als JSON sichern\n3 = lokale Version trotzdem überschreiben','1');if(choice==='1'){await this.loadCloudConfirmed();return false}if(choice==='2'){backupTriple20Data('triple20_konflikt_lokal');return false}if(choice!=='3'||!confirm('Lokale Version wirklich trotzdem in der Cloud überschreiben?'))return false;backupTriple20Data('triple20_konflikt_lokal')}}
+        const payload=requested.map(key=>({data_key:key,data:localValueForKey(key)})),client=requireSupabaseClient(),result=await withTimeout(client.from('triple20_data').upsert(payload,{onConflict:'data_key'}).select('data_key,updated_at'),10000,'Die Cloud antwortet beim Speichern nicht rechtzeitig.'),{data,error}=result;if(error)throw error;(data||[]).forEach(row=>this.cloudUpdated[row.data_key]=row.updated_at);
+        if(!this.pendingSyncKeys.size){this.pendingSync=false;localStorage.removeItem('triple20_pending_sync')}else{clearTimeout(this.syncTimer);this.syncTimer=setTimeout(()=>this.syncDataKeys([...this.pendingSyncKeys]),700)}this.lastSyncAt=new Date().toISOString();localStorage.setItem('triple20_last_sync',this.lastSyncAt);setSyncStatus(this.pendingSync?'Weitere Änderungen warten …':'Online gespeichert',this.pendingSync?'saving':'saved');renderCloudPanel();return true;
+      }catch(error){requested.forEach(key=>this.pendingSyncKeys.add(key));console.warn('Cloud speichern fehlgeschlagen',error);this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');setSyncStatus('Synchronisierung unterbrochen – neuer Versuch folgt','offline');clearTimeout(this.syncTimer);this.syncTimer=setTimeout(()=>{if(this.client&&navigator.onLine)this.syncDataKeys(requested,{force})},3000);return false}
+    })
+  },
+  async syncAll({force=false}={}){return this.syncDataKeys(CLOUD_DATA_KEYS,{force})},
   async uploadLocalWithBackup(){if(!isAdmin())return;const summary=backupPreview();backupTriple20Data('triple20_vor_cloud_upload');if(!confirm(`Lokale Triple20-Daten in die Cloud übernehmen?\n\n${summary}\n\nEin JSON-Backup wurde heruntergeladen.`))return;await this.syncAll({force:true})},
   async loadCloudConfirmed(){if(!this.loadedCloudData)await this.loadCloud();if(!this.loadedCloudData)return;backupTriple20Data('triple20_vor_cloud_laden');if(!confirm('Cloud-Daten laden? Die aktuelle lokale Version wurde vorher als Backup gesichert.'))return;applyTriple20Data(this.loadedCloudData);setSyncStatus('Online – aktuell','online')},
-  startPolling(){clearInterval(this.pollTimer);clearInterval(this.memberPollTimer);this.pollTimer=setInterval(()=>this.loadCloud(),15000);this.memberPollTimer=setInterval(()=>{if(!this.user)return;this.loadPublicMembers().then(()=>{if(!$('#seasonSection')?.classList.contains('hidden'))renderSeasonView()}).catch(error=>console.warn('Mitgliedsnamen konnten nicht aktualisiert werden',error))},60000)}
+  startPolling(){clearInterval(this.pollTimer);clearInterval(this.memberPollTimer);this.pollTimer=setInterval(()=>{if(!$('#tvSection')?.classList.contains('hidden'))return;this.loadCloud()},15000);this.memberPollTimer=setInterval(()=>{if(!this.user)return;this.loadPublicMembers().then(()=>{if(!$('#seasonSection')?.classList.contains('hidden'))renderSeasonView()}).catch(error=>console.warn('Mitgliedsnamen konnten nicht aktualisiert werden',error))},60000)}
 };
 function memberIdForName(name){
   const normalized=(name||'').trim().toLowerCase();
@@ -1426,7 +1425,7 @@ function renderTvView(){
   const updated=$('#tvUpdatedAt'),stamp=T20Cloud.lastSyncAt?new Date(T20Cloud.lastSyncAt):new Date();if(updated)updated.textContent=`Automatisch aktuell · ${stamp.toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit',second:'2-digit'})} Uhr`;
 }
 function stopTvRefresh(){if(tvRefreshTimer){clearInterval(tvRefreshTimer);tvRefreshTimer=null}}
-function startTvRefresh(){stopTvRefresh();tvRefreshTimer=setInterval(()=>{if($('#tvSection')?.classList.contains('hidden'))return;renderTvView();T20Cloud.loadCloud().catch(error=>console.warn('TV-Daten konnten nicht aktualisiert werden:',error))},3000)}
+function startTvRefresh(){stopTvRefresh();tvRefreshTimer=setInterval(()=>{if($('#tvSection')?.classList.contains('hidden'))return;T20Cloud.loadLiveTournament().then(renderTvView).catch(error=>console.warn('TV-Daten konnten nicht aktualisiert werden:',error))},3000)}
 async function toggleTvFullscreen(){
   try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen()}catch(error){console.warn('Vollbild konnte nicht aktiviert werden:',error)}
   if('wakeLock'in navigator&&!tvWakeLock)try{tvWakeLock=await navigator.wakeLock.request('screen');tvWakeLock.addEventListener('release',()=>{tvWakeLock=null})}catch(error){console.warn('Bildschirm-Wachhaltefunktion ist nicht verfügbar:',error)}
