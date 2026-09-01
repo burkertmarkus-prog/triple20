@@ -428,6 +428,7 @@ window.T20Cloud={
         renderCloudPanel();
         await this.restoreSessionAfterInit();
         try{await this.loadPublicMembers()}catch(error){console.warn('Öffentliche Spielerprofile konnten nicht geladen werden:',error)}
+        if(this.isAdmin)await mergeGuenterSeasonEntries();
         this.startPolling();
         setLoginError('');
       }catch(error){
@@ -673,7 +674,7 @@ function memberIdForName(name){
   return (T20Cloud.publicMembers||[]).find(member=>member.nickname.trim().toLowerCase()===normalized)?.id||'';
 }
 function currentMemberNickname(id,fallback=''){
-  return (T20Cloud.publicMembers||[]).find(member=>member.id===id)?.nickname||fallback;
+  const nickname=(T20Cloud.publicMembers||[]).find(member=>member.id===id)?.nickname||'';if(normalizedPlayerName(fallback)==='günter g.'&&['günter','günther'].includes(normalizedPlayerName(nickname)))return fallback;return nickname||fallback;
 }
 function memberAvatarUrl(id){return T20Cloud.publicMemberAvatars?.[id]||T20Cloud.adminProfileAvatars?.[id]||(T20Cloud.user?.id===id?T20Cloud.avatarSignedUrl:'')||''}
 function resultIdentity(name,id=''){return id?`id:${id}`:`name:${(name||'').trim().toLowerCase()}`}
@@ -933,6 +934,26 @@ $('#qualificationCard').addEventListener('click',e=>{const mode=e.target.dataset
 function defaultPointSystem(){return appSettings.club?.pointSystem||{5:25,4:20,3:15,2:10,1:7,0:5}}
 function loadSeasons(){try{const data=JSON.parse(localStorage.getItem(SEASON_KEY)||'{"seasons":[]}');return Array.isArray(data.seasons)?data:{seasons:[]}}catch{return{seasons:[]}}}
 function persistSeasons(){localStorage.setItem(SEASON_KEY,JSON.stringify(seasonStore));if(selectedSeasonId)localStorage.setItem('tripleTwentySelectedSeason',selectedSeasonId)}
+async function mergeGuenterSeasonEntries(){
+  const migrationKey='triple20_migration_guenter_g_v1';if(localStorage.getItem(migrationKey)==='done')return false;
+  const target='Günter G.',aliases=new Set(['günther','günter']),isAlias=name=>aliases.has(normalizedPlayerName(name)),rename=name=>isAlias(name)?target:name;
+  const affected=(seasonStore.seasons||[]).filter(season=>[...(season.members||[]),...(season.players||[]),...(season.tournaments||[]).flatMap(tournament=>[...(tournament.players||[]),...(tournament.results||[]).map(result=>result.name),...(tournament.matches||[]).flatMap(match=>[match.a,match.b])])].some(isAlias));
+  if(!affected.length)return false;
+  try{if(!localStorage.getItem('triple20_backup_before_guenter_merge'))nativeSetItem('triple20_backup_before_guenter_merge',JSON.stringify({createdAt:new Date().toISOString(),seasons:seasonStore}))}catch(error){console.warn('Lokale Sicherung vor Namenszusammenführung nicht möglich:',error)}
+  for(const season of affected){
+    const profileCandidates=[],collectProfile=(name,id)=>{if(id&&(normalizedPlayerName(name)===normalizedPlayerName(target)||isAlias(name)))profileCandidates.push({name,id})};
+    Object.entries(season.memberProfileIds||{}).forEach(([name,id])=>collectProfile(name,id));for(const tournament of season.tournaments||[]){Object.entries(tournament.playerProfileIds||{}).forEach(([name,id])=>collectProfile(name,id));for(const result of tournament.results||[])collectProfile(result.name,result.profileId)}
+    const profileId=profileCandidates.find(item=>normalizedPlayerName(item.name)===normalizedPlayerName(target))?.id||profileCandidates.find(item=>normalizedPlayerName(item.name)==='günter')?.id||profileCandidates[0]?.id||'';
+    const memberSource=season.members!==undefined?season.members:(season.players||[]);season.members=[...new Set(memberSource.map(rename))];season.players=[...new Set((season.players||[]).map(rename))];season.memberProfileIds=season.memberProfileIds||{};for(const name of Object.keys(season.memberProfileIds))if(isAlias(name)||normalizedPlayerName(name)===normalizedPlayerName(target))delete season.memberProfileIds[name];if(profileId)season.memberProfileIds[target]=profileId;
+    for(const tournament of season.tournaments||[]){
+      tournament.players=[...new Set((tournament.players||[]).map(rename))];tournament.winner=rename(tournament.winner);tournament.top3=[...new Set((tournament.top3||[]).map(rename))];for(const match of tournament.matches||[]){match.a=rename(match.a);match.b=rename(match.b)}
+      tournament.playerProfileIds=tournament.playerProfileIds||{};for(const name of Object.keys(tournament.playerProfileIds))if(isAlias(name)||normalizedPlayerName(name)===normalizedPlayerName(target))delete tournament.playerProfileIds[name];if(profileId&&tournament.players.includes(target))tournament.playerProfileIds[target]=profileId;
+      const mergedResults=new Map();for(const raw of tournament.results||[]){const result={...raw,name:rename(raw.name)},key=normalizedPlayerName(result.name);if(result.name===target&&profileId)result.profileId=profileId;const previous=mergedResults.get(key);if(!previous){mergedResults.set(key,result);continue}previous.wins=(previous.wins||0)+(result.wins||0);previous.losses=(previous.losses||0)+(result.losses||0);previous.byes=(previous.byes||0)+(result.byes||0);previous.points=(previous.points||0)+(result.points||0);previous.legsFor=(previous.legsFor||0)+(result.legsFor||0);previous.legsAgainst=(previous.legsAgainst||0)+(result.legsAgainst||0);previous.max180=(previous.max180||0)+(result.max180||0);previous.checkout=Math.max(previous.checkout||0,result.checkout||0);previous.rank=Math.min(previous.rank||Number.MAX_SAFE_INTEGER,result.rank||Number.MAX_SAFE_INTEGER);if(previous.rank===Number.MAX_SAFE_INTEGER)previous.rank=0;if(profileId)previous.profileId=profileId}tournament.results=[...mergedResults.values()];tournament.participantCount=tournament.players.length;
+    }
+    season.members.sort((a,b)=>a.localeCompare(b,'de'));season.players=[...new Set([...season.players,...season.members,...(season.tournaments||[]).flatMap(tournament=>tournament.players||[])])].sort((a,b)=>a.localeCompare(b,'de'));season.stats=calculateSeasonStatisticsSummary(season);
+  }
+  persistSeasons();await T20Cloud.syncAll({force:true});if(T20Cloud.pendingSync){console.warn('Namenszusammenführung ist lokal erfolgt, aber noch nicht online gespeichert.');return false}nativeSetItem(migrationKey,'done');renderSeasonView();alert('„Günther“ und „Günter“ wurden zu „Günter G.“ zusammengeführt. Alle Saisonergebnisse wurden übernommen.');return true;
+}
 function createSeason(data={}){
   if(!isClubMode())return null;
   const half=currentHalfYear(),season={id:data.id||`season-${Date.now()}`,name:data.name||half.name,startDate:data.startDate||half.start,endDate:data.endDate||half.end,tournaments:data.tournaments||[],players:data.players||[],members:data.members||data.players||[],pointSystem:data.pointSystem||defaultPointSystem(),dropCount:+(data.dropCount??appSettings.club.dropResults??0),stats:data.stats||{},archived:!!data.archived,createdAt:data.createdAt||new Date().toISOString()};
