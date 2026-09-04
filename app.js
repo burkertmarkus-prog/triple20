@@ -1429,7 +1429,11 @@ function tvBracketRounds(matches=[],kind='upper',stageCount=0,playerCount=0){
   return Array.from({length:count},(_,index)=>{const round=roundNumbers[index],planned=kind==='lower'?Math.max(1,2**(Math.max(1,Math.ceil(Math.log2(playerCount)))-1-Math.ceil((index+1)/2))):Math.max(1,Math.ceil(playerCount/2**(index+1)));return{round,label:kind==='lower'?`Verliererrunde ${index+1}`:index===count-1?'Finale':`Runde ${index+1}`,matches:round===undefined?[]:filtered.filter(match=>(+match.round||1)===round),planned}});
 }
 function tvBracketColumns(rounds,{finals=false,limit=5}={}){
-  const lastActual=rounds.reduce((last,stage,index)=>stage.matches.length?index:last,-1),start=lastActual<0?0:Math.max(0,Math.min(Math.max(0,rounds.length-limit),lastActual-1)),visible=finals?rounds.slice(-2):rounds.slice(start,start+limit);
+  // Future placeholders and automatic byes are not tournament progress.
+  // Keep the earliest unfinished stage visible even when another branch is ahead.
+  const firstPending=rounds.findIndex(stage=>stage.matches.some(match=>match.sa===null&&!match.automatic));
+  const lastActual=rounds.reduce((last,stage,index)=>stage.matches.some(match=>!match.preview&&!match.automatic)?index:last,-1);
+  const focus=firstPending>=0?firstPending:lastActual,start=focus<0?0:Math.max(0,Math.min(Math.max(0,rounds.length-limit),focus-1)),visible=finals?rounds.slice(-2):rounds.slice(start,start+limit);
   return visible.map(stage=>{const placeholder=stage.label==='Finale'?'Finalist':stage.label.startsWith('Verliererrunde')?'Teilnehmer aus Vorrunde':'Sieger aus Vorrunde';return `<section class="tv-bracket-round ${Math.max(stage.matches.length,stage.planned||0)>4?'dense':''}"><h3>${esc(stage.label)}</h3><div>${stage.matches.length?stage.matches.map(match=>tvBracketGame(match)).join(''):Array.from({length:stage.planned||1},()=>tvBracketGame(null,placeholder)).join('')}</div></section>`}).join('');
 }
 function tvKnockoutBracketHtml(tournament,{finals=false}={}){
