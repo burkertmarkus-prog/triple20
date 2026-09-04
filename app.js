@@ -1421,6 +1421,7 @@ function tvStandingsHtml(tournament){
 }
 function tvBracketGame(match,label='Noch offen'){
   if(!match)return`<div class="tv-bracket-game placeholder"><span>${esc(label)}</span><b>–</b><span>${esc(label)}</span><b>–</b></div>`;
+  if(match.automatic)return `<div class="tv-bracket-game automatic"><span>${esc(match.a)}</span><b>→</b><span>Freilos · weiter</span><b>–</b></div>`;
   const done=match.sa!==null,winner=done?(match.sa>match.sb?'a':'b'):'';
   return `<div class="tv-bracket-game ${done?'done':'open'}"><span class="${winner==='a'?'is-winner':''}">${esc(match.a||label)}</span><b>${done?match.sa:'–'}</b><span class="${winner==='b'?'is-winner':''}">${esc(match.b||label)}</span><b>${done?match.sb:'–'}</b></div>`;
 }
@@ -1434,7 +1435,12 @@ function tvBracketColumns(rounds,{finals=false,limit=5}={}){
   const firstPending=rounds.findIndex(stage=>stage.matches.some(match=>match.sa===null&&!match.automatic));
   const lastActual=rounds.reduce((last,stage,index)=>stage.matches.some(match=>!match.preview&&!match.automatic)?index:last,-1);
   const focus=firstPending>=0?firstPending:lastActual,start=focus<0?0:Math.max(0,Math.min(Math.max(0,rounds.length-limit),focus-1)),visible=finals?rounds.slice(-2):rounds.slice(start,start+limit);
-  return visible.map(stage=>{const placeholder=stage.label==='Finale'?'Finalist':stage.label.startsWith('Verliererrunde')?'Teilnehmer aus Vorrunde':'Sieger aus Vorrunde';return `<section class="tv-bracket-round ${Math.max(stage.matches.length,stage.planned||0)>4?'dense':''}"><h3>${esc(stage.label)}</h3><div>${stage.matches.length?stage.matches.map(match=>tvBracketGame(match)).join(''):Array.from({length:stage.planned||1},()=>tvBracketGame(null,placeholder)).join('')}</div></section>`}).join('');
+  return visible.map(stage=>{
+    const placeholder=stage.label==='Finale'?'Finalist':stage.label.startsWith('Verliererrunde')?'Teilnehmer aus Vorrunde':'Sieger aus Vorrunde';
+    const games=stage.matches.length?stage.matches.filter(match=>!(match.automatic&&match.a==='Freilos'&&match.b==='Freilos')):Array.from({length:stage.planned||1},()=>null);
+    const pageSize=typeof window!=='undefined'&&window.innerHeight<900?4:6,pages=Math.max(1,Math.ceil(games.length/pageSize)),page=Math.floor(Date.now()/15000)%pages,shown=games.slice(page*pageSize,(page+1)*pageSize);
+    return `<section class="tv-bracket-round ${games.length>2?'dense':''}"><h3>${esc(stage.label)}${pages>1?` <small>· ${page+1}/${pages}</small>`:''}</h3><div>${shown.length?shown.map(match=>tvBracketGame(match,placeholder)).join(''):'<p class="tv-bracket-empty">Keine Begegnung</p>'}</div>${pages>1?'<small class="tv-bracket-page-note">Weitere Felder alle 15 Sek.</small>':''}</section>`;
+  }).join('');
 }
 function tvKnockoutBracketHtml(tournament,{finals=false}={}){
   const playerCount=tournament.players?.length||0,total=Math.max(1,Math.ceil(Math.log2(Math.max(2,playerCount)))),rounds=tvBracketRounds(tournament.matches||[],'upper',total,playerCount);
