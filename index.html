@@ -34,7 +34,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260904-04">
+  <link rel="stylesheet" href="styles.css?v=20260904-05">
 </head>
 <body>
   <header class="hero">
@@ -220,6 +220,20 @@
       </div>
       <div id="groupOptions" class="group-options"><label>Anzahl Gruppen<select id="groupCount"><option selected>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label><label>Weiter pro Gruppe<select id="qualifiers"><option selected>1</option><option>2</option><option>3</option><option>4</option></select></label></div>
       <div id="swissOptions" class="group-options hidden"><label>Anzahl Runden<select id="swissRounds"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label><p class="option-help">Nach jeder abgeschlossenen Runde wird anhand der Tabelle neu gepaart. Gleiche Paarungen werden möglichst vermieden.</p></div>
+      <details id="seedingOptions" class="seeding-options hidden">
+        <summary><span><b>Setzliste</b><small>Gesetzte Spieler möglichst weit auseinander platzieren</small></span></summary>
+        <div class="seeding-body">
+          <div class="seeding-toolbar">
+            <label>Saisonrangliste<select id="seedingSeason"></select></label>
+            <label>Anzahl gesetzter Spieler<select id="seedingCount"><option value="0">Keine</option><option value="4">Top 4</option><option value="8" selected>Top 8</option><option value="16">Top 16</option></select></label>
+            <button id="loadSeasonSeeds" class="secondary" type="button">Rangliste übernehmen</button>
+          </div>
+          <div class="seeding-manual"><label>Spieler manuell setzen<select id="manualSeedPlayer"></select></label><button id="addManualSeed" class="secondary" type="button">Zur Setzliste</button></div>
+          <div id="seededPlayerList" class="seeded-player-list"></div>
+          <div class="draw-preview-head"><div><b>Vorschau der ersten Runde</b><small>Die übrigen Plätze werden zufällig ausgelost.</small></div><button id="rerollSeeding" class="secondary" type="button">Ungesetzte neu losen</button></div>
+          <div id="seedingPreview" class="seeding-preview"></div>
+        </div>
+      </details>
       <div class="players-head"><div><h3>Spieler</h3><p id="playerCount">0 Spieler eingetragen</p></div></div>
       <form id="playerForm" class="player-form"><input id="playerName" placeholder="Name des Spielers" maxlength="30" autocomplete="off" list="memberSuggestions"><datalist id="memberSuggestions"></datalist><button type="submit">+ Hinzufügen</button></form>
       <div id="playerList" class="player-list"></div>
@@ -241,8 +255,8 @@
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <script src="double-ko.js?v=20260904-04"></script>
-  <script src="app.js?v=20260904-04"></script>
-  <script src="pwa.js?v=20260904-04"></script>
+  <script src="double-ko.js?v=20260904-05"></script>
+  <script src="app.js?v=20260904-05"></script>
+  <script src="pwa.js?v=20260904-05"></script>
 </body>
 </html>

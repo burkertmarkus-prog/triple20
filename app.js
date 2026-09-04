@@ -52,7 +52,7 @@ let seasonFormOpen=false;
 let editingSeasonTournamentId='';
 let publicPastExpanded=false;
 const expandedSeasonTournamentIds=new Set();
-const COMPETITION_KEYS=['players','playerProfileIds','started','matches','settings','groups','withdrawn','endedEarly','savedToHistory','seasonImportedTo','seasonTournamentId','scheduledEventId','scheduledSeasonId','groupStage','scoreAudit','scoreUndoStack'];
+const COMPETITION_KEYS=['players','playerProfileIds','started','matches','settings','groups','withdrawn','endedEarly','savedToHistory','seasonImportedTo','seasonTournamentId','scheduledEventId','scheduledSeasonId','groupStage','scoreAudit','scoreUndoStack','seedingDraft'];
 function emptyCompetition(){return{players:[],playerProfileIds:{},started:false,matches:[],settings:{}}}
 function competitionSnapshot(source=state){const out={};for(const key of COMPETITION_KEYS)if(source[key]!==undefined)out[key]=structuredClone(source[key]);return{...emptyCompetition(),...out}}
 function ensureTournamentDayState(target=state){
@@ -724,10 +724,11 @@ function renderRegisteredPlayerChoices(){
 function renderPlayers(){
   if(!T20Cloud.user&&!state.guestLocal&&(state.players?.length||state.matches?.length)){ $('#playerList').innerHTML='';$('#playerCount').textContent='0 Spieler eingetragen';$('#memberSuggestions').innerHTML='';$('#registeredPlayerChoices')?.classList.add('hidden');$('#startBtn').disabled=true;return }
   if(!state.started)state.players=sortBySeasonWins(state.players);
-  $('#playerList').innerHTML=state.players.map((p,i)=>`<div class="player"><b><span>${i+1}</span>${esc(p)}</b><button data-remove="${i}" aria-label="${esc(p)} entfernen">×</button></div>`).join('');
+  const seeds=activeSeededPlayers();$('#playerList').innerHTML=state.players.map((p,i)=>{const seed=seeds.indexOf(p)+1;return `<div class="player"><b><span>${i+1}</span>${esc(p)}${seed?`<small class="seed-badge">gesetzt ${seed}</small>`:''}</b><button data-remove="${i}" aria-label="${esc(p)} entfernen">×</button></div>`}).join('');
   $('#playerCount').textContent=`${state.players.length} Spieler eingetragen`;
   renderMemberSuggestions();
   renderRegisteredPlayerChoices();
+  renderSeedingOptions();
   $('#startBtn').disabled=state.players.length<2;save();
 }
 function renderTournamentSubnav(){const nav=$('#tournamentSubnav');if(!nav)return;nav.classList.add('hidden');nav.innerHTML=''}
@@ -745,8 +746,45 @@ function setActiveCompetition(key){
 $('#playerForm').addEventListener('submit',e=>{e.preventDefault();const input=$('#playerName');if(addTournamentPlayer(input.value)){input.value='';input.focus()}});
 $('#playerList').addEventListener('click',e=>{const i=e.target.dataset.remove;if(i!==undefined){state.players.splice(+i,1);renderPlayers()}});
 $('#setupSection').addEventListener('click',e=>{const button=e.target.closest('[data-add-profile]');if(button)addTournamentPlayer(button.dataset.addProfile,button.dataset.profileId)});
-function toggleModeOptions(){const mode=$('#mode').value;$('#groupOptions').classList.toggle('hidden',mode!=='roundrobin');$('#swissOptions').classList.toggle('hidden',mode!=='swiss')}
+function toggleModeOptions(){const mode=$('#mode').value;$('#groupOptions').classList.toggle('hidden',mode!=='roundrobin');$('#swissOptions').classList.toggle('hidden',mode!=='swiss');$('#seedingOptions')?.classList.toggle('hidden',mode!=='double');renderSeedingOptions()}
 $('#mode').addEventListener('change',toggleModeOptions);toggleModeOptions();
+
+function seedingDraft(){state.seedingDraft=state.seedingDraft||{seededPlayers:[],drawOrder:[]};return state.seedingDraft}
+function playerBySeedName(name){const normalized=normalizedPlayerName(name);return state.players.find(player=>normalizedPlayerName(player)===normalized)||''}
+function activeSeededPlayers(){
+  if($('#mode')?.value!=='double'&&!state.started)return[];
+  const limit=+($('#seedingCount')?.value||state.seedingDraft?.count||0),seen=new Set();return (state.seedingDraft?.seededPlayers||[]).map(playerBySeedName).filter(name=>name&&!seen.has(normalizedPlayerName(name))&&seen.add(normalizedPlayerName(name))).slice(0,Math.min(16,limit));
+}
+function ensureSeedingDraw(force=false){
+  const draft=seedingDraft(),seeded=activeSeededPlayers(),rest=state.players.filter(player=>!seeded.includes(player));
+  const valid=!force&&draft.drawOrder?.length===state.players.length&&draft.drawOrder.every(player=>state.players.includes(player))&&seeded.every((player,index)=>draft.drawOrder[index]===player);
+  if(!valid)draft.drawOrder=[...seeded,...shuffle(rest)];draft.count=+($('#seedingCount')?.value||draft.count||0);return draft.drawOrder;
+}
+function selectedSeedingSeason(){return seasonStore.seasons.find(season=>String(season.id)===String($('#seedingSeason')?.value||selectedSeason()?.id||''))||selectedSeason()}
+function renderSeedingOptions(){
+  const box=$('#seedingOptions');if(!box)return;const visible=!state.started&&$('#mode')?.value==='double';box.classList.toggle('hidden',!visible);if(!visible)return;
+  const draft=seedingDraft(),seasonSelect=$('#seedingSeason'),current=seasonSelect?.value||selectedSeason()?.id||'';
+  if(seasonSelect){seasonSelect.innerHTML=(seasonStore.seasons||[]).map(season=>`<option value="${esc(season.id)}" ${String(season.id)===String(current)?'selected':''}>${esc(season.name)}</option>`).join('')||'<option value="">Keine Saison vorhanden</option>'}
+  const count=$('#seedingCount');if(count)count.value=String([0,4,8,16].includes(+draft.count)?+draft.count:8);
+  draft.count=+(count?.value||0);draft.seededPlayers=(draft.seededPlayers||[]).map(playerBySeedName).filter(Boolean).slice(0,16);
+  const seeds=activeSeededPlayers(),available=state.players.filter(player=>!seeds.includes(player));
+  const manual=$('#manualSeedPlayer');if(manual)manual.innerHTML=available.map(player=>`<option value="${esc(player)}">${esc(player)}</option>`).join('')||'<option value="">Alle Spieler gesetzt</option>';
+  $('#seededPlayerList').innerHTML=seeds.length?seeds.map((player,index)=>`<div class="seeded-player"><span>${index+1}</span><b>${esc(player)}</b><button type="button" data-seed-up="${index}" ${index===0?'disabled':''} aria-label="Nach oben">↑</button><button type="button" data-seed-down="${index}" ${index===seeds.length-1?'disabled':''} aria-label="Nach unten">↓</button><button type="button" data-seed-remove="${index}" aria-label="Setzung entfernen">×</button></div>`).join(''):'<p class="option-help">Noch keine Spieler gesetzt. Du kannst eine Saisonrangliste übernehmen oder Spieler manuell hinzufügen.</p>';
+  const preview=$('#seedingPreview');if(state.players.length<2){preview.innerHTML='<p class="option-help">Mindestens zwei Spieler eintragen.</p>';return}
+  const order=ensureSeedingDraw(),plan=T20DoubleKO.create(order),games=T20DoubleKO.evaluate(plan).preview.filter(match=>match.bracket==='upper'&&match.stage===1);
+  preview.innerHTML=games.map(match=>`<article><span>${esc(match.a||'Freilos')}</span><b>VS</b><span>${esc(match.automatic?'Freilos':match.b||'Freilos')}</span></article>`).join('');
+}
+function loadSeasonSeeding(){
+  const limit=+($('#seedingCount')?.value||0);if(!limit){alert('Bitte zuerst Top 4, Top 8 oder Top 16 auswählen.');return}
+  const rows=calculateSeasonStandings(selectedSeedingSeason()),ranked=rows.map(row=>playerBySeedName(row.name)).filter(Boolean),draft=seedingDraft();draft.seededPlayers=[...new Set(ranked)].slice(0,limit);ensureSeedingDraw(true);renderPlayers()
+}
+function addManualSeed(){const player=$('#manualSeedPlayer')?.value;if(!player)return;const draft=seedingDraft();if(draft.seededPlayers.length>=16)return alert('Es können höchstens 16 Spieler gesetzt werden.');draft.seededPlayers.push(player);const needed=draft.seededPlayers.length,draftCount=needed<=4?4:needed<=8?8:16;draft.count=Math.max(draft.count||0,draftCount);$('#seedingCount').value=String(draft.count);ensureSeedingDraw(true);renderPlayers()}
+$('#seedingOptions').addEventListener('click',event=>{
+  if(event.target.id==='loadSeasonSeeds'){loadSeasonSeeding();return}if(event.target.id==='addManualSeed'){addManualSeed();return}if(event.target.id==='rerollSeeding'){ensureSeedingDraw(true);renderSeedingOptions();save();return}
+  const draft=seedingDraft(),up=event.target.dataset.seedUp,down=event.target.dataset.seedDown,remove=event.target.dataset.seedRemove,index=+(up??down??remove);
+  if(remove!==undefined)draft.seededPlayers.splice(index,1);else if(up!==undefined&&index>0)[draft.seededPlayers[index-1],draft.seededPlayers[index]]=[draft.seededPlayers[index],draft.seededPlayers[index-1]];else if(down!==undefined&&index<draft.seededPlayers.length-1)[draft.seededPlayers[index+1],draft.seededPlayers[index]]=[draft.seededPlayers[index],draft.seededPlayers[index+1]];else return;ensureSeedingDraw(true);renderPlayers()
+});
+$('#seedingCount').addEventListener('change',()=>{const draft=seedingDraft();draft.count=+$('#seedingCount').value;draft.seededPlayers=draft.seededPlayers.slice(0,draft.count);ensureSeedingDraw(true);renderPlayers()});
 
 function addPairs(target,players,round,bracket='upper'){
   for(let i=0;i<players.length-1;i+=2)target.push({a:players[i],b:players[i+1],sa:null,sb:null,round,bracket});
@@ -781,7 +819,7 @@ function swissRound(round,history=[]){
 function makeMatches(){
   const arr=[];
   delete state.settings.doubleKoPlan;
-  if(state.settings.mode==='double'){state.groups=[];state.settings.doubleKoPlan=T20DoubleKO.create(shuffle(state.players));return T20DoubleKO.evaluate(state.settings.doubleKoPlan).matches}
+  if(state.settings.mode==='double'){state.groups=[];const draw=state.settings.doubleKoDrawOrder?.length===state.players.length?state.settings.doubleKoDrawOrder:shuffle(state.players);state.settings.doubleKoPlan=T20DoubleKO.create(draw);return T20DoubleKO.evaluate(state.settings.doubleKoPlan).matches}
   if(state.settings.mode==='roundrobin'){
     const amount=Math.min(state.settings.groupCount||1,state.players.length),groups=Array.from({length:amount},()=>[]);shuffle(state.players).forEach((p,i)=>groups[i%amount].push(p));state.groups=groups;
     groups.forEach((players,group)=>{let ps=[...players];if(ps.length%2)ps.push(null);const count=ps.length;for(let round=1;round<count;round++){for(let i=0;i<count/2;i++){const a=ps[i],b=ps[count-1-i];if(a&&b)arr.push({a,b,sa:null,sb:null,round,group})}ps=[ps[0],ps[count-1],...ps.slice(1,count-1)]}});arr.sort((a,b)=>a.round-b.round||a.group-b.group);
@@ -789,7 +827,7 @@ function makeMatches(){
   else addPairs(arr,shuffle(state.players),1,'upper');
   return arr;
 }
-$('#startBtn').addEventListener('click',async()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];state.scoreAudit=[];state.scoreUndoStack=[];delete state.endedEarly;delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value};state.matches=makeMatches();state.started=true;save();renderTournament();const published=await publishLiveTournament({notifyOnError:true});if(published)await PushNotifications.sendLiveTournament()});
+$('#startBtn').addEventListener('click',async()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];state.scoreAudit=[];state.scoreUndoStack=[];delete state.endedEarly;delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;const doubleMode=$('#mode').value==='double',draw=doubleMode?[...ensureSeedingDraw()]:[],seeds=doubleMode?[...activeSeededPlayers()]:[];state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value,doubleKoDrawOrder:draw,doubleKoSeededPlayers:seeds};state.matches=makeMatches();state.started=true;delete state.seedingDraft;save();renderTournament();const published=await publishLiveTournament({notifyOnError:true});if(published)await PushNotifications.sendLiveTournament()});
 
 function playerLosses(){const losses=Object.fromEntries(state.players.map(p=>[p,0]));state.matches.filter(m=>m.sa!==null&&m.b!=='Freilos').forEach(m=>{losses[m.sa>m.sb?m.b:m.a]++});return losses}
 function standingsFor(players,matches=state.matches){return players.map(name=>{const played=matches.filter(m=>m.sa!==null&&(m.a===name||m.b===name));let w=0,lf=0,la=0;played.forEach(m=>{const own=m.a===name?m.sa:m.sb,other=m.a===name?m.sb:m.sa;lf+=own;la+=other;if(own>other)w++});return{name,p:played.length,w,l:played.length-w,lf,la,pts:w*2}}).sort((a,b)=>b.pts-a.pts||(b.lf-b.la)-(a.lf-a.la)||b.lf-a.lf)}
