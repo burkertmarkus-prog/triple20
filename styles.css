@@ -279,6 +279,7 @@ body.member-mode #seasonStandings .link-btn{color:var(--blue);font-weight:900}
 .tv-bracket-game .is-winner{color:#fff;background:#0d6be8}
 .tv-bracket-lane>div{height:100%}.tv-bracket-game span,.tv-bracket-round.dense .tv-bracket-game span{font-size:clamp(12px,.95vw,16px);font-weight:750}
 .tv-match-label{grid-column:1/-1;color:#72b3ff;font-size:clamp(10px,.75vw,13px);font-weight:900;letter-spacing:.08em;text-transform:uppercase}.tv-match .tv-match-player-a{text-align:right}.tv-match .tv-match-player-b{text-align:left}
+.tv-pages{margin:12px 0 0;color:#a9bad0;text-align:center;font-weight:800;font-size:14px}
 
 /* Vollständig gespielte Runden platzsparend einklappen */
 .completed-round{border:1px solid #b8cce6;border-radius:14px;background:#f5f9ff;overflow:hidden}.completed-round>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 17px;color:#24466d;font-weight:900}.completed-round>summary::-webkit-details-marker{display:none}.completed-round>summary span:before{content:'✓';display:inline-grid;place-items:center;width:24px;height:24px;margin-right:10px;border-radius:50%;background:#198754;color:#fff;font-size:13px}.completed-round>summary small{color:#607a98;font-weight:750}.completed-round>summary small:after{content:' ▾'}.completed-round[open]>summary small:after{content:' ▴'}.completed-round-matches{display:grid;gap:10px;padding:0 10px 10px}.completed-round-matches .match{box-shadow:none}
