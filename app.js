@@ -3,9 +3,8 @@ const SETTINGS_KEY='triple20_settings';
 const TOURNAMENT_HISTORY_KEY='triple20_tournaments';
 const MEMBER_TOURNAMENT_KEY='triple20_member_tournament';
 const LIVE_RECOVERY_KEY='triple20_live_recovery';
-const ACCESS_COUNT_KEY='triple20_access_count';
-const ACCESS_DAILY_KEY='triple20_access_daily';
-const ACCESS_SESSION_KEY='triple20_access_counted';
+const APP_ANALYTICS_DEVICE_KEY='triple20_analytics_device';
+const APP_ANALYTICS_LAST_KEY='triple20_analytics_last_visit';
 const SHOP_CONFIG_URL='shop-products.json';
 const SHOP_DATA_KEY='triple20_recommendations';
 const SHOP_CATEGORIES=[['all','Alle'],['darts','Darts'],['autodarts','Autodarts']];
@@ -119,30 +118,18 @@ function applyTheme(){const t=appSettings.theme||defaultSettings.theme,r=documen
 function shuffle(values){const a=[...values];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function todayIso(){return new Date().toISOString().slice(0,10)}
 function currentHalfYear(date=new Date()){const y=date.getFullYear(),h=date.getMonth()<6?'H1':'H2';return{year:y,half:h,name:`${y} ${h}`,start:`${y}-${h==='H1'?'01-01':'07-01'}`,end:`${y}-${h==='H1'?'06-30':'12-31'}`}}
+function analyticsDeviceId(){let id=localStorage.getItem(APP_ANALYTICS_DEVICE_KEY)||'';if(!/^[0-9a-f-]{36}$/i.test(id)){id=crypto.randomUUID?.()||'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:r&3|8).toString(16)});localStorage.setItem(APP_ANALYTICS_DEVICE_KEY,id)}return id}
 function registerAccess(){
-  let count=Math.max(0,parseInt(localStorage.getItem(ACCESS_COUNT_KEY)||'0',10)||0);
-  if(sessionStorage.getItem(ACCESS_SESSION_KEY)!=='1'){
-    count+=1;
-    localStorage.setItem(ACCESS_COUNT_KEY,String(count));
-    const daily=safeJsonParse(localStorage.getItem(ACCESS_DAILY_KEY)||'{}',{}),day=localDateKey();
-    daily[day]=(parseInt(daily[day],10)||0)+1;
-    localStorage.setItem(ACCESS_DAILY_KEY,JSON.stringify(daily));
-    sessionStorage.setItem(ACCESS_SESSION_KEY,'1');
-  }
-  return count;
+  if(!['triple20.at','www.triple20.at'].includes(location.hostname))return;
+  let timer=0;
+  const schedule=()=>{clearTimeout(timer);if(document.visibilityState==='hidden')return;const last=Number(localStorage.getItem(APP_ANALYTICS_LAST_KEY)||0);if(Date.now()-last<30*60*1000)return;timer=setTimeout(()=>T20Cloud.recordAppVisit().catch(error=>console.warn('App-Nutzung konnte nicht erfasst werden:',error)),10000)};
+  schedule();document.addEventListener('visibilitychange',schedule);
 }
 function localDateKey(date=new Date()){const year=date.getFullYear(),month=String(date.getMonth()+1).padStart(2,'0'),day=String(date.getDate()).padStart(2,'0');return `${year}-${month}-${day}`}
-function accessStats(now=new Date()){
-  const daily=safeJsonParse(localStorage.getItem(ACCESS_DAILY_KEY)||'{}',{}),today=localDateKey(now);
-  const weekStart=new Date(now.getFullYear(),now.getMonth(),now.getDate());weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));
-  const monthStart=new Date(now.getFullYear(),now.getMonth(),1);
-  const sumSince=start=>Object.entries(daily).reduce((sum,[day,value])=>sum+(day>=localDateKey(start)&&day<=today?(parseInt(value,10)||0):0),0);
-  return{today:parseInt(daily[today],10)||0,week:sumSince(weekStart),month:sumSince(monthStart),total:Math.max(0,parseInt(localStorage.getItem(ACCESS_COUNT_KEY)||'0',10)||0)};
-}
 function renderAccessStats(){
   if(!isFullAdmin())return'';
-  const stats=accessStats();
-  return `<section class="access-stats" aria-label="Zugriffsstatistik"><h3>App-Aufrufe</h3><div class="access-stat-grid"><article><span>Heute</span><b>${stats.today}</b></article><article><span>Diese Woche</span><b>${stats.week}</b></article><article><span>Dieser Monat</span><b>${stats.month}</b></article><article><span>Insgesamt</span><b>${stats.total}</b></article></div><p class="view-note">Ein Aufruf pro Browsersitzung auf diesem Gerät.</p></section>`;
+  const stats=T20Cloud.analyticsStats;if(!stats)return `<section class="access-stats" aria-label="Zugriffsstatistik"><h3>App-Nutzung</h3><p class="view-note">Die zentrale Nutzungsstatistik wird geladen …</p></section>`;
+  return `<section class="access-stats" aria-label="Zugriffsstatistik"><h3>App-Nutzung</h3><div class="access-stat-grid"><article><span>Heute</span><b>${stats.today_sessions||0}</b></article><article><span>Diese Woche</span><b>${stats.week_sessions||0}</b></article><article><span>Dieser Monat</span><b>${stats.month_sessions||0}</b></article><article><span>Insgesamt</span><b>${stats.total_sessions||0}</b></article></div><p class="view-note">Heute ${stats.today_devices||0} unterschiedliche Geräte · ${stats.today_members||0} angemeldete Mitglieder. Gezählt wird eine aktive Nutzung ab 10 Sekunden, höchstens einmal je Gerät innerhalb von 30 Minuten.</p></section>`;
 }
 function downloadFile(name,type,content){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;document.body.appendChild(a);a.click();URL.revokeObjectURL(a.href);a.remove()}
 function requireSupabaseClient(){const client=window.T20Cloud?.client||supabaseClient;if(!client)throw new Error('Supabase-Client wurde nicht initialisiert.');return client}
@@ -414,7 +401,7 @@ function cleanAuthRedirectUrl(){
   history.replaceState({},document.title,url.pathname+(url.searchParams.size?`?${url.searchParams}`:'')+url.hash);
 }
 window.T20Cloud={
-  authResolved:false,
+  authResolved:false,analyticsStats:null,
   liveTournamentState:null,tournamentViewMode:'local',
   client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,role:'guest',memberRoles:{},profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,sessionProcessingPromise:null,authRedirectSessionPromise:null,authRedirectSessionResolve:null,loginBusy:false,magicLinkBusy:false,otpVerifyBusy:false,otpEmail:'',profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),lastSeenTimer:null,lastSeenVisibilityBound:false,authMessage:'',authError:'',loadBusy:false,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
   async finishAuthRedirect(){cleanAuthRedirectUrl();this.authHandoffActive=false;this.authMessage='Anmeldung erfolgreich. Du kannst diesen Tab weiterverwenden.';showLogin();renderCloudPanel()},
@@ -495,6 +482,7 @@ window.T20Cloud={
       if(this.user&&!this.isAdmin)this.tournamentViewMode='live';
       if(this.isAdmin&&localStorage.getItem('triple20_identity_pending')==='1'){this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');localStorage.removeItem('triple20_identity_pending')}
       if(this.user&&this.isAdmin)try{await this.loadAdminProfiles();if(isFullAdmin())await this.loadMemberRoles();else this.memberRoles={[this.user.id]:this.role}}catch(error){console.warn('Mitgliederprofile oder Rollen konnten nach der Anmeldung nicht geladen werden:',error)}
+      if(isFullAdmin())this.loadAppAnalyticsStats().catch(error=>console.warn('Nutzungsstatistik konnte nicht geladen werden:',error));
       if(this.user)try{await loadTournamentRegistrations()}catch(error){console.warn('Turnieranmeldungen konnten nach der Anmeldung nicht geladen werden:',error)}
       if(this.user)try{this.profile=await this.loadProfile()}catch(error){console.warn('Profil konnte nach der Anmeldung nicht geladen werden:',error);this.profile={id:this.user.id,display_name:'',nickname:'',avatar_url:null};this.authError='Du bist angemeldet, aber dein Profil konnte noch nicht geladen werden. Bitte aktualisiere die Seite.'}
       if(this.user){this.startPresence();this.startLastSeenTracking()}
@@ -519,6 +507,15 @@ window.T20Cloud={
     if(!this.client||!this.user||document.visibilityState==='hidden')return;
     const {error}=await this.client.rpc('triple20_touch_last_seen_v1');
     if(error)console.warn('„Zuletzt online“ konnte nicht aktualisiert werden:',error);
+  },
+  async recordAppVisit(){
+    if(!this.client||document.visibilityState==='hidden')return;
+    const last=Number(localStorage.getItem(APP_ANALYTICS_LAST_KEY)||0);if(Date.now()-last<30*60*1000)return;
+    const {error}=await this.client.rpc('triple20_record_app_visit',{visitor_device:analyticsDeviceId()});if(error)throw error;
+    localStorage.setItem(APP_ANALYTICS_LAST_KEY,String(Date.now()));if(isFullAdmin())await this.loadAppAnalyticsStats();
+  },
+  async loadAppAnalyticsStats(){
+    if(!this.client||!isFullAdmin())return;const {data,error}=await this.client.rpc('triple20_app_usage_stats');if(error)throw error;this.analyticsStats=data||{};renderCloudPanel();
   },
   startLastSeenTracking(){
     clearInterval(this.lastSeenTimer);this.touchLastSeen();
@@ -1436,7 +1433,7 @@ function renderPublicHome({refreshRegistrations=true}={}){
   status.innerHTML=T20Cloud.authResolved?'':'<span class="public-loading">Aktuelle Vereinsdaten werden geladen …</span>';
   $('#publicAdminSchedule')?.classList.toggle('hidden',!isAdmin());
   if(isAdmin()){const select=$('#publicScheduleSeason');if(select)select.innerHTML=(seasonStore.seasons||[]).map(season=>`<option value="${esc(season.id)}" ${season.id===selectedSeason()?.id?'selected':''}>${esc(season.name)}${season.archived?' · Archiv':''}</option>`).join('')||'<option value="">Zuerst eine Saison erstellen</option>';const date=$('#publicScheduleDate');if(date&&!date.value)date.value=todayIso()}
-  $('#publicLiveGames').innerHTML=live.join('')||'<div class="public-empty"><span>○</span><p>Derzeit läuft kein Spiel. Sobald ein Turnier startet, erscheint es hier automatisch.</p></div>';
+  const liveGames=$('#publicLiveGames'),liveBlock=liveGames?.closest('.public-home-block');liveBlock?.classList.toggle('is-empty-live',!live.length);liveGames.innerHTML=live.join('')||'<div class="public-empty"><p>Derzeit läuft kein Spiel. Sobald ein Turnier startet, erscheint es hier automatisch.</p></div>';
   $('#publicUpcomingGames').innerHTML=upcoming.map(item=>publicEventRow(item,'future')).join('')||'<div class="public-empty"><p>Derzeit sind keine zukünftigen Spieltage eingetragen.</p></div>';
   const visiblePast=publicPastExpanded?past:past.slice(0,2),pastToggle=past.length>2?`<button class="secondary public-past-toggle" type="button" data-public-past-toggle aria-expanded="${publicPastExpanded}">${publicPastExpanded?'Weniger anzeigen':`Mehr anzeigen (${past.length-2})`} <span>${publicPastExpanded?'↑':'↓'}</span></button>`:'';
   $('#publicPastGames').innerHTML=visiblePast.map(item=>publicEventRow(item,'past')).join('')+pastToggle||'<div class="public-empty"><p>Noch keine vergangenen Spiele vorhanden.</p></div>';
