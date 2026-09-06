@@ -181,7 +181,7 @@ function applyTriple20Data(data){
   else if(visibleSection==='settingsSection')showSettings();
   else if(visibleSection==='seasonSection')showSeason();
   else if(visibleSection==='shopSection')showShop();
-  else if(visibleSection==='statsStationSection')showStatsStation(false);
+  else if(visibleSection==='statsStationSection')showStatsStation(false,true);
   else if(visibleSection==='tournamentSection'||visibleSection==='setupSection')showTournament();
 }
 function backupPreview(data=collectTriple20Data()){const seasons=data.tripleTwentySeasons?.seasons||[],tournaments=data.triple20_tournaments||[],current=data.dartTournament||{};return `${seasons.length} Saison(en), ${tournaments.length} gespeicherte Turnier(e), aktuelles Turnier: ${current.started?'läuft':'nicht gestartet'}${current.players?.length?`, ${current.players.length} Spieler`:''}`;}
@@ -1566,17 +1566,19 @@ function refreshVisibleTv(){document.body.classList.add('tv-mode');$('#tvSection
 function collectStatsStationMatches(){
   ensureTournamentDayState();return ['men','women'].flatMap(key=>{const tournament=key===state.activeCompetition?competitionSnapshot(state):competitionSnapshot(state.competitions?.[key]||emptyCompetition());if(!tournament.started)return[];return(tournament.matches||[]).map((match,index)=>({key,index,match,tournament})).filter(item=>item.match.sa===null&&item.match.b!=='Freilos'&&item.match.a&&item.match.b&&!['Noch offen','Sieger aus Vorrunde','Teilnehmer aus Vorrunde'].includes(item.match.a)&&!['Noch offen','Sieger aus Vorrunde','Teilnehmer aus Vorrunde'].includes(item.match.b))});
 }
-function renderStatsStation(){
-  const select=$('#statsStationMatch'),preview=$('#statsStationPreview'),status=$('#statsStationStatus');if(!select)return;statsStationMatches=collectStatsStationMatches();
+function renderStatsStation(preserveResult=false){
+  const select=$('#statsStationMatch'),preview=$('#statsStationPreview'),status=$('#statsStationStatus');if(!select)return;const previous=statsStationMatches[Number(select.value)],previousKey=previous?`${previous.key}:${previous.index}`:'';statsStationMatches=collectStatsStationMatches();
   select.innerHTML=statsStationMatches.map((item,i)=>`<option value="${i}">${esc(competitionLabel(item.key))} · Runde ${item.match.round||1} · ${esc(item.match.a)} gegen ${esc(item.match.b)}${item.match.sa!==null?` · ${item.match.sa}:${item.match.sb}`:''}</option>`).join('')||'<option value="">Derzeit keine Paarung verfügbar</option>';
-  if(preview)preview.classList.add('hidden');if(status)status.textContent=statsStationMatches.length?'Wähle die passende Paarung und anschließend den Autodarts-Screenshot aus.':'Derzeit ist kein laufendes Spiel verfügbar.';
+  const restoredIndex=statsStationMatches.findIndex(item=>`${item.key}:${item.index}`===previousKey);if(restoredIndex>=0)select.value=String(restoredIndex);
+  if(!preserveResult){if(preview)preview.classList.add('hidden');if(status)status.textContent=statsStationMatches.length?'Wähle die passende Paarung und anschließend den Autodarts-Screenshot aus.':'Derzeit ist kein laufendes Spiel verfügbar.'}
 }
-function showStatsStation(updateUrl=true){hideMainSections();$('#statsStationSection')?.classList.remove('hidden');renderStatsStation();renderNavigation();if(updateUrl)updateAppUrl('statistikstation')}
+function showStatsStation(updateUrl=true,preserveResult=false){hideMainSections();$('#statsStationSection')?.classList.remove('hidden');renderStatsStation(preserveResult);renderNavigation();if(updateUrl)updateAppUrl('statistikstation')}
 function ocrPair(text,label,value='[0-9]+(?:[.,][0-9]+)?'){
   const normalized=text.replace(/\s+/g,' '),match=normalized.match(new RegExp(`(${value})\\s*%?(?:\\s*\\([^)]*\\))?\\s*${label}\\s*(${value})\\s*%?`,`i`));return match?[match[1].replace(',','.'),match[2].replace(',','.')]:['–','–'];
 }
 function parseAutodartsStats(text){
-  return{average:ocrPair(text,'3\\s*Dart\\s*Average'),checkout:ocrPair(text,'Checkout\\s*%','[0-9]+'),first9:ocrPair(text,'First\\s*9\\s*Average'),until170:ocrPair(text,'Average\\s*until\\s*170'),highestFinish:ocrPair(text,'Highest\\s*Finish','(?:[0-9]+|[-–—])'),darts:ocrPair(text,'Darts\\s*thrown','[0-9]+'),max180:ocrPair(text,'180','[0-9]+')};
+  const fixAverage=values=>values.map(value=>{if(!/^\d+$/.test(value))return value;const number=Number(value);return number>180&&number<=1800?(number/10).toFixed(1):value});
+  return{average:fixAverage(ocrPair(text,'3\\s*Dart\\s*Average')),checkout:ocrPair(text,'Checkout\\s*%','[0-9]+'),first9:fixAverage(ocrPair(text,'First\\s*9\\s*Average')),until170:fixAverage(ocrPair(text,'Average\\s*until\\s*170')),highestFinish:ocrPair(text,'Highest\\s*Finish','(?:[0-9]+|[-–—])'),darts:ocrPair(text,'Darts\\s*thrown','[0-9]+'),max180:ocrPair(text,'180','[0-9]+')};
 }
 function stationMetric(label,values){return `<div><span>${label}</span><b>${esc(values[0])}</b><b>${esc(values[1])}</b></div>`}
 async function analyzeStatsStationImage(file){
