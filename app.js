@@ -200,6 +200,7 @@ function setSyncStatus(text,cls='view-only'){const bar=$('#syncStatusBar'),label
 function isAdmin(){return !!window.T20Cloud?.isAdmin}
 function isFullAdmin(){return window.T20Cloud?.role==='admin'}
 function isMember(){return !!window.T20Cloud?.user&&!isAdmin()}
+function accountMenuLabel(){return T20Cloud?.user?(T20Cloud.profile?.nickname?'Mein Profil':'Konto'):'Anmelden'}
 function assertAdminAction(){if(isAdmin())return true;alert('Nur die Turnierleitung darf Daten ändern. Du bist aktuell im Nur-Ansicht-Modus.');return false}
 function canEditCurrentTournament(){return isAdmin()}
 function assertTournamentAction(){if(canEditCurrentTournament())return true;alert('Dieses Vereinsturnier kann nur von der Turnierleitung geändert werden.');return false}
@@ -215,7 +216,7 @@ function renderReadonlyMode(){
   document.querySelectorAll('#withdrawCard input,#withdrawCard select,#withdrawCard button,#qualificationCard button,#undoLastScoreBtn,#endTournamentBtn,#finishReset,#seasonImportCard input,#seasonImportCard select,#seasonImportCard button').forEach(control=>{const disabled=!canEditCurrentTournament();control.disabled=disabled;control.setAttribute('aria-disabled',String(disabled))});
   $('#showSettingsBtn')?.classList.toggle('hidden',!isFullAdmin());
   $('#showSeasonBtn')?.classList.remove('hidden');
-  const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=admin?'Konto':member?'Mein Profil':'Anmelden';
+  const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=accountMenuLabel();
   renderNavigation();
   // Die Adminrolle wird asynchron geladen. Deshalb die TV-Steuerung auch hier
   // erneut auswerten, damit sie nicht im vorigen Gast-/Mitgliedsstatus verborgen bleibt.
@@ -327,7 +328,7 @@ function renderPersonalMemberOverview(){
 }
 function renderStaffMemberIdentity(){
   const c=T20Cloud,p=c.profile||{},roleLabel=c.role==='admin'?'Administrator':'Turnierleitung',initial=esc((p.nickname||p.display_name||c.user?.email||'?').trim().charAt(0).toUpperCase()||'?'),avatar=c.avatarSignedUrl?`<img src="${esc(c.avatarSignedUrl)}" alt="Profilfoto">`:initial,nickname=p.nickname||'Spitzname noch nicht eingetragen';
-  return `<section class="staff-member-identity"><div class="profile-heading"><div><span class="profile-avatar">${avatar}</span><div><span class="eyebrow">MITGLIED &amp; ${esc(roleLabel.toUpperCase())}</span><h3>${esc(nickname)}</h3><p class="view-note">${esc(p.display_name||'Vor- und Zuname fehlen')} · ${esc(c.user?.email||'')}</p></div></div><button id="adminLogoutBtn" class="secondary" type="button">Abmelden</button></div>${renderPersonalMemberOverview()}<details id="staffProfileSettings" class="member-account-settings"><summary><span><b>Mein Spielerprofil</b><small>Profilfoto, Spitzname und persönliche Angaben verwalten</small></span><i aria-hidden="true">⌄</i></summary><div class="member-account-settings-body"><section class="member-profile-settings"><div class="avatar-actions"><label class="secondary avatar-upload">${c.avatarBusy?'Bild wird verarbeitet …':'Profilfoto auswählen'}<input id="profileAvatarInput" type="file" accept="image/*" ${c.avatarBusy?'disabled':''}></label>${p.avatar_url?`<button id="removeAvatarBtn" class="danger" type="button" ${c.avatarBusy?'disabled':''}>Foto entfernen</button>`:''}</div><p id="loginError" class="login-error">${esc(c.authError||'')}</p><p class="login-success ${c.authMessage?'':'hidden'}">${esc(c.authMessage||'')}</p><form id="memberProfileForm" class="profile-form"><label>Spitzname<input id="profileNickname" maxlength="30" value="${esc(p.nickname||'')}" required></label><label>Vor- und Zuname<input id="profileDisplayName" maxlength="60" value="${esc(p.display_name||'')}" autocomplete="name" required></label><button class="primary" type="submit">${c.profileBusy?'Wird gespeichert …':'PROFIL SPEICHERN'}</button></form></section></div></details></section>`;
+  return `<section class="staff-member-identity"><div class="profile-heading"><div><span class="profile-avatar">${avatar}</span><div><span class="eyebrow">MITGLIED &amp; ${esc(roleLabel.toUpperCase())}</span><h3>${esc(nickname)}</h3><p class="view-note">${esc(p.display_name||'Vor- und Zuname fehlen')} · ${esc(c.user?.email||'')}</p></div></div><button id="adminLogoutBtn" class="secondary" type="button">Abmelden</button></div>${renderPersonalMemberOverview()}<details id="staffProfileSettings" class="member-account-settings"><summary><span><b>Profil &amp; Benachrichtigungen</b><small>Push, Profilfoto und persönliche Angaben verwalten</small></span><i aria-hidden="true">⌄</i></summary><div class="member-account-settings-body">${renderMemberPush()}<section class="member-profile-settings"><div class="member-settings-heading"><span class="eyebrow">PROFIL</span><h3>Persönliche Angaben</h3></div><div class="avatar-actions"><label class="secondary avatar-upload">${c.avatarBusy?'Bild wird verarbeitet …':'Profilfoto auswählen'}<input id="profileAvatarInput" type="file" accept="image/*" ${c.avatarBusy?'disabled':''}></label>${p.avatar_url?`<button id="removeAvatarBtn" class="danger" type="button" ${c.avatarBusy?'disabled':''}>Foto entfernen</button>`:''}<small>Profilfoto, Spitzname und vollständigen Namen hier verwalten.</small></div><p id="loginError" class="login-error">${esc(c.authError||'')}</p><p class="login-success ${c.authMessage?'':'hidden'}">${esc(c.authMessage||'')}</p><form id="memberProfileForm" class="profile-form"><label>Spitzname<input id="profileNickname" maxlength="30" value="${esc(p.nickname||'')}" required></label><label>Vor- und Zuname<input id="profileDisplayName" maxlength="60" value="${esc(p.display_name||'')}" autocomplete="name" required></label><button class="primary" type="submit">${c.profileBusy?'Wird gespeichert …':'PROFIL SPEICHERN'}</button></form></section></div></details></section>`;
 }
 function renderCloudPanel(){
   const panel=$('#cloudAdminPanel');if(!panel||!window.T20Cloud)return;
@@ -1590,7 +1591,7 @@ function renderNavigation(){
   $('.club-settings-block')?.classList.remove('hidden');
   $('#showSettingsBtn')?.classList.toggle('hidden',!isFullAdmin());
   $('#showSeasonBtn')?.classList.remove('hidden');
-  const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=admin?'Konto':member?'Mein Profil':'Anmelden';
+  const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=accountMenuLabel();
 }
 function renderDashboard(){
   if(!$('#dashboardCards')||!$('#dashboardPanel'))return;
