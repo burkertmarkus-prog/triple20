@@ -60,6 +60,8 @@ th{background:#eaf2ff;color:#4e6078}
 td,th{border-bottom:1px solid #e0e9f5}
 .match.done{border-left-color:var(--blue)}
 .match-no{color:#6d7d91}
+.score-suggestion-label{display:inline-flex;margin-left:.65rem;padding:.18rem .45rem;border-radius:999px;background:#fff2c7;color:#8a5a00;font-size:.67rem;letter-spacing:0;text-transform:none;vertical-align:middle}
+.match.has-score-suggestion{border-color:#e9b949;box-shadow:0 0 0 2px rgba(233,185,73,.14)}
 .players-match{color:#122033}
 .score-controls select{background:#fff;border-color:#b9c9dc;color:#122033}
 .winner,.qualification{background:linear-gradient(145deg,rgba(14,107,255,.12),rgba(255,255,255,.97));border-color:rgba(14,107,255,.4)}
