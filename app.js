@@ -140,7 +140,7 @@ function accessStats(now=new Date()){
   return{today:parseInt(daily[today],10)||0,week:sumSince(weekStart),month:sumSince(monthStart),total:Math.max(0,parseInt(localStorage.getItem(ACCESS_COUNT_KEY)||'0',10)||0)};
 }
 function renderAccessStats(){
-  if(!isAdmin())return'';
+  if(!isFullAdmin())return'';
   const stats=accessStats();
   return `<section class="access-stats" aria-label="Zugriffsstatistik"><h3>App-Aufrufe</h3><div class="access-stat-grid"><article><span>Heute</span><b>${stats.today}</b></article><article><span>Diese Woche</span><b>${stats.week}</b></article><article><span>Dieser Monat</span><b>${stats.month}</b></article><article><span>Insgesamt</span><b>${stats.total}</b></article></div><p class="view-note">Ein Aufruf pro Browsersitzung auf diesem Gerät.</p></section>`;
 }
@@ -198,6 +198,7 @@ function applyTriple20Data(data){
 function backupPreview(data=collectTriple20Data()){const seasons=data.tripleTwentySeasons?.seasons||[],tournaments=data.triple20_tournaments||[],current=data.dartTournament||{};return `${seasons.length} Saison(en), ${tournaments.length} gespeicherte Turnier(e), aktuelles Turnier: ${current.started?'läuft':'nicht gestartet'}${current.players?.length?`, ${current.players.length} Spieler`:''}`;}
 function setSyncStatus(text,cls='view-only'){const bar=$('#syncStatusBar'),label=$('#syncStatusText');if(!bar||!label)return;bar.className=`sync-status ${cls}`;label.textContent=text;const last=$('#syncLastSaved');if(last)last.textContent=T20Cloud?.lastSyncAt?`Letzte Synchronisierung: ${new Date(T20Cloud.lastSyncAt).toLocaleString('de-AT')}`:'Noch nicht synchronisiert'}
 function isAdmin(){return !!window.T20Cloud?.isAdmin}
+function isFullAdmin(){return window.T20Cloud?.role==='admin'}
 function isMember(){return !!window.T20Cloud?.user&&!isAdmin()}
 function assertAdminAction(){if(isAdmin())return true;alert('Nur die Turnierleitung darf Daten ändern. Du bist aktuell im Nur-Ansicht-Modus.');return false}
 function canEditCurrentTournament(){return isAdmin()}
@@ -212,7 +213,7 @@ function renderReadonlyMode(){
   document.querySelectorAll('#setupSection input,#setupSection select,#setupSection button').forEach(control=>{const disabled=!T20Cloud.authResolved||(member&&!state.memberLocal);control.disabled=disabled;control.setAttribute('aria-disabled',String(disabled))});
   document.querySelectorAll('.score-controls select,.score-controls button').forEach(control=>{const disabled=!canEditCurrentTournament()||!!state.endedEarly;control.disabled=disabled;control.setAttribute('aria-disabled',String(disabled))});
   document.querySelectorAll('#withdrawCard input,#withdrawCard select,#withdrawCard button,#qualificationCard button,#undoLastScoreBtn,#endTournamentBtn,#finishReset,#seasonImportCard input,#seasonImportCard select,#seasonImportCard button').forEach(control=>{const disabled=!canEditCurrentTournament();control.disabled=disabled;control.setAttribute('aria-disabled',String(disabled))});
-  $('#showSettingsBtn')?.classList.toggle('hidden',!admin);
+  $('#showSettingsBtn')?.classList.toggle('hidden',!isFullAdmin());
   $('#showSeasonBtn')?.classList.remove('hidden');
   const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=admin?'Konto':member?'Mein Profil':'Anmelden';
   renderNavigation();
@@ -233,6 +234,7 @@ function replaceCloudPanelHtml(panel,html){
   if(nextActive){nextActive.focus({preventScroll:true});if(selection&&typeof nextActive.setSelectionRange==='function')nextActive.setSelectionRange(selection[0],selection[1])}
 }
 function renderAdminMembers(){
+  if(!isFullAdmin())return'';
   const c=T20Cloud,profiles=[...(c.adminProfiles||[])].sort((a,b)=>{
     const aOnline=c.onlineUserIds?.has(a.id)?1:0,bOnline=c.onlineUserIds?.has(b.id)?1:0;
     if(aOnline!==bOnline)return bOnline-aOnline;
@@ -242,13 +244,14 @@ function renderAdminMembers(){
     return aName.localeCompare(bName,'de',{sensitivity:'base'});
   });
   const cards=profiles.map(profile=>{
-    const adminProfile=profile.id===c.user?.id,name=profile.display_name||(adminProfile?'Turnierleitung':'Name noch nicht eingetragen'),nickname=profile.nickname||(adminProfile?'Administrator':'Spitzname fehlt'),initial=esc((profile.nickname||profile.display_name||(adminProfile?'A':'?')).trim().charAt(0).toUpperCase()||'?'),photo=c.adminProfileAvatars?.[profile.id],avatar=photo?`<img src="${esc(photo)}" alt="">`:initial;
+    const ownProfile=profile.id===c.user?.id,role=c.memberRoles?.[profile.id]||'member',roleLabel=role==='admin'?'Administrator':role==='tournament_manager'?'Turnierleitung':'Mitglied',name=profile.display_name||(ownProfile?'Turnierleitung':'Name noch nicht eingetragen'),nickname=profile.nickname||(ownProfile?'Administrator':'Spitzname fehlt'),initial=esc((profile.nickname||profile.display_name||(ownProfile?'A':'?')).trim().charAt(0).toUpperCase()||'?'),photo=c.adminProfileAvatars?.[profile.id],avatar=photo?`<img src="${esc(photo)}" alt="">`:initial;
     const joined=profile.created_at?new Date(profile.created_at).toLocaleDateString('de-AT'):'–';
     const online=c.onlineUserIds?.has(profile.id);
     const lastSeen=online?'Jetzt online':profile.last_seen_at?`Zuletzt online: ${new Intl.DateTimeFormat('de-AT',{dateStyle:'medium',timeStyle:'short'}).format(new Date(profile.last_seen_at))}`:'Zuletzt online: noch nicht erfasst';
-    return `<article class="admin-member-card ${adminProfile?'admin-account':''}"><span class="profile-avatar">${avatar}</span><div><strong>${esc(nickname)} <i class="online-dot ${online?'is-online':''}" title="${online?'Online':'Offline'}"></i></strong><span>${esc(name)}</span><small>${adminProfile?'Administratorkonto · ':''}Registriert seit ${esc(joined)}</small><small>${esc(lastSeen)}</small></div></article>`;
+    const roleControl=isFullAdmin()?`<label class="member-role-control">Berechtigung<select data-member-role="${esc(profile.id)}" ${ownProfile?'disabled':''}><option value="member" ${role==='member'?'selected':''}>Mitglied</option><option value="tournament_manager" ${role==='tournament_manager'?'selected':''}>Turnierleitung</option><option value="admin" ${role==='admin'?'selected':''}>Administrator</option></select></label>`:`<small>${esc(roleLabel)}</small>`;
+    return `<article class="admin-member-card ${role!=='member'?'admin-account':''}"><span class="profile-avatar">${avatar}</span><div><strong>${esc(nickname)} <i class="online-dot ${online?'is-online':''}" title="${online?'Online':'Offline'}"></i></strong><span>${esc(name)}</span><small>${esc(roleLabel)} · Registriert seit ${esc(joined)}</small><small>${esc(lastSeen)}</small>${roleControl}</div></article>`;
   }).join('');
-  return `<details id="adminMembersDetails" class="admin-members admin-collapsible"><summary><span><b>Registrierte Mitglieder</b><small>${profiles.length} Profil${profiles.length===1?'':'e'} vorhanden</small></span><i aria-hidden="true">⌄</i></summary><div class="admin-collapsible-body"><div class="admin-members-toolbar"><p class="view-note">Profile, Aktivität und letzten Online-Status verwalten.</p><button id="refreshMembersBtn" class="secondary" type="button" ${c.adminProfilesBusy?'disabled':''}>${c.adminProfilesBusy?'Wird geladen …':'Aktualisieren'}</button></div><div class="admin-member-grid">${cards||'<p class="view-note">Noch keine Mitgliederprofile vorhanden.</p>'}</div></div></details>`;
+  return `<details id="adminMembersDetails" class="admin-members admin-collapsible"><summary><span><b>Registrierte Mitglieder</b><small>${profiles.length} Profil${profiles.length===1?'':'e'} vorhanden</small></span><i aria-hidden="true">⌄</i></summary><div class="admin-collapsible-body"><div class="admin-members-toolbar"><p class="view-note">Profile, Aktivität und Berechtigungen verwalten. Jedes Konto bleibt gleichzeitig ein persönliches Mitgliedskonto.</p><button id="refreshMembersBtn" class="secondary" type="button" ${c.adminProfilesBusy?'disabled':''}>${c.adminProfilesBusy?'Wird geladen …':'Aktualisieren'}</button></div><div class="admin-member-grid">${cards||'<p class="view-note">Noch keine Mitgliederprofile vorhanden.</p>'}</div></div></details>`;
 }
 const PushNotifications={
   supported:'serviceWorker'in navigator&&'PushManager'in window&&'Notification'in window,
@@ -294,7 +297,7 @@ const PushNotifications={
 window.PushNotifications=PushNotifications;
 function urlBase64ToUint8Array(value){const padding='='.repeat((4-value.length%4)%4),base64=(value+padding).replace(/-/g,'+').replace(/_/g,'/'),raw=atob(base64);return Uint8Array.from([...raw].map(char=>char.charCodeAt(0)))}
 function renderMemberPush(){const p=PushNotifications,ios=/iphone|ipad|ipod/i.test(navigator.userAgent),standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;if(!p.supported)return `<section class="push-card"><div><span class="eyebrow">BENACHRICHTIGUNGEN</span><h3>Auf diesem Browser nicht verfügbar</h3><p>Bitte verwende einen aktuellen Browser.${ios&&!standalone?' Auf iPhone und iPad muss Triple20 zuerst zum Home-Bildschirm hinzugefügt werden.':''}</p></div></section>`;return `<section class="push-card ${p.enabled?'is-enabled':''}"><div><span class="eyebrow">BENACHRICHTIGUNGEN</span><h3>${p.enabled?'Push ist aktiviert':'Nichts mehr verpassen'}</h3><p>${p.enabled?'Dieses Gerät erhält Hinweise zu Spieltagen und wichtigen Vereinsmeldungen.':'Erhalte Hinweise zu neuen Spieltagen, Änderungen und wichtigen Vereinsmeldungen.'}</p>${ios&&!standalone?'<small>Auf iPhone/iPad: Triple20 zuerst über „Teilen → Zum Home-Bildschirm“ installieren und dort öffnen.</small>':''}</div><button id="${p.enabled?'disablePushBtn':'enablePushBtn'}" class="${p.enabled?'secondary':'primary'}" type="button" ${p.busy?'disabled':''}>${p.busy?'BITTE WARTEN …':p.enabled?'Deaktivieren':'PUSH AKTIVIEREN'}</button>${p.error?`<p class="login-error">${esc(p.error)}</p>`:''}${p.message?`<p class="login-success">${esc(p.message)}</p>`:''}</section>`}
-function renderAdminPush(){const p=PushNotifications,count=p.subscriberCount===null?'–':p.subscriberCount;return `<section class="admin-push"><div class="admin-push-head"><div><span class="eyebrow">PUSH-NACHRICHTEN</span><h3>Mitglieder direkt informieren</h3><p>Eine kurze Nachricht an alle aktivierten Geräte senden.</p></div><div class="admin-push-reach"><b>${count}</b><span>${count===1?'Gerät':'Geräte'} erreichbar</span></div></div><form id="adminPushForm" class="admin-push-form"><div class="admin-push-meta"><label>Titel<input id="pushTitle" maxlength="60" value="Triple20" required></label><label>Ziel in der App<select id="pushUrl"><option value="/">Startseite</option><option value="/?bereich=saison">Saisonwertung</option><option value="/?bereich=live">Live-Turnier</option><option value="/?bereich=konto">Konto</option></select></label></div><label class="admin-push-message">Nachricht<textarea id="pushBody" maxlength="180" placeholder="Was sollen die Mitglieder wissen?" required></textarea></label><div class="admin-push-footer"><small>Kurz und eindeutig formulieren · maximal 180 Zeichen</small><button class="primary" type="submit" ${p.busy?'disabled':''}>${p.busy?'WIRD GESENDET …':'NACHRICHT SENDEN'}</button></div></form>${p.error?`<p class="login-error">${esc(p.error)}</p>`:''}${p.message?`<p class="login-success">${esc(p.message)}</p>`:''}</section>`}
+function renderAdminPush(){if(!isFullAdmin())return'';const p=PushNotifications,count=p.subscriberCount===null?'–':p.subscriberCount;return `<section class="admin-push"><div class="admin-push-head"><div><span class="eyebrow">PUSH-NACHRICHTEN</span><h3>Mitglieder direkt informieren</h3><p>Eine kurze Nachricht an alle aktivierten Geräte senden.</p></div><div class="admin-push-reach"><b>${count}</b><span>${count===1?'Gerät':'Geräte'} erreichbar</span></div></div><form id="adminPushForm" class="admin-push-form"><div class="admin-push-meta"><label>Titel<input id="pushTitle" maxlength="60" value="Triple20" required></label><label>Ziel in der App<select id="pushUrl"><option value="/">Startseite</option><option value="/?bereich=saison">Saisonwertung</option><option value="/?bereich=live">Live-Turnier</option><option value="/?bereich=konto">Konto</option></select></label></div><label class="admin-push-message">Nachricht<textarea id="pushBody" maxlength="180" placeholder="Was sollen die Mitglieder wissen?" required></textarea></label><div class="admin-push-footer"><small>Kurz und eindeutig formulieren · maximal 180 Zeichen</small><button class="primary" type="submit" ${p.busy?'disabled':''}>${p.busy?'WIRD GESENDET …':'NACHRICHT SENDEN'}</button></div></form>${p.error?`<p class="login-error">${esc(p.error)}</p>`:''}${p.message?`<p class="login-success">${esc(p.message)}</p>`:''}</section>`}
 function upcomingAdminEvents(){
   const today=todayIso(),activeScheduleIds=new Set([state.scheduledEventId,...Object.values(state.competitions||{}).map(competition=>competition?.scheduledEventId)].filter(Boolean));return publicTournamentRecords().filter(item=>!activeScheduleIds.has(item.id)&&(item.planned||item.date>=today)&&item.date>=today).sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.startTime||'').localeCompare(b.startTime||''));
 }
@@ -322,6 +325,10 @@ function renderPersonalMemberOverview(){
   const {season,row,rank}=current,recent=row.entries.filter(entry=>entry.present).sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,3),balance=row.wins+row.losses?`${row.wins} : ${row.losses}`:'0 : 0';
   return `<section class="personal-overview"><div class="personal-overview-head"><div><span class="eyebrow">MEINE ÜBERSICHT</span><h3>${esc(season.name)}</h3><p>${esc(row.name)} · Persönliche Saisonwerte</p></div><div class="personal-overview-actions"><button class="secondary" type="button" data-member-profile="${esc(playerProfileReference(row))}">Mein öffentliches Profil</button><button class="secondary" type="button" data-member-season="${esc(season.id)}">Rangliste öffnen</button></div></div><div class="personal-stat-grid"><article><small>Rang</small><b>${rank}</b></article><article><small>Punkte</small><b>${row.cleanPoints}</b></article><article><small>Turniere</small><b>${row.played}</b></article><article><small>Siege : Niederlagen</small><b>${balance}</b></article></div><div class="personal-overview-detail"><section><h4>Letzte Ergebnisse</h4>${recent.length?`<div class="personal-results">${recent.map(entry=>`<div><span><b>${publicDate(entry.date)}</b>${esc(entry.name||'Spieltag')}</span><strong>${entry.rank?`${entry.rank}. Platz · `:''}${entry.points} Pkt.</strong></div>`).join('')}</div>`:'<p class="view-note">Noch kein gespielter Termin vorhanden.</p>'}</section><section class="personal-next-event"><h4>Nächster Spieltag</h4>${next?`<b>${esc(next.name||next.eventName||'Spieltag')}</b><p>${publicDate(next.date)}${publicStartTime(next)?` · ${esc(publicStartTime(next))}`:''}</p><small>${esc([next.competitionLabel,next.seasonName].filter(Boolean).join(' · ')||'Weitere Informationen folgen')}</small><button class="link-btn" type="button" data-member-home>Alle Termine öffnen</button>`:'<p class="view-note">Derzeit ist kein zukünftiger Spieltag eingetragen.</p>'}</section></div></section>`;
 }
+function renderStaffMemberIdentity(){
+  const c=T20Cloud,p=c.profile||{},roleLabel=c.role==='admin'?'Administrator':'Turnierleitung',initial=esc((p.nickname||p.display_name||c.user?.email||'?').trim().charAt(0).toUpperCase()||'?'),avatar=c.avatarSignedUrl?`<img src="${esc(c.avatarSignedUrl)}" alt="Profilfoto">`:initial,nickname=p.nickname||'Spitzname noch nicht eingetragen';
+  return `<section class="staff-member-identity"><div class="profile-heading"><div><span class="profile-avatar">${avatar}</span><div><span class="eyebrow">MITGLIED &amp; ${esc(roleLabel.toUpperCase())}</span><h3>${esc(nickname)}</h3><p class="view-note">${esc(p.display_name||'Vor- und Zuname fehlen')} · ${esc(c.user?.email||'')}</p></div></div><button id="adminLogoutBtn" class="secondary" type="button">Abmelden</button></div>${renderPersonalMemberOverview()}<details id="staffProfileSettings" class="member-account-settings"><summary><span><b>Mein Spielerprofil</b><small>Profilfoto, Spitzname und persönliche Angaben verwalten</small></span><i aria-hidden="true">⌄</i></summary><div class="member-account-settings-body"><section class="member-profile-settings"><div class="avatar-actions"><label class="secondary avatar-upload">${c.avatarBusy?'Bild wird verarbeitet …':'Profilfoto auswählen'}<input id="profileAvatarInput" type="file" accept="image/*" ${c.avatarBusy?'disabled':''}></label>${p.avatar_url?`<button id="removeAvatarBtn" class="danger" type="button" ${c.avatarBusy?'disabled':''}>Foto entfernen</button>`:''}</div><p id="loginError" class="login-error">${esc(c.authError||'')}</p><p class="login-success ${c.authMessage?'':'hidden'}">${esc(c.authMessage||'')}</p><form id="memberProfileForm" class="profile-form"><label>Spitzname<input id="profileNickname" maxlength="30" value="${esc(p.nickname||'')}" required></label><label>Vor- und Zuname<input id="profileDisplayName" maxlength="60" value="${esc(p.display_name||'')}" autocomplete="name" required></label><button class="primary" type="submit">${c.profileBusy?'Wird gespeichert …':'PROFIL SPEICHERN'}</button></form></section></div></details></section>`;
+}
 function renderCloudPanel(){
   const panel=$('#cloudAdminPanel');if(!panel||!window.T20Cloud)return;
   const c=T20Cloud,summary=backupPreview();
@@ -331,7 +338,8 @@ function renderCloudPanel(){
     const p=c.profile||{},initial=esc((p.nickname||p.display_name||c.user?.email||'?').trim().charAt(0).toUpperCase()||'?'),avatar=c.avatarSignedUrl?`<img src="${esc(c.avatarSignedUrl)}" alt="Profilfoto">`:initial,nickname=p.nickname||'Spitzname noch nicht eingetragen';
     replaceCloudPanelHtml(panel,`<section class="member-profile"><div class="profile-heading"><div><span class="profile-avatar">${avatar}</span><div><h3>${esc(nickname)}</h3><p class="view-note">${esc(p.display_name||'Vor- und Zuname fehlen')} · ${esc(c.user?.email||'')}</p></div></div><button id="memberLogoutBtn" class="secondary" type="button">Abmelden</button></div>${renderPersonalMemberOverview()}<details id="memberAccountSettings" class="member-account-settings"><summary><span><b>Profil &amp; Benachrichtigungen</b><small>Push, Profilfoto und persönliche Daten verwalten</small></span><i aria-hidden="true">⌄</i></summary><div class="member-account-settings-body">${renderMemberPush()}<section class="member-profile-settings"><div class="member-settings-heading"><span class="eyebrow">PROFIL</span><h3>Persönliche Angaben</h3></div><div class="avatar-actions"><label class="secondary avatar-upload">${c.avatarBusy?'Bild wird verarbeitet …':'Profilfoto auswählen'}<input id="profileAvatarInput" type="file" accept="image/*" ${c.avatarBusy?'disabled':''}></label>${p.avatar_url?`<button id="removeAvatarBtn" class="danger" type="button" ${c.avatarBusy?'disabled':''}>Foto entfernen</button>`:''}<small>iPhone-Fotos, JPEG, PNG oder WebP · wird auf 512 × 512 Pixel verkleinert · maximal 1 MB</small></div><p id="loginError" class="login-error">${esc(c.authError||'')}</p><p class="login-success ${c.authMessage?'':'hidden'}">${esc(c.authMessage||'')}</p><form id="memberProfileForm" class="profile-form"><label>Spitzname<input id="profileNickname" maxlength="30" value="${esc(p.nickname||'')}" placeholder="Öffentlicher Spielname" required></label><label>Vor- und Zuname<input id="profileDisplayName" maxlength="60" value="${esc(p.display_name||'')}" placeholder="z. B. Markus Mustermann" autocomplete="name" required></label><button class="primary" type="submit">${c.profileBusy?'Wird gespeichert …':'PROFIL SPEICHERN'}</button></form><p class="view-note">Der Spitzname wird bei Turnieren und Ranglisten angezeigt. Der vollständige Name bleibt im geschützten Profil.</p></section></div></details></section>`);return
   }
-  replaceCloudPanelHtml(panel,`${renderAdminDashboard()}${renderAdminPush()}${renderAdminMembers()}${renderAccessStats()}<h3>Online-Speicherung</h3><p class="view-note">${esc(summary)}</p><div class="cloud-actions"><button id="backupDownloadBtn" class="cloud-action-btn" type="button">Backup herunterladen</button><label class="cloud-action-btn backup-file">Backup einspielen<input id="backupImportInput" type="file" accept="application/json"></label><button id="uploadLocalBtn" class="cloud-action-btn" type="button">Lokale Daten in die Cloud übernehmen</button><button id="loadCloudBtn" class="cloud-action-btn" type="button">Cloud-Daten laden</button><button id="forceCloudBtn" class="cloud-action-btn danger-cloud" type="button">Cloud überschreiben</button><button id="adminLogoutBtn" class="cloud-action-btn" type="button">Abmelden</button></div>`);
+  const cloudTools=isFullAdmin()?`<h3>Online-Speicherung</h3><p class="view-note">${esc(summary)}</p><div class="cloud-actions"><button id="backupDownloadBtn" class="cloud-action-btn" type="button">Backup herunterladen</button><label class="cloud-action-btn backup-file">Backup einspielen<input id="backupImportInput" type="file" accept="application/json"></label><button id="uploadLocalBtn" class="cloud-action-btn" type="button">Lokale Daten in die Cloud übernehmen</button><button id="loadCloudBtn" class="cloud-action-btn" type="button">Cloud-Daten laden</button><button id="forceCloudBtn" class="cloud-action-btn danger-cloud" type="button">Cloud überschreiben</button></div>`:'';
+  replaceCloudPanelHtml(panel,`${renderStaffMemberIdentity()}${renderAdminDashboard()}${renderAdminPush()}${renderAdminMembers()}${renderAccessStats()}${cloudTools}`);
 }
 async function handleBackupImport(file){
   if(!file||!isAdmin())return;
@@ -407,7 +415,7 @@ function cleanAuthRedirectUrl(){
 window.T20Cloud={
   authResolved:false,
   liveTournamentState:null,tournamentViewMode:'local',
-  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,sessionProcessingPromise:null,authRedirectSessionPromise:null,authRedirectSessionResolve:null,loginBusy:false,magicLinkBusy:false,otpVerifyBusy:false,otpEmail:'',profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),lastSeenTimer:null,lastSeenVisibilityBound:false,authMessage:'',authError:'',loadBusy:false,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
+  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,role:'guest',memberRoles:{},profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,sessionProcessingPromise:null,authRedirectSessionPromise:null,authRedirectSessionResolve:null,loginBusy:false,magicLinkBusy:false,otpVerifyBusy:false,otpEmail:'',profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),lastSeenTimer:null,lastSeenVisibilityBound:false,authMessage:'',authError:'',loadBusy:false,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
   async finishAuthRedirect(){cleanAuthRedirectUrl();this.authHandoffActive=false;this.authMessage='Anmeldung erfolgreich. Du kannst diesen Tab weiterverwenden.';showLogin();renderCloudPanel()},
   async init(){
     if(this.initPromise)return this.initPromise;
@@ -470,13 +478,13 @@ window.T20Cloud={
     this.authBusy=true;
     try{
       if(!session&&this.presenceChannel)await this.stopPresence();
-      this.session=session;this.user=session?.user||null;this.authResolved=true;this.isAdmin=false;this.profile=null;this.avatarSignedUrl='';
+      this.session=session;this.user=session?.user||null;this.authResolved=true;this.isAdmin=false;this.role=this.user?'member':'guest';this.memberRoles={};this.profile=null;this.avatarSignedUrl='';
       if(this.user){
         this.authMessage=this.authRedirectPending?'Anmeldung erfolgreich. Dein Profil wird geladen …':'';
         renderReadonlyMode();renderCloudPanel();setSyncStatus('Anmeldung bestätigt …','saving');
         if(this.authRedirectPending){this.authRedirectPending=false;cleanAuthRedirectUrl();showLogin();renderCloudPanel()}
       }
-      if(this.user)this.isAdmin=await this.checkAdmin(this.user.id);
+      if(this.user){this.role=await this.loadOwnRole(this.user.id);this.isAdmin=['tournament_manager','admin'].includes(this.role)}
       if(this.isAdmin){
         const stranded=loadMemberTournament(),hasStrandedLive=!!(stranded.started||Object.values(stranded.competitions||{}).some(competition=>competition?.started));
         if(hasStrandedLive&&!state.started&&!Object.values(state.competitions||{}).some(competition=>competition?.started)){replaceTournamentState(structuredClone(stranded));delete state.memberLocal;delete state.guestLocal;localStorage.removeItem(MEMBER_TOURNAMENT_KEY);save()}
@@ -485,9 +493,9 @@ window.T20Cloud={
       if(this.user&&!this.isAdmin&&state.guestLocal){Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,{players:[],playerProfileIds:{},started:false,matches:[],settings:{}});localStorage.removeItem('dartTournament');localStorage.removeItem('triple20_pending_sync');this.pendingSync=false}
       if(this.user&&!this.isAdmin)this.tournamentViewMode='live';
       if(this.isAdmin&&localStorage.getItem('triple20_identity_pending')==='1'){this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');localStorage.removeItem('triple20_identity_pending')}
-      if(this.user&&this.isAdmin)try{await this.loadAdminProfiles()}catch(error){console.warn('Mitgliederprofile konnten nach der Anmeldung nicht geladen werden:',error)}
+      if(this.user&&this.isAdmin)try{await this.loadAdminProfiles();if(isFullAdmin())await this.loadMemberRoles();else this.memberRoles={[this.user.id]:this.role}}catch(error){console.warn('Mitgliederprofile oder Rollen konnten nach der Anmeldung nicht geladen werden:',error)}
       if(this.user)try{await loadTournamentRegistrations()}catch(error){console.warn('Turnieranmeldungen konnten nach der Anmeldung nicht geladen werden:',error)}
-      if(this.user&&!this.isAdmin)try{this.profile=await this.loadProfile()}catch(error){console.warn('Profil konnte nach der Anmeldung nicht geladen werden:',error);this.profile={id:this.user.id,display_name:'',nickname:'',avatar_url:null};this.authError='Du bist angemeldet, aber dein Profil konnte noch nicht geladen werden. Bitte aktualisiere die Seite.'}
+      if(this.user)try{this.profile=await this.loadProfile()}catch(error){console.warn('Profil konnte nach der Anmeldung nicht geladen werden:',error);this.profile={id:this.user.id,display_name:'',nickname:'',avatar_url:null};this.authError='Du bist angemeldet, aber dein Profil konnte noch nicht geladen werden. Bitte aktualisiere die Seite.'}
       if(this.user){this.startPresence();this.startLastSeenTracking()}
       renderReadonlyMode();renderCloudPanel();
       if(this.user)PushNotifications.refresh().catch(error=>console.warn('Push-Status konnte nicht geprüft werden:',error));
@@ -516,7 +524,14 @@ window.T20Cloud={
     this.lastSeenTimer=setInterval(()=>this.touchLastSeen(),5*60*1000);
     if(!this.lastSeenVisibilityBound){document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&this.user)this.touchLastSeen()});this.lastSeenVisibilityBound=true}
   },
-  async checkAdmin(uid){try{const client=requireSupabaseClient();const {data,error}=await withTimeout(client.from('triple20_admins').select('user_id').eq('user_id',uid).maybeSingle(),10000,'Adminprüfung dauert zu lange.');if(error)throw error;const ok=data?.user_id===uid;if(ok)localStorage.setItem('triple20_admin_uid',uid);return ok}catch(e){console.warn('Adminprüfung fehlgeschlagen',e);return localStorage.getItem('triple20_admin_uid')===uid}},
+  async loadOwnRole(uid){
+    try{const client=requireSupabaseClient(),{data,error}=await withTimeout(client.rpc('triple20_my_role'),10000,'Berechtigungsprüfung dauert zu lange.');if(error)throw error;const role=['admin','tournament_manager'].includes(data)?data:'member';if(role!=='member')localStorage.setItem('triple20_admin_uid',uid);else localStorage.removeItem('triple20_admin_uid');return role}
+    catch(error){
+      // Rueckwaertskompatibel, bis das neue Rollen-SQL einmal ausgefuehrt wurde.
+      try{const client=requireSupabaseClient(),{data,error:legacyError}=await withTimeout(client.from('triple20_admins').select('user_id').eq('user_id',uid).maybeSingle(),10000,'Adminprüfung dauert zu lange.');if(legacyError)throw legacyError;const role=data?.user_id===uid?'admin':'member';if(role==='admin')localStorage.setItem('triple20_admin_uid',uid);return role}
+      catch(legacyError){console.warn('Berechtigungsprüfung fehlgeschlagen',error,legacyError);return localStorage.getItem('triple20_admin_uid')===uid?'admin':'member'}
+    }
+  },
   async loadPublicMembers(){
     if(!this.client)return[];
     const {data,error}=await this.client.rpc('triple20_public_members');
@@ -538,6 +553,18 @@ window.T20Cloud={
     renderMemberSuggestions();renderRegisteredPlayerChoices();
     return this.adminProfiles;
   },
+  async loadMemberRoles(){
+    if(!this.isAdmin)return{};
+    try{const client=requireSupabaseClient(),{data,error}=await client.rpc('triple20_list_member_roles');if(error)throw error;this.memberRoles=Object.fromEntries((data||[]).map(item=>[item.user_id,item.role]));if(this.user)this.memberRoles[this.user.id]=this.role;return this.memberRoles}
+    catch(error){console.warn('Mitgliederrollen konnten noch nicht geladen werden:',error);this.memberRoles=this.user?{[this.user.id]:this.role}:{};return this.memberRoles}
+  },
+  async setMemberRole(userId,role){
+    if(!isFullAdmin()||!userId||userId===this.user?.id)return;
+    const previous=this.memberRoles[userId]||'member';this.memberRoles[userId]=role;renderCloudPanel();
+    try{const client=requireSupabaseClient(),{error}=await client.rpc('triple20_set_member_role',{target_user_id:userId,new_role:role});if(error)throw error;await this.loadMemberRoles();this.authMessage='Berechtigung wurde gespeichert.';this.authError=''}
+    catch(error){this.memberRoles[userId]=previous;this.authMessage='';this.authError=`Berechtigung konnte nicht gespeichert werden: ${error?.message||'Bitte das Rollen-SQL in Supabase ausführen.'}`}
+    renderCloudPanel();
+  },
   async refreshAdminProfiles(){
     if(!this.isAdmin||this.adminProfilesBusy)return;
     this.adminProfilesBusy=true;this.authError='';renderCloudPanel();
@@ -553,13 +580,13 @@ window.T20Cloud={
     const encode=quality=>new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));let blob=await encode(.84);if(blob?.size>1048576)blob=await encode(.68);if(!blob||blob.size>1048576)throw new Error('Das Bild konnte nicht auf unter 1 MB verkleinert werden.');return blob;
   },
   async uploadAvatar(file){
-    if(!this.user||this.isAdmin||this.avatarBusy)return;this.avatarBusy=true;this.authMessage='';this.authError='';renderCloudPanel();
+    if(!this.user||this.avatarBusy)return;this.avatarBusy=true;this.authMessage='';this.authError='';renderCloudPanel();
     try{const blob=await this.prepareAvatar(file),path=`${this.user.id}/avatar.webp`,client=requireSupabaseClient(),{error:uploadError}=await client.storage.from('triple20-avatars').upload(path,blob,{contentType:'image/webp',upsert:true,cacheControl:'3600'});if(uploadError)throw uploadError;const {data,error}=await client.from('triple20_profiles').update({avatar_url:path}).eq('id',this.user.id).select('id,display_name,nickname,avatar_url,updated_at').single();if(error)throw error;this.profile=data;const {data:signed,error:signedError}=await client.storage.from('triple20-avatars').createSignedUrl(path,3600);if(signedError)throw signedError;this.avatarSignedUrl=signed?.signedUrl||'';this.authMessage='Profilfoto wurde gespeichert.'}
     catch(error){console.error('Profilfoto hochladen fehlgeschlagen:',error);this.authError=`Profilfoto konnte nicht gespeichert werden: ${error?.message||'Bitte später erneut versuchen.'}`}
     finally{this.avatarBusy=false;renderCloudPanel()}
   },
   async removeAvatar(){
-    if(!this.user||this.isAdmin||this.avatarBusy||!this.profile?.avatar_url)return;this.avatarBusy=true;this.authMessage='';this.authError='';renderCloudPanel();
+    if(!this.user||this.avatarBusy||!this.profile?.avatar_url)return;this.avatarBusy=true;this.authMessage='';this.authError='';renderCloudPanel();
     try{const client=requireSupabaseClient(),path=this.profile.avatar_url,{error:removeError}=await client.storage.from('triple20-avatars').remove([path]);if(removeError)throw removeError;const {data,error}=await client.from('triple20_profiles').update({avatar_url:null}).eq('id',this.user.id).select('id,display_name,nickname,avatar_url,updated_at').single();if(error)throw error;this.profile=data;this.avatarSignedUrl='';this.authMessage='Profilfoto wurde entfernt.'}
     catch(error){console.error('Profilfoto entfernen fehlgeschlagen:',error);this.authError=`Profilfoto konnte nicht entfernt werden: ${error?.message||'Bitte später erneut versuchen.'}`}
     finally{this.avatarBusy=false;renderCloudPanel()}
@@ -579,7 +606,7 @@ window.T20Cloud={
     finally{this.otpVerifyBusy=false;renderCloudPanel()}
   },
   async saveProfile(displayName,nickname){
-    if(!this.user||this.isAdmin||this.profileBusy)return;
+    if(!this.user||this.profileBusy)return;
     const cleanName=displayName.trim().replace(/\s+/g,' '),cleanNickname=nickname.trim().replace(/\s+/g,' ');
     if(!cleanNickname){this.authError='Bitte einen Spitznamen eintragen.';this.authMessage='';renderCloudPanel();return}
     if(cleanName.split(' ').length<2){this.authError='Bitte Vor- und Zunamen vollständig eintragen.';this.authMessage='';renderCloudPanel();return}
@@ -616,7 +643,7 @@ window.T20Cloud={
     if(this.isAdmin&&this.client){clearTimeout(this.syncTimer);await this.syncAll({force:true});if(this.pendingSync){alert('Abmeldung abgebrochen: Die letzten Änderungen konnten noch nicht in der Cloud gespeichert werden. Bitte prüfe die Internetverbindung und versuche es erneut.');return}}
     try{await this.stopPresence();if(this.client)await this.client.auth.signOut()}catch(e){console.warn('Abmeldung fehlgeschlagen',e)}
     localStorage.removeItem('triple20_admin_uid');
-    this.session=null;this.user=null;this.isAdmin=false;this.profile=null;this.avatarSignedUrl='';this.authMessage='';this.authError='';
+    this.session=null;this.user=null;this.isAdmin=false;this.role='guest';this.memberRoles={};this.profile=null;this.avatarSignedUrl='';this.authMessage='';this.authError='';
     if(state.memberLocal)replaceTournamentState({players:[],playerProfileIds:{},started:false,matches:[],settings:{},guestLocal:true});
     renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only');showHome();
   },
@@ -1339,9 +1366,8 @@ function registrationEventKey(tournament={}){return String(tournament.id||tourna
 function registrationHtml(tournament={}){
   const eventKey=registrationEventKey(tournament),count=tournamentRegistrationCounts[eventKey]||0,own=tournamentRegistrations.find(item=>item.event_key===eventKey&&item.user_id===T20Cloud.user?.id),visibleRows=T20Cloud.user?tournamentRegistrations.filter(item=>item.event_key===eventKey).sort((a,b)=>(a.nickname||'').localeCompare(b.nickname||'','de')):[];
   const names=visibleRows.length?`<details class="registration-names"><summary>${count} Anmeldung${count===1?'':'en'} anzeigen</summary><span>${visibleRows.map(item=>esc(item.nickname||'Mitglied')).join(', ')}</span></details>`:`<small>${count} angemeldet</small>`;
-  if(isAdmin())return `<div class="event-registration admin-registration">${names}</div>`;
   if(!T20Cloud.user)return `<div class="event-registration"><small>${count} angemeldet</small><button class="secondary" type="button" data-event-login>Zur Teilnahme anmelden</button></div>`;
-  return `<div class="event-registration member-registration"><div>${names}${own?'<small>Du bist angemeldet.</small>':''}</div><button class="${own?'danger':'primary'}" type="button" data-event-registration="${esc(eventKey)}" data-registration-action="${own?'cancel':'join'}">${own?'Teilnahme absagen':'Ich bin dabei'}</button></div>`;
+  return `<div class="event-registration member-registration ${isAdmin()?'admin-registration':''}"><div>${names}${own?'<small>Du bist angemeldet.</small>':''}</div><button class="${own?'danger':'primary'}" type="button" data-event-registration="${esc(eventKey)}" data-registration-action="${own?'cancel':'join'}">${own?'Teilnahme absagen':'Ich bin dabei'}</button></div>`;
 }
 async function loadTournamentRegistrations(){
   if(registrationsLoading||!T20Cloud.client)return;registrationsLoading=true;
@@ -1353,7 +1379,7 @@ async function loadTournamentRegistrations(){
   }catch(error){console.warn('Teilnahmeanmeldungen konnten nicht geladen werden:',error)}finally{registrationsLoading=false}
 }
 async function changeTournamentRegistration(eventKey,action){
-  if(!T20Cloud.user||isAdmin()){if(!T20Cloud.user)showLogin();return}if(!T20Cloud.client){alert('Die Anmeldung benötigt momentan eine Internetverbindung.');return}
+  if(!T20Cloud.user){showLogin();return}if(!T20Cloud.client){alert('Die Anmeldung benötigt momentan eine Internetverbindung.');return}
   const button=document.querySelector(`[data-event-registration="${CSS.escape(eventKey)}"]`);if(button)button.disabled=true;
   try{
     if(action==='cancel'){const {error}=await T20Cloud.client.from('triple20_tournament_registrations').delete().eq('event_key',eventKey).eq('user_id',T20Cloud.user.id);if(error)throw error}
@@ -1562,7 +1588,7 @@ function hideMainSections(){stopTvRefresh();document.body.classList.remove('tv-m
 function renderNavigation(){
   const admin=isAdmin(),member=isMember(),guest=!admin&&!member;
   $('.club-settings-block')?.classList.remove('hidden');
-  $('#showSettingsBtn')?.classList.toggle('hidden',!admin);
+  $('#showSettingsBtn')?.classList.toggle('hidden',!isFullAdmin());
   $('#showSeasonBtn')?.classList.remove('hidden');
   const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=admin?'Konto':member?'Mein Profil':'Anmelden';
 }
@@ -1606,7 +1632,7 @@ function openLiveQr(){
   document.body.insertAdjacentHTML('beforeend',`<div id="liveQrOverlay" class="live-qr-overlay" role="dialog" aria-modal="true" aria-labelledby="liveQrTitle"><section class="live-qr-dialog"><button id="closeLiveQrBtn" class="live-qr-close" type="button" aria-label="QR-Code schließen">×</button><span class="eyebrow">ZUSCHAUER-LINK</span><h2 id="liveQrTitle">Live-Spielplan öffnen</h2><p>QR-Code scannen und den Spielplan ohne Anmeldung ansehen.</p><div class="live-qr-switch"><button class="secondary" type="button" data-live-qr-competition="men">Herren</button><button class="secondary" type="button" data-live-qr-competition="women">Damen</button></div><div id="liveQrCode" class="live-qr-code"></div><a id="liveQrLink" class="live-qr-link" href="#" target="_blank" rel="noopener"></a><button id="copyLiveQrLinkBtn" class="primary" type="button">LINK KOPIEREN <span>⧉</span></button></section></div>`);renderLiveQrCode(state.activeCompetition||'men');
 }
 function showLogin(updateUrl=true){hideMainSections();$('#authSection')?.classList.remove('hidden');renderCloudPanel();renderNavigation();if(updateUrl)updateAppUrl('konto')}
-function showSettings(updateUrl=true){if(!isAdmin()){showLogin(updateUrl);return}hideMainSections();$('#settingsSection').classList.remove('hidden');renderSettingsForm();renderNavigation();if(updateUrl)updateAppUrl('einstellungen')}
+function showSettings(updateUrl=true){if(!isFullAdmin()){showLogin(updateUrl);return}hideMainSections();$('#settingsSection').classList.remove('hidden');renderSettingsForm();renderNavigation();if(updateUrl)updateAppUrl('einstellungen')}
 function validPartnerUrl(value){try{const url=new URL(value);return url.protocol==='https:'&&/(^|\.)amazon\.de$/i.test(url.hostname)}catch{return false}}
 function validProductImage(value){return typeof value==='string'&&(/^product-images\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)$/i.test(value)||/^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(value))}
 function shopIcon(icon='target'){return({target:'🎯',camera:'📷',club:'👥',starter:'✨',case:'💼',light:'💡',board:'◉',tools:'🔧'})[icon]||'🎯'}
@@ -1792,6 +1818,10 @@ $('#cloudAdminPanel').addEventListener('click',e=>{
   if(e.target.id==='uploadLocalBtn')T20Cloud.uploadLocalWithBackup();
   if(e.target.id==='loadCloudBtn')T20Cloud.loadCloudConfirmed();
   if(e.target.id==='forceCloudBtn'){if(confirm('Lokale Daten wirklich in der Cloud überschreiben?'))T20Cloud.syncAll({force:true})}
+});
+$('#cloudAdminPanel').addEventListener('change',event=>{
+  const roleSelect=event.target.closest('[data-member-role]');
+  if(roleSelect)T20Cloud.setMemberRole(roleSelect.dataset.memberRole,roleSelect.value);
 });
 $('#cloudAdminPanel').addEventListener('change',e=>{if(e.target.id==='backupImportInput')handleBackupImport(e.target.files?.[0]);if(e.target.id==='profileAvatarInput'&&e.target.files?.[0])openAvatarCrop(e.target.files[0]).catch(error=>{T20Cloud.authError=`Bild konnte nicht geöffnet werden: ${error?.message||'Unbekannter Fehler'}`;renderCloudPanel()})});
 document.addEventListener('click',e=>{if(e.target.id==='cancelAvatarCropBtn'||e.target.id==='avatarCropOverlay')closeAvatarCrop();if(e.target.id==='saveAvatarCropBtn')saveAvatarCrop()});
