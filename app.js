@@ -15,6 +15,7 @@ let tournamentRegistrationCounts={},tournamentRegistrations=[],registrationsLoad
 const CHECKIN_STORAGE_KEY='triple20_admin_checkins';
 let adminCheckInEventKey='';
 let recommendationClickStats={},recommendationClicksLoading=false;
+let statsStationMatches=[],statsStationImageUrl='';
 const PENDING_RECOMMENDATION_CLICKS_KEY='triple20_pending_recommendation_clicks';
 const SUPABASE_URL='https://hidjvylnxmtlvtiomktu.supabase.co';
 const TRIPLE20_PUBLIC_URL='https://triple20.at/';
@@ -152,7 +153,7 @@ function hasMeaningfulLocalData(){return !!(state.players?.length||state.matches
 function collectTriple20Data(){return Object.fromEntries(CLOUD_DATA_KEYS.map(k=>[k,localValueForKey(k)]))}
 function backupTriple20Data(prefix='triple20_backup'){const data={createdAt:new Date().toISOString(),app:'Triple20',data:collectTriple20Data()};downloadFile(`${prefix}_${new Date().toISOString().slice(0,19).replaceAll(':','-')}.json`,'application/json',JSON.stringify(data,null,2));return data}
 function applyTriple20Data(data){
-  const visibleSection=['tvSection','publicHomeSection','authSection','settingsSection','seasonSection','shopSection','setupSection','tournamentSection'].find(id=>!$('#'+id)?.classList.contains('hidden'))||'';
+  const visibleSection=['tvSection','publicHomeSection','authSection','settingsSection','seasonSection','shopSection','statsStationSection','setupSection','tournamentSection'].find(id=>!$('#'+id)?.classList.contains('hidden'))||'';
   if(!data)return;
   T20_SUPPRESS_SYNC=true;
   try{
@@ -180,6 +181,7 @@ function applyTriple20Data(data){
   else if(visibleSection==='settingsSection')showSettings();
   else if(visibleSection==='seasonSection')showSeason();
   else if(visibleSection==='shopSection')showShop();
+  else if(visibleSection==='statsStationSection')showStatsStation(false);
   else if(visibleSection==='tournamentSection'||visibleSection==='setupSection')showTournament();
 }
 function backupPreview(data=collectTriple20Data()){const seasons=data.tripleTwentySeasons?.seasons||[],tournaments=data.triple20_tournaments||[],current=data.dartTournament||{};return `${seasons.length} Saison(en), ${tournaments.length} gespeicherte Turnier(e), aktuelles Turnier: ${current.started?'läuft':'nicht gestartet'}${current.players?.length?`, ${current.players.length} Spieler`:''}`;}
@@ -883,6 +885,7 @@ function renderTournament(){
   $('#liveCompetitionLabel').textContent=`${competitionLabel().toUpperCase()} · LIVE-TURNIER`;$('#liveTitle').textContent=competitionEventName()||state.settings.name;$('#liveMeta').textContent=`${state.players.length} Teilnehmende · ${modeName()} · ${state.settings.start}`;
   const refreshed=T20Cloud.lastSyncAt?new Date(T20Cloud.lastSyncAt).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'';$('#liveViewerStatus').textContent=refreshed?`Automatisch aktuell · zuletzt ${refreshed} Uhr`:'Automatische Aktualisierung alle 15 Sekunden';
   $('#openTvViewBtn')?.classList.toggle('hidden',!isAdmin());
+  $('#openStatsStationBtn')?.classList.toggle('hidden',!isAdmin());
   $('#tournamentActionsMenu')?.classList.toggle('hidden',!isAdmin());
   renderTvDisplayControls();
   $('#showLiveQrBtn')?.classList.toggle('hidden',!isAdmin());
@@ -1560,6 +1563,34 @@ async function toggleTvFullscreen(){
 function showTv(updateUrl=true){hideMainSections();document.body.classList.add('tv-mode');$('#tvSection')?.classList.remove('hidden');renderTvView();startTvRefresh();if(updateUrl)updateAppUrl('tv')}
 function refreshVisibleTv(){document.body.classList.add('tv-mode');$('#tvSection')?.classList.remove('hidden');renderTvView();if(!tvRefreshTimer)startTvRefresh()}
 
+function collectStatsStationMatches(){
+  ensureTournamentDayState();return ['men','women'].flatMap(key=>{const tournament=key===state.activeCompetition?competitionSnapshot(state):competitionSnapshot(state.competitions?.[key]||emptyCompetition());if(!tournament.started)return[];return(tournament.matches||[]).map((match,index)=>({key,index,match,tournament})).filter(item=>item.match.sa===null&&item.match.b!=='Freilos'&&item.match.a&&item.match.b&&!['Noch offen','Sieger aus Vorrunde','Teilnehmer aus Vorrunde'].includes(item.match.a)&&!['Noch offen','Sieger aus Vorrunde','Teilnehmer aus Vorrunde'].includes(item.match.b))});
+}
+function renderStatsStation(){
+  const select=$('#statsStationMatch'),preview=$('#statsStationPreview'),status=$('#statsStationStatus');if(!select)return;statsStationMatches=collectStatsStationMatches();
+  select.innerHTML=statsStationMatches.map((item,i)=>`<option value="${i}">${esc(competitionLabel(item.key))} · Runde ${item.match.round||1} · ${esc(item.match.a)} gegen ${esc(item.match.b)}${item.match.sa!==null?` · ${item.match.sa}:${item.match.sb}`:''}</option>`).join('')||'<option value="">Derzeit keine Paarung verfügbar</option>';
+  if(preview)preview.classList.add('hidden');if(status)status.textContent=statsStationMatches.length?'Wähle die passende Paarung und anschließend den Autodarts-Screenshot aus.':'Derzeit ist kein laufendes Spiel verfügbar.';
+}
+function showStatsStation(updateUrl=true){hideMainSections();$('#statsStationSection')?.classList.remove('hidden');renderStatsStation();renderNavigation();if(updateUrl)updateAppUrl('statistikstation')}
+function ocrPair(text,label,value='[0-9]+(?:[.,][0-9]+)?'){
+  const normalized=text.replace(/\s+/g,' '),match=normalized.match(new RegExp(`(${value})\\s*%?(?:\\s*\\([^)]*\\))?\\s*${label}\\s*(${value})\\s*%?`,`i`));return match?[match[1].replace(',','.'),match[2].replace(',','.')]:['–','–'];
+}
+function parseAutodartsStats(text){
+  return{average:ocrPair(text,'3\\s*Dart\\s*Average'),checkout:ocrPair(text,'Checkout\\s*%','[0-9]+'),first9:ocrPair(text,'First\\s*9\\s*Average'),until170:ocrPair(text,'Average\\s*until\\s*170'),highestFinish:ocrPair(text,'Highest\\s*Finish','(?:[0-9]+|[-–—])'),darts:ocrPair(text,'Darts\\s*thrown','[0-9]+'),max180:ocrPair(text,'180','[0-9]+')};
+}
+function stationMetric(label,values){return `<div><span>${label}</span><b>${esc(values[0])}</b><b>${esc(values[1])}</b></div>`}
+async function analyzeStatsStationImage(file){
+  const selected=statsStationMatches[Number($('#statsStationMatch')?.value)];if(!selected){alert('Bitte zuerst eine laufende Paarung auswählen.');return}if(!file)return;
+  const status=$('#statsStationStatus'),preview=$('#statsStationPreview');status.textContent='Screenshot wird vorbereitet …';preview.classList.add('hidden');
+  try{
+    if(statsStationImageUrl)URL.revokeObjectURL(statsStationImageUrl);statsStationImageUrl=URL.createObjectURL(file);
+    const image=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('Das Bild konnte nicht geöffnet werden.'));img.src=statsStationImageUrl}),scale=Math.min(1,1800/image.width),canvas=document.createElement('canvas');canvas.width=Math.round(image.width*scale);canvas.height=Math.round(image.height*scale);canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+    if(!window.Tesseract)await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+    const result=await Tesseract.recognize(canvas,'eng',{logger:event=>{if(event.status==='recognizing text')status.textContent=`Screenshot wird gelesen … ${Math.round((event.progress||0)*100)} %`;}}),text=result?.data?.text||'',stats=parseAutodartsStats(text),m=selected.match;
+    preview.innerHTML=`<div class="stats-station-result"><div class="stats-station-image"><img src="${statsStationImageUrl}" alt="Ausgewählter Autodarts-Screenshot"></div><div class="stats-station-values"><span class="eyebrow">ERKANNTE KONTROLLVORSCHAU</span><h2>${esc(m.a)} gegen ${esc(m.b)}</h2><div class="stats-station-table"><div class="head"><span>Wert</span><b>${esc(m.a)}</b><b>${esc(m.b)}</b></div>${stationMetric('3-Dart-Average',stats.average)}${stationMetric('Checkout %',stats.checkout)}${stationMetric('First 9',stats.first9)}${stationMetric('Average bis 170',stats.until170)}${stationMetric('High Finish',stats.highestFinish)}${stationMetric('Darts',stats.darts)}${stationMetric('180er',stats.max180)}</div><p class="stats-station-warning">Testmodus: Bitte Werte kontrollieren. Es wurde nichts gespeichert.</p><details><summary>Erkannten Rohtext anzeigen</summary><pre>${esc(text||'Kein Text erkannt')}</pre></details></div></div>`;preview.classList.remove('hidden');status.textContent='Auswertung abgeschlossen. Bitte mit dem Screenshot vergleichen.';
+  }catch(error){console.error('Screenshot-Auswertung fehlgeschlagen:',error);status.textContent=`Auswertung nicht möglich: ${error?.message||'Unbekannter Fehler'}`}
+}
+
 function updateAppUrl(area,extras={},replace=false){
   if(applyingRoute)return;
   const url=new URL(location.href);url.searchParams.set('bereich',area);
@@ -1572,6 +1603,7 @@ async function applyAppRoute(){
   applyingRoute=true;
   try{
     if(area==='tv'){showTv(false);return}
+    if(area==='statistikstation'){showStatsStation(false);return}
     if(area==='empfehlungen'||product){await showShop({productId:product,category,updateUrl:false});return}
     if(area==='spieler'&&player){showPlayerProfile(player,false);return}
     if(area==='saison'){showSeason(false);return}
@@ -1582,7 +1614,7 @@ async function applyAppRoute(){
     showHome(false);
   }finally{applyingRoute=false}
 }
-function hideMainSections(){stopTvRefresh();document.body.classList.remove('tv-mode');['tvSection','publicHomeSection','playerProfileSection','dashboardSection','authSection','settingsSection','seasonSection','shopSection','tournamentSubnav','competitionNav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
+function hideMainSections(){stopTvRefresh();document.body.classList.remove('tv-mode');['tvSection','publicHomeSection','playerProfileSection','dashboardSection','authSection','settingsSection','seasonSection','shopSection','statsStationSection','tournamentSubnav','competitionNav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
 function renderNavigation(){
   const admin=isAdmin(),member=isMember(),guest=!admin&&!member;
   $('.club-settings-block')?.classList.remove('hidden');
@@ -1901,4 +1933,9 @@ async function endTournamentEarly(){
   state.endedEarly=true;save();renderTournament();await publishLiveTournament({notifyOnError:true});
 }
 async function reset(){if(state.started&&!confirm(`Den Bewerb „${competitionLabel()}“ wirklich löschen? Der andere Bewerb bleibt erhalten.`))return;for(const key of COMPETITION_KEYS)delete state[key];Object.assign(state,emptyCompetition());syncActiveCompetition();save();renderPlayers();renderTournament();showTournament();await publishLiveTournament({notifyOnError:true})}
-$('#resetBtn').onclick=reset;$('#undoLastScoreBtn').onclick=undoLastScore;$('#endTournamentBtn').onclick=endTournamentEarly;$('#finishReset').onclick=reset;$('#renameEventBtn').onclick=renameEvent;registerAccess();applyTheme();applyTournamentDefaults();fillSeasonForm();renderPlayers();renderSettingsForm();renderNavigation();repairScheduledTournamentAssignments();renderSeasonView();applyAppRoute();T20Cloud.init().finally(applyAppRoute);
+$('#resetBtn').onclick=reset;$('#undoLastScoreBtn').onclick=undoLastScore;$('#endTournamentBtn').onclick=endTournamentEarly;$('#finishReset').onclick=reset;$('#renameEventBtn').onclick=renameEvent;
+$('#openStatsStationBtn').onclick=()=>showStatsStation();
+$('#closeStatsStationBtn').onclick=showHome;
+$('#statsStationFile').addEventListener('change',event=>analyzeStatsStationImage(event.target.files?.[0]));
+$('#statsStationMatch').addEventListener('change',()=>{$('#statsStationPreview').classList.add('hidden');$('#statsStationStatus').textContent='Jetzt den Autodarts-Screenshot dieses Spiels auswählen.'});
+registerAccess();applyTheme();applyTournamentDefaults();fillSeasonForm();renderPlayers();renderSettingsForm();renderNavigation();repairScheduledTournamentAssignments();renderSeasonView();applyAppRoute();T20Cloud.init().finally(applyAppRoute);

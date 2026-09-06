@@ -1,5 +1,5 @@
-const CACHE_VERSION='triple20-shell-20260906-05';
-const DATA_CACHE='triple20-data-20260906-05';
+const CACHE_VERSION='triple20-shell-20260906-06';
+const DATA_CACHE='triple20-data-20260906-06';
 const APP_SHELL=[
   './','./index.html','./styles.css','./double-ko.js','./app.js','./pwa.js','./manifest.webmanifest','./shop-products.json',
   './icons/triple20-icon-192.png','./icons/triple20-icon-512.png','./icons/apple-touch-icon.png','./icons/triple20-icon.svg',
@@ -9,7 +9,8 @@ const APP_SHELL=[
 ];
 const OPTIONAL_EXTERNAL=[
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
-  'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js'
+  'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js',
+  'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
 ];
 
 self.addEventListener('install',event=>{

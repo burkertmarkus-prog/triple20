@@ -34,7 +34,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260906-05">
+  <link rel="stylesheet" href="styles.css?v=20260906-06">
 </head>
 <body>
   <header class="hero">
@@ -206,6 +206,19 @@
       <div class="export-actions"><button id="exportSeasonJsonBtn" class="secondary">Saison als JSON exportieren</button><button id="exportStandingsCsvBtn" class="secondary">Rangliste als CSV exportieren</button></div>
     </section>
 
+    <section id="statsStationSection" class="stats-station hidden" aria-labelledby="statsStationTitle">
+      <div class="stats-station-head">
+        <div><span class="eyebrow">TESTBETRIEB</span><h1 id="statsStationTitle">Autodarts-Statistikstation</h1><p>Screenshot auswählen und erkannte Werte kontrollieren. In dieser Testversion wird noch nichts gespeichert.</p></div>
+        <button id="closeStatsStationBtn" class="secondary" type="button">Zurück zur Startseite</button>
+      </div>
+      <section class="card stats-station-card">
+        <label>Laufende Paarung<select id="statsStationMatch"></select></label>
+        <label class="stats-station-upload">Autodarts-Screenshot auswählen<input id="statsStationFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
+        <div id="statsStationStatus" class="view-note">Wähle zuerst ein laufendes Spiel und anschließend den Screenshot aus.</div>
+      </section>
+      <section id="statsStationPreview" class="stats-station-preview hidden"></section>
+    </section>
+
     <nav id="tournamentSubnav" class="tournament-subnav hidden" aria-label="Turnieransicht"></nav>
     <nav id="competitionNav" class="competition-nav" aria-label="Bewerb auswählen"></nav>
     <section id="memberLiveEmpty" class="card slim-card member-live-empty hidden"><h3>Derzeit läuft kein Vereinsturnier</h3><p>Sobald die Turnierleitung ein Turnier startet, kannst du hier den Spielplan und die Tabelle ansehen.</p></section>
@@ -241,7 +254,7 @@
     </section>
 
     <section id="tournamentSection" class="hidden">
-      <div class="tournament-head"><div><p class="eyebrow" id="liveCompetitionLabel">LIVE-TURNIER</p><h2 id="liveTitle"></h2><p id="liveMeta"></p><p id="liveViewerStatus" class="live-viewer-status"></p><div class="live-tournament-actions"><details id="tournamentActionsMenu" class="tournament-actions-menu hidden"><summary>Turnier-Aktionen</summary><div><button id="openTvViewBtn" class="secondary hidden" type="button">TV-Ansicht öffnen</button><button id="showLiveQrBtn" class="secondary hidden" type="button">QR-Code anzeigen</button><button id="renameEventBtn" class="secondary hidden" type="button">Spieltag umbenennen</button><button id="undoLastScoreBtn" class="secondary hidden" type="button">Letztes Ergebnis rückgängig</button><button id="endTournamentBtn" class="danger hidden" type="button">Turnier beenden</button></div></details></div></div><div class="progress-ring"><strong id="progressText">0%</strong><span>gespielt</span></div></div>
+      <div class="tournament-head"><div><p class="eyebrow" id="liveCompetitionLabel">LIVE-TURNIER</p><h2 id="liveTitle"></h2><p id="liveMeta"></p><p id="liveViewerStatus" class="live-viewer-status"></p><div class="live-tournament-actions"><details id="tournamentActionsMenu" class="tournament-actions-menu hidden"><summary>Turnier-Aktionen</summary><div><button id="openTvViewBtn" class="secondary hidden" type="button">TV-Ansicht öffnen</button><button id="openStatsStationBtn" class="secondary hidden" type="button">Statistikstation testen</button><button id="showLiveQrBtn" class="secondary hidden" type="button">QR-Code anzeigen</button><button id="renameEventBtn" class="secondary hidden" type="button">Spieltag umbenennen</button><button id="undoLastScoreBtn" class="secondary hidden" type="button">Letztes Ergebnis rückgängig</button><button id="endTournamentBtn" class="danger hidden" type="button">Turnier beenden</button></div></details></div></div><div class="progress-ring"><strong id="progressText">0%</strong><span>gespielt</span></div></div>
       <div id="tvDisplayControls" class="tv-display-controls hidden"><strong>TV-Ansicht steuern</strong><span>Anzeige auf dem verbundenen Fernseher</span><div><button type="button" data-tv-display="matches">Paarungen</button><button type="button" data-tv-display="standings">Top 10</button><button type="button" data-tv-display="bracket">Raster</button><button type="button" data-tv-display="finals">Finalphase</button><button type="button" data-tv-display="auto">Automatisch</button></div><small id="tvDisplayHelp">Die automatische Anzeige wechselt passend zum Turniermodus.</small></div>
       <div id="withdrawCard" class="withdraw-card hidden"></div>
       <div class="tabs"><button class="tab active" data-tab="matches">Spielplan</button><button id="bracketTab" class="tab hidden" data-tab="bracket">Turnierbaum</button><button class="tab" data-tab="table">Tabelle</button></div>
@@ -255,8 +268,8 @@
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <script src="double-ko.js?v=20260906-05"></script>
-  <script src="app.js?v=20260906-05"></script>
-  <script src="pwa.js?v=20260906-05"></script>
+  <script src="double-ko.js?v=20260906-06"></script>
+  <script src="app.js?v=20260906-06"></script>
+  <script src="pwa.js?v=20260906-06"></script>
 </body>
 </html>
