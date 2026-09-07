@@ -185,6 +185,10 @@ function applyTriple20Data(data){
   else if(visibleSection==='statsStationSection')showStatsStation(false,true);
   else if(visibleSection==='tournamentSection'||visibleSection==='setupSection')showTournament();
 }
+function applyLiveTournamentData(value){
+  if(!value)return;T20_SUPPRESS_SYNC=true;try{localStorage.setItem('dartTournament',JSON.stringify(value))}finally{T20_SUPPRESS_SYNC=false}
+  Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,structuredClone(value));ensureTournamentDayState();loadActiveCompetition();renderTvView();renderTvDisplayControls();
+}
 function backupPreview(data=collectTriple20Data()){const seasons=data.tripleTwentySeasons?.seasons||[],tournaments=data.triple20_tournaments||[],current=data.dartTournament||{};return `${seasons.length} Saison(en), ${tournaments.length} gespeicherte Turnier(e), aktuelles Turnier: ${current.started?'läuft':'nicht gestartet'}${current.players?.length?`, ${current.players.length} Spieler`:''}`;}
 function setSyncStatus(text,cls='view-only'){const bar=$('#syncStatusBar'),label=$('#syncStatusText');if(!bar||!label)return;bar.className=`sync-status ${cls}`;label.textContent=text;const last=$('#syncLastSaved');if(last)last.textContent=T20Cloud?.lastSyncAt?`Letzte Synchronisierung: ${new Date(T20Cloud.lastSyncAt).toLocaleString('de-AT')}`:'Noch nicht synchronisiert'}
 function isAdmin(){return !!window.T20Cloud?.isAdmin}
@@ -406,7 +410,7 @@ function cleanAuthRedirectUrl(){
 window.T20Cloud={
   authResolved:false,analyticsStats:null,
   liveTournamentState:null,tournamentViewMode:'local',
-  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,role:'guest',memberRoles:{},profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,sessionProcessingPromise:null,authRedirectSessionPromise:null,authRedirectSessionResolve:null,loginBusy:false,magicLinkBusy:false,otpVerifyBusy:false,otpEmail:'',profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),lastSeenTimer:null,lastSeenVisibilityBound:false,authMessage:'',authError:'',loadBusy:false,pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
+  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,role:'guest',memberRoles:{},profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,sessionProcessingPromise:null,authRedirectSessionPromise:null,authRedirectSessionResolve:null,loginBusy:false,magicLinkBusy:false,otpVerifyBusy:false,otpEmail:'',profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),lastSeenTimer:null,lastSeenVisibilityBound:false,authMessage:'',authError:'',loadBusy:false,liveTournamentUpdatedAt:'',pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
   async finishAuthRedirect(){cleanAuthRedirectUrl();this.authHandoffActive=false;this.authMessage='Anmeldung erfolgreich. Du kannst diesen Tab weiterverwenden.';showLogin();renderCloudPanel()},
   async init(){
     if(this.initPromise)return this.initPromise;
@@ -649,6 +653,10 @@ window.T20Cloud={
     renderReadonlyMode();renderCloudPanel();setSyncStatus('Nur Ansicht','view-only');showHome();
   },
   async fetchCloud(){const client=requireSupabaseClient();const {data,error}=await client.from('triple20_data').select('data_key,data,updated_at').in('data_key',CLOUD_DATA_KEYS);if(error)throw error;this.online=true;return data||[]},
+  async loadLiveTournament(){
+    if(this.loadBusy||!this.client||document.visibilityState==='hidden')return false;this.loadBusy=true;
+    try{const {data,error}=await this.client.from('triple20_data').select('data,updated_at').eq('data_key','dartTournament').maybeSingle();if(error)throw error;this.online=true;if(!data||data.updated_at===this.liveTournamentUpdatedAt)return false;this.liveTournamentUpdatedAt=data.updated_at||'';this.cloudUpdated.dartTournament=data.updated_at||this.cloudUpdated.dartTournament;this.lastSyncAt=new Date().toISOString();localStorage.setItem('triple20_last_sync',this.lastSyncAt);applyLiveTournamentData(data.data);return true}catch(error){console.warn('Schlanker TV-Abgleich fehlgeschlagen',error);this.online=false;return false}finally{this.loadBusy=false}
+  },
   rowsToObject(rows){return Object.fromEntries(CLOUD_DATA_KEYS.map(k=>{const row=rows.find(r=>r.data_key===k);if(row?.updated_at)this.cloudUpdated[k]=row.updated_at;return[k,row?row.data:null]}))},
   async loadCloud({initial=false}={}){
     if(this.loadBusy)return;
@@ -695,7 +703,7 @@ window.T20Cloud={
   },
   async uploadLocalWithBackup(){if(!isAdmin())return;const summary=backupPreview();backupTriple20Data('triple20_vor_cloud_upload');if(!confirm(`Lokale Triple20-Daten in die Cloud übernehmen?\n\n${summary}\n\nEin JSON-Backup wurde heruntergeladen.`))return;await this.syncAll({force:true})},
   async loadCloudConfirmed(){if(!this.loadedCloudData)await this.loadCloud();if(!this.loadedCloudData)return;backupTriple20Data('triple20_vor_cloud_laden');if(!confirm('Cloud-Daten laden? Die aktuelle lokale Version wurde vorher als Backup gesichert.'))return;applyTriple20Data(this.loadedCloudData);setSyncStatus('Online – aktuell','online')},
-  startPolling(){clearInterval(this.pollTimer);clearInterval(this.memberPollTimer);this.pollTimer=setInterval(()=>this.loadCloud(),15000);this.memberPollTimer=setInterval(()=>{if(!this.user)return;this.loadPublicMembers().then(()=>{if(!$('#seasonSection')?.classList.contains('hidden'))renderSeasonView()}).catch(error=>console.warn('Mitgliedsnamen konnten nicht aktualisiert werden',error))},60000)}
+  startPolling(){clearInterval(this.pollTimer);clearInterval(this.memberPollTimer);this.pollTimer=setInterval(()=>{if(document.visibilityState==='hidden'||!$('#tvSection')?.classList.contains('hidden'))return;this.loadCloud()},30000);this.memberPollTimer=setInterval(()=>{if(!this.user||document.visibilityState==='hidden'||!$('#tvSection')?.classList.contains('hidden'))return;this.loadPublicMembers().then(()=>{if(!$('#seasonSection')?.classList.contains('hidden'))renderSeasonView()}).catch(error=>console.warn('Mitgliedsnamen konnten nicht aktualisiert werden',error))},120000)}
 };
 function memberIdForName(name){
   const normalized=(name||'').trim().toLowerCase();
@@ -1561,12 +1569,12 @@ function renderTvView(){
   const updated=$('#tvUpdatedAt'),stamp=T20Cloud.lastSyncAt?new Date(T20Cloud.lastSyncAt):new Date();if(updated)updated.textContent=`Automatisch aktuell · ${stamp.toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit',second:'2-digit'})} Uhr`;
 }
 function stopTvRefresh(){if(tvRefreshTimer){clearInterval(tvRefreshTimer);tvRefreshTimer=null}}
-function startTvRefresh(){stopTvRefresh();tvRefreshTimer=setInterval(()=>{if($('#tvSection')?.classList.contains('hidden'))return;renderTvView();T20Cloud.loadCloud().catch(error=>console.warn('TV-Daten konnten nicht aktualisiert werden:',error))},3000)}
+function startTvRefresh(){stopTvRefresh();tvRefreshTimer=setInterval(()=>{if($('#tvSection')?.classList.contains('hidden')||document.visibilityState==='hidden')return;renderTvView();T20Cloud.loadLiveTournament().catch(error=>console.warn('TV-Daten konnten nicht aktualisiert werden:',error))},12000)}
 async function toggleTvFullscreen(){
   try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen()}catch(error){console.warn('Vollbild konnte nicht aktiviert werden:',error)}
   if('wakeLock'in navigator&&!tvWakeLock)try{tvWakeLock=await navigator.wakeLock.request('screen');tvWakeLock.addEventListener('release',()=>{tvWakeLock=null})}catch(error){console.warn('Bildschirm-Wachhaltefunktion ist nicht verfügbar:',error)}
 }
-function showTv(updateUrl=true){hideMainSections();document.body.classList.add('tv-mode');$('#tvSection')?.classList.remove('hidden');renderTvView();startTvRefresh();if(updateUrl)updateAppUrl('tv')}
+function showTv(updateUrl=true){hideMainSections();document.body.classList.add('tv-mode');$('#tvSection')?.classList.remove('hidden');renderTvView();startTvRefresh();T20Cloud.loadLiveTournament().catch(error=>console.warn('TV-Startdaten konnten nicht aktualisiert werden:',error));if(updateUrl)updateAppUrl('tv')}
 function refreshVisibleTv(){document.body.classList.add('tv-mode');$('#tvSection')?.classList.remove('hidden');renderTvView();if(!tvRefreshTimer)startTvRefresh()}
 
 function collectStatsStationMatches(){
@@ -1917,7 +1925,7 @@ $('#showLiveQrBtn')?.addEventListener('click',openLiveQr);
 $('#openTvViewBtn')?.addEventListener('click',()=>window.open(tvPublicUrl(),'_blank','noopener'));
 $('#tvDisplayControls')?.addEventListener('click',event=>{const button=event.target.closest('[data-tv-display]');if(button)setTvDisplayMode(button.dataset.tvDisplay)});
 $('#tvFullscreenBtn')?.addEventListener('click',toggleTvFullscreen);
-$('#tvRefreshBtn')?.addEventListener('click',()=>T20Cloud.loadCloud().then(renderTvView).catch(error=>console.warn('TV-Aktualisierung fehlgeschlagen:',error)));
+$('#tvRefreshBtn')?.addEventListener('click',()=>T20Cloud.loadLiveTournament().then(renderTvView).catch(error=>console.warn('TV-Aktualisierung fehlgeschlagen:',error)));
 window.addEventListener('storage',event=>{if(event.key!=='dartTournament'||$('#tvSection')?.classList.contains('hidden')||!event.newValue)return;const next=safeJsonParse(event.newValue);if(!next)return;Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,next);ensureTournamentDayState();loadActiveCompetition();renderTvView()});
 document.addEventListener('click',async event=>{if(event.target.id==='closeLiveQrBtn'||event.target.id==='liveQrOverlay'){$('#liveQrOverlay')?.remove();return}const switchButton=event.target.closest('[data-live-qr-competition]');if(switchButton){renderLiveQrCode(switchButton.dataset.liveQrCompetition);return}const copyButton=event.target.closest('#copyLiveQrLinkBtn');if(copyButton){const value=$('#liveQrLink')?.href||'';try{await navigator.clipboard.writeText(value);copyButton.firstChild.textContent='LINK KOPIERT '}catch{prompt('Live-Link kopieren:',value)}}});
 $('#showSeasonBtn').addEventListener('click',()=>showSeason());
