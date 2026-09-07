@@ -704,7 +704,7 @@ window.T20Cloud={
           backupTriple20Data('triple20_konflikt_lokal');
         }
       }
-      const payload=CLOUD_DATA_KEYS.map(k=>({data_key:k,data:localValueForKey(k)}));
+      const updatedAt=new Date().toISOString(),payload=CLOUD_DATA_KEYS.map(k=>({data_key:k,data:localValueForKey(k),updated_at:updatedAt}));
       const client=requireSupabaseClient();
       const {data,error}=await client.from('triple20_data').upsert(payload,{onConflict:'data_key'}).select('data_key,updated_at');
       if(error)throw error;(data||[]).forEach(r=>this.cloudUpdated[r.data_key]=r.updated_at);
