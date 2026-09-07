@@ -34,7 +34,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260907-23">
+  <link rel="stylesheet" href="styles.css?v=20260907-24">
 </head>
 <body>
   <header class="hero">
@@ -250,7 +250,7 @@
         </div>
       </details>
       <div class="players-head"><div><h3>Spieler</h3><p id="playerCount">0 Spieler eingetragen</p></div></div>
-      <form id="playerForm" class="player-form"><input id="playerName" placeholder="Name des Spielers" maxlength="30" autocomplete="off" list="memberSuggestions"><datalist id="memberSuggestions"></datalist><button type="submit">+ Hinzufügen</button></form>
+      <form id="playerForm" class="player-form"><select id="memberSuggestions" aria-label="Gespeichertes Mitglied auswählen"><option value="">Mitglied auswählen …</option></select><input id="playerName" placeholder="Oder neuen Spieler eingeben" maxlength="30" autocomplete="off"><button type="submit">+ Hinzufügen</button></form>
       <div id="playerList" class="player-list"></div>
       <button id="startBtn" class="primary" disabled>TURNIER STARTEN <span>→</span></button>
     </section>
@@ -270,8 +270,8 @@
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <script src="double-ko.js?v=20260907-23"></script>
-  <script src="app.js?v=20260907-23"></script>
-  <script src="pwa.js?v=20260907-23"></script>
+  <script src="double-ko.js?v=20260907-24"></script>
+  <script src="app.js?v=20260907-24"></script>
+  <script src="pwa.js?v=20260907-24"></script>
 </body>
 </html>
