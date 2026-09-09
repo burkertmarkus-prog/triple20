@@ -95,8 +95,10 @@ function save(){
 async function publishLiveTournament({notifyOnError=false}={}){
   if(!isAdmin())return false;
   if(!T20Cloud.client){if(notifyOnError)alert('Die Cloud-Verbindung ist noch nicht bereit. Bitte warte kurz und starte das Turnier anschließend erneut.');return false}
-  await T20Cloud.syncAll({force:true});
-  const published=!T20Cloud.pendingSync;
+  // Ein Ergebnis oder eine TV-Umschaltung darf niemals gleichzeitig einen
+  // älteren Saison- oder Terminstand dieses Geräts zurück in die Cloud schreiben.
+  await T20Cloud.syncAll({force:true,keys:['dartTournament']});
+  const published=!T20Cloud.pendingKeys.has('dartTournament');
   if(!published&&notifyOnError)alert('Das Turnier wurde auf diesem PC gestartet, konnte aber nicht in die Cloud veröffentlicht werden. Bitte prüfe die Internetverbindung und den Statusbalken.');
   return published;
 }
@@ -288,11 +290,11 @@ const PushNotifications={
     // Nur ein über den offiziellen Admin-Check-in übernommener Termin besitzt
     // eine scheduledEventId. Frei gestartete Trainings- und Testturniere lösen
     // bewusst keine Nachricht an alle Mitglieder aus.
-    if(!isAdmin()||!state.scheduledEventId)return;
+    if(!isAdmin()||!state.scheduledEventId)return false;
     const eventKey=`${state.scheduledEventId}|${state.activeCompetition||'open'}`;
     const title=`Jetzt live: ${state.eventName||'Dartturnier'}`,body=`Der Bewerb ${competitionLabel()} wurde gestartet. Spielplan und Ergebnisse sind jetzt live verfügbar.`;
-    try{await this.invoke({action:'live',eventKey,title,body,url:'/?bereich=live'})}
-    catch(error){console.warn('Automatische Live-Nachricht konnte nicht versendet werden:',error)}
+    try{await this.invoke({action:'live',eventKey,title,body,url:'/?bereich=live'});return true}
+    catch(error){console.warn('Automatische Live-Nachricht konnte nicht versendet werden:',error);this.error='Das Turnier läuft, aber die automatische Pushnachricht konnte nicht versendet werden.';renderCloudPanel();return false}
   }
 };
 window.PushNotifications=PushNotifications;
@@ -301,6 +303,15 @@ function renderMemberPush(){const p=PushNotifications,ios=/iphone|ipad|ipod/i.te
 function renderAdminPush(){if(!isFullAdmin())return'';const p=PushNotifications,count=p.subscriberCount===null?'–':p.subscriberCount;return `<details id="adminPushDetails" class="admin-push admin-collapsible"><summary><span><b>Pushnachrichten</b><small>${count} ${count===1?'Gerät':'Geräte'} erreichbar · Nachricht an Mitglieder senden</small></span><i aria-hidden="true">⌄</i></summary><div class="admin-collapsible-body"><form id="adminPushForm" class="admin-push-form"><div class="admin-push-meta"><label>Titel<input id="pushTitle" maxlength="60" value="Triple20" required></label><label>Ziel in der App<select id="pushUrl"><option value="/">Startseite</option><option value="/?bereich=saison">Saisonwertung</option><option value="/?bereich=live">Live-Turnier</option><option value="/?bereich=konto">Konto</option></select></label></div><label class="admin-push-message">Nachricht<textarea id="pushBody" maxlength="180" placeholder="Was sollen die Mitglieder wissen?" required></textarea></label><div class="admin-push-footer"><small>Kurz und eindeutig formulieren · maximal 180 Zeichen</small><button class="primary" type="submit" ${p.busy?'disabled':''}>${p.busy?'WIRD GESENDET …':'NACHRICHT SENDEN'}</button></div></form>${p.error?`<p class="login-error">${esc(p.error)}</p>`:''}${p.message?`<p class="login-success">${esc(p.message)}</p>`:''}</div></details>`}
 function upcomingAdminEvents(){
   const today=todayIso(),activeScheduleIds=new Set([state.scheduledEventId,...Object.values(state.competitions||{}).map(competition=>competition?.scheduledEventId)].filter(Boolean));return publicTournamentRecords().filter(item=>item.planned&&!activeScheduleIds.has(item.id)&&item.date>=today).sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.startTime||'').localeCompare(b.startTime||'')||(a.name||'').localeCompare(b.name||'','de'));
+}
+function linkPlannedEventBeforeStart(){
+  if(state.scheduledEventId)return true;
+  const competition=state.activeCompetition||'men',today=todayIso(),candidates=upcomingAdminEvents().filter(event=>event.date===today&&(event.competition===competition||event.competition==='open'));
+  if(!candidates.length)return true;
+  if(candidates.length>1){alert('Für heute gibt es mehrere passende geplante Turniere. Bitte öffne im Adminbereich „Turnierleitung“ und bereite dort den richtigen Termin vor. So bleiben Pushnachricht und Saisonzuordnung eindeutig.');return false}
+  const event=candidates[0],season=seasonStore.seasons.find(item=>String(item.id)===String(event.seasonId||''))||seasonForScheduledEvent(event.id);
+  state.scheduledEventId=event.id||'';state.scheduledSeasonId=season?.id||'';
+  return true;
 }
 function checkInData(event){
   const eventKey=registrationEventKey(event),registered=tournamentRegistrations.filter(row=>row.event_key===eventKey);
@@ -416,7 +427,7 @@ function cleanAuthRedirectUrl(){
 window.T20Cloud={
   authResolved:false,analyticsStats:null,
   liveTournamentState:null,tournamentViewMode:'local',
-  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,role:'guest',memberRoles:{},profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,sessionProcessingPromise:null,authRedirectSessionPromise:null,authRedirectSessionResolve:null,loginBusy:false,magicLinkBusy:false,otpVerifyBusy:false,otpEmail:'',profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),lastSeenTimer:null,lastSeenVisibilityBound:false,authMessage:'',authError:'',loadBusy:false,stationSuggestionBusy:false,liveTournamentUpdatedAt:'',pendingSync:localStorage.getItem('triple20_pending_sync')==='1',lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,stationPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
+  client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,role:'guest',memberRoles:{},profile:null,avatarSignedUrl:'',online:false,syncing:false,authBusy:false,sessionProcessingPromise:null,authRedirectSessionPromise:null,authRedirectSessionResolve:null,loginBusy:false,magicLinkBusy:false,otpVerifyBusy:false,otpEmail:'',profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),lastSeenTimer:null,lastSeenVisibilityBound:false,authMessage:'',authError:'',loadBusy:false,stationSuggestionBusy:false,liveTournamentUpdatedAt:'',pendingSync:localStorage.getItem('triple20_pending_sync')==='1',pendingKeys:new Set(safeJsonParse(localStorage.getItem('triple20_pending_keys')||'[]',[])),lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,stationPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
   async finishAuthRedirect(){cleanAuthRedirectUrl();this.authHandoffActive=false;this.authMessage='Anmeldung erfolgreich. Du kannst diesen Tab weiterverwenden.';showLogin();renderCloudPanel()},
   async init(){
     if(this.initPromise)return this.initPromise;
@@ -672,29 +683,43 @@ window.T20Cloud={
     if(this.loadBusy)return;
     this.loadBusy=true;
     try{
-      const rows=await this.fetchCloud(),cloud=this.rowsToObject(rows),hasCloud=rows.length&&Object.values(cloud).some(v=>v!==null&&v!==undefined);
+      const previousCloudUpdated={...this.cloudUpdated},rows=await this.fetchCloud(),remoteChanged=new Set(rows.filter(row=>previousCloudUpdated[row.data_key]&&row.updated_at&&row.updated_at!==previousCloudUpdated[row.data_key]).map(row=>row.data_key)),cloud=this.rowsToObject(rows),hasCloud=rows.length&&Object.values(cloud).some(v=>v!==null&&v!==undefined);
       this.loadedCloudData=cloud;this.lastSyncAt=new Date().toISOString();localStorage.setItem('triple20_last_sync',this.lastSyncAt);
       if(this.user&&!this.isAdmin){const selectedCompetition=state.activeCompetition||'men';this.liveTournamentState=structuredClone(cloud.dartTournament||{players:[],playerProfileIds:{},started:false,matches:[],settings:{}});if(this.liveTournamentState.competitions?.[selectedCompetition])this.liveTournamentState.activeCompetition=selectedCompetition;applyTriple20Data({...cloud,dartTournament:this.liveTournamentState});setSyncStatus('Angemeldet – Mitglied','view-only');return}
-      if(this.isAdmin&&this.pendingSync){await this.syncAll();return}
+      if(this.isAdmin&&this.pendingSync){
+        // Alte App-Versionen kannten noch keine Liste geänderter Bereiche. Ein
+        // bloß übrig gebliebenes Flag darf daher keinen kompletten Altstand hochladen.
+        if(!this.pendingKeys.size){this.pendingSync=false;nativeRemoveItem('triple20_pending_sync');applyTriple20Data(cloud);setSyncStatus('Online – aktuell','online');return}
+        for(const key of this.pendingKeys){if(previousCloudUpdated[key])this.cloudUpdated[key]=previousCloudUpdated[key];else delete this.cloudUpdated[key]}
+        await this.syncAll();return
+      }
       if(!hasCloud){setSyncStatus(this.isAdmin&&hasMeaningfulLocalData()?'Online – Cloud leer, lokale Daten vorhanden':'Online – aktuell','online');renderCloudPanel();return}
       if(!this.user){applyTriple20Data(cloud);setSyncStatus('Öffentliche Daten aktuell','view-only');return}
       if(!this.isAdmin&&(state.started||state.players?.length||state.matches?.length)){setSyncStatus('Offline – lokales Turnier','offline');renderCloudPanel();return}
+      // Für Administrator und Turnierleitung ist nach der Anmeldung die Cloud
+      // maßgeblich. Sonst startet ein zweites Gerät mit seinem alten Browserstand
+      // und kann Termine und Saisonzuordnungen unbemerkt zurücksetzen.
+      if(initial&&this.isAdmin){applyTriple20Data(cloud);setSyncStatus('Online – aktuell','online');return}
       if(initial&&!hasMeaningfulLocalData()){applyTriple20Data(cloud);setSyncStatus(this.isAdmin?'Online – aktuell':'Nur Ansicht',this.isAdmin?'online':'view-only');return}
       if(!this.isAdmin){applyTriple20Data(cloud);setSyncStatus('Nur Ansicht','view-only');return}
+      const safeRemoteKeys=[...remoteChanged].filter(key=>!this.pendingKeys.has(key));
+      if(safeRemoteKeys.length)applyTriple20Data(Object.fromEntries(safeRemoteKeys.map(key=>[key,cloud[key]])));
       setSyncStatus('Online – aktuell','online');renderCloudPanel();
     }catch(e){console.warn('Cloud laden fehlgeschlagen',e);this.online=false;setSyncStatus('Offline – lokale Kopie','offline')}
     finally{this.loadBusy=false}
   },
-  queueSync(key){if(!this.isAdmin)return;this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');clearTimeout(this.syncTimer);if(!this.client||!navigator.onLine){setSyncStatus('Offline – sicher auf diesem Gerät gespeichert','offline');return}setSyncStatus('Änderungen werden gespeichert …','saving');this.syncTimer=setTimeout(()=>this.syncAll(),700)},
-  async syncAll({force=false}={}){
+  queueSync(key){if(!this.isAdmin)return;if(CLOUD_DATA_KEYS.includes(key))this.pendingKeys.add(key);this.pendingSync=true;nativeSetItem('triple20_pending_sync','1');nativeSetItem('triple20_pending_keys',JSON.stringify([...this.pendingKeys]));clearTimeout(this.syncTimer);if(!this.client||!navigator.onLine){setSyncStatus('Offline – sicher auf diesem Gerät gespeichert','offline');return}setSyncStatus('Änderungen werden gespeichert …','saving');this.syncTimer=setTimeout(()=>this.syncAll(),700)},
+  async syncAll({force=false,keys=null,all=false}={}){
     if(!this.isAdmin||!this.client)return;
+    const targetKeys=[...new Set(keys?.filter(key=>CLOUD_DATA_KEYS.includes(key))||(all?CLOUD_DATA_KEYS:[...this.pendingKeys]))];
+    if(!targetKeys.length){this.pendingSync=false;nativeRemoveItem('triple20_pending_sync');nativeRemoveItem('triple20_pending_keys');return}
     clearTimeout(this.syncTimer);
     this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');
     setSyncStatus('Wird gespeichert …','saving');
     try{
       const rows=await this.fetchCloud();
       if(!force){
-        const changed=rows.some(r=>this.cloudUpdated[r.data_key]&&r.updated_at&&r.updated_at!==this.cloudUpdated[r.data_key]);
+        const changed=rows.some(r=>targetKeys.includes(r.data_key)&&this.cloudUpdated[r.data_key]&&r.updated_at&&r.updated_at!==this.cloudUpdated[r.data_key]);
         if(changed){
           setSyncStatus('Konflikt erkannt','conflict');
           const choice=prompt('Die Online-Daten wurden zwischenzeitlich auf einem anderen Gerät geändert.\n\n1 = Online-Version laden\n2 = lokale Version als JSON sichern\n3 = lokale Version trotzdem überschreiben','1');
@@ -704,14 +729,14 @@ window.T20Cloud={
           backupTriple20Data('triple20_konflikt_lokal');
         }
       }
-      const updatedAt=new Date().toISOString(),payload=CLOUD_DATA_KEYS.map(k=>({data_key:k,data:localValueForKey(k),updated_at:updatedAt}));
+      const updatedAt=new Date().toISOString(),payload=targetKeys.map(k=>({data_key:k,data:localValueForKey(k),updated_at:updatedAt}));
       const client=requireSupabaseClient();
       const {data,error}=await client.from('triple20_data').upsert(payload,{onConflict:'data_key'}).select('data_key,updated_at');
       if(error)throw error;(data||[]).forEach(r=>this.cloudUpdated[r.data_key]=r.updated_at);
-      this.pendingSync=false;localStorage.removeItem('triple20_pending_sync');this.lastSyncAt=new Date().toISOString();localStorage.setItem('triple20_last_sync',this.lastSyncAt);setSyncStatus('Online gespeichert','saved');renderCloudPanel();
+      targetKeys.forEach(key=>this.pendingKeys.delete(key));this.pendingSync=this.pendingKeys.size>0;if(this.pendingSync){nativeSetItem('triple20_pending_sync','1');nativeSetItem('triple20_pending_keys',JSON.stringify([...this.pendingKeys]))}else{nativeRemoveItem('triple20_pending_sync');nativeRemoveItem('triple20_pending_keys')}this.lastSyncAt=new Date().toISOString();nativeSetItem('triple20_last_sync',this.lastSyncAt);setSyncStatus(this.pendingSync?'Weitere Änderungen werden gespeichert …':'Online gespeichert',this.pendingSync?'saving':'saved');renderCloudPanel();
     }catch(e){console.warn('Cloud speichern fehlgeschlagen',e);this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');setSyncStatus('Offline – lokale Kopie','offline')}
   },
-  async uploadLocalWithBackup(){if(!isAdmin())return;const summary=backupPreview();backupTriple20Data('triple20_vor_cloud_upload');if(!confirm(`Lokale Triple20-Daten in die Cloud übernehmen?\n\n${summary}\n\nEin JSON-Backup wurde heruntergeladen.`))return;await this.syncAll({force:true})},
+  async uploadLocalWithBackup(){if(!isAdmin())return;const summary=backupPreview();backupTriple20Data('triple20_vor_cloud_upload');if(!confirm(`Lokale Triple20-Daten in die Cloud übernehmen?\n\n${summary}\n\nEin JSON-Backup wurde heruntergeladen.`))return;await this.syncAll({force:true,all:true})},
   async loadCloudConfirmed(){if(!this.loadedCloudData)await this.loadCloud();if(!this.loadedCloudData)return;backupTriple20Data('triple20_vor_cloud_laden');if(!confirm('Cloud-Daten laden? Die aktuelle lokale Version wurde vorher als Backup gesichert.'))return;applyTriple20Data(this.loadedCloudData);setSyncStatus('Online – aktuell','online')},
   startPolling(){clearInterval(this.pollTimer);clearInterval(this.memberPollTimer);clearInterval(this.stationPollTimer);this.pollTimer=setInterval(()=>{if(document.visibilityState==='hidden'||!$('#tvSection')?.classList.contains('hidden')||!$('#statsStationSection')?.classList.contains('hidden'))return;this.loadCloud()},30000);this.memberPollTimer=setInterval(()=>{if(!this.user||document.visibilityState==='hidden'||!$('#tvSection')?.classList.contains('hidden'))return;this.loadPublicMembers().then(()=>{if(!$('#seasonSection')?.classList.contains('hidden'))renderSeasonView()}).catch(error=>console.warn('Mitgliedsnamen konnten nicht aktualisiert werden',error))},120000);this.stationPollTimer=setInterval(()=>{if(document.visibilityState==='hidden')return;if(!$('#statsStationSection')?.classList.contains('hidden'))this.loadLiveTournament();else if(state.started||Object.values(state.competitions||{}).some(item=>item?.started))this.loadStationSuggestions()},10000)}
 };
@@ -873,7 +898,7 @@ function makeMatches(){
   else addPairs(arr,shuffle(state.players),1,'upper');
   return arr;
 }
-$('#startBtn').addEventListener('click',async()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];state.scoreAudit=[];state.scoreUndoStack=[];delete state.endedEarly;delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;const doubleMode=$('#mode').value==='double',draw=doubleMode?[...ensureSeedingDraw()]:[],seeds=doubleMode?[...activeSeededPlayers()]:[];state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value,doubleKoDrawOrder:draw,doubleKoSeededPlayers:seeds};state.matches=makeMatches();state.started=true;delete state.seedingDraft;save();renderTournament();const published=await publishLiveTournament({notifyOnError:true});if(published)await PushNotifications.sendLiveTournament()});
+$('#startBtn').addEventListener('click',async()=>{if(!linkPlannedEventBeforeStart())return;state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];state.scoreAudit=[];state.scoreUndoStack=[];delete state.endedEarly;delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;const doubleMode=$('#mode').value==='double',draw=doubleMode?[...ensureSeedingDraw()]:[],seeds=doubleMode?[...activeSeededPlayers()]:[];state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value,doubleKoDrawOrder:draw,doubleKoSeededPlayers:seeds};state.matches=makeMatches();state.started=true;delete state.seedingDraft;save();renderTournament();const published=await publishLiveTournament({notifyOnError:true});if(published)await PushNotifications.sendLiveTournament()});
 
 function playerLosses(){const losses=Object.fromEntries(state.players.map(p=>[p,0]));state.matches.filter(m=>m.sa!==null&&m.b!=='Freilos').forEach(m=>{losses[m.sa>m.sb?m.b:m.a]++});return losses}
 function standingsFor(players,matches=state.matches){return players.map(name=>{const played=matches.filter(m=>m.sa!==null&&(m.a===name||m.b===name));let w=0,lf=0,la=0;played.forEach(m=>{const own=m.a===name?m.sa:m.sb,other=m.a===name?m.sb:m.sa;lf+=own;la+=other;if(own>other)w++});return{name,p:played.length,w,l:played.length-w,lf,la,pts:w*2}}).sort((a,b)=>b.pts-a.pts||(b.lf-b.la)-(a.lf-a.la)||b.lf-a.lf)}
@@ -1031,7 +1056,8 @@ $('#qualificationCard').addEventListener('click',e=>{const mode=e.target.dataset
 
 function defaultPointSystem(){return appSettings.club?.pointSystem||{5:25,4:20,3:15,2:10,1:7,0:5}}
 function loadSeasons(){try{const data=JSON.parse(localStorage.getItem(SEASON_KEY)||'{"seasons":[]}');return Array.isArray(data.seasons)?data:{seasons:[]}}catch{return{seasons:[]}}}
-function persistSeasons(){localStorage.setItem(SEASON_KEY,JSON.stringify(seasonStore));if(selectedSeasonId)localStorage.setItem('tripleTwentySelectedSeason',selectedSeasonId)}
+function persistSelectedSeason(){if(selectedSeasonId)nativeSetItem('tripleTwentySelectedSeason',selectedSeasonId);else nativeRemoveItem('tripleTwentySelectedSeason')}
+function persistSeasons(){localStorage.setItem(SEASON_KEY,JSON.stringify(seasonStore));persistSelectedSeason()}
 async function mergeGuenterSeasonEntries(){
   const migrationKey='triple20_migration_guenter_g_v1';if(localStorage.getItem(migrationKey)==='done')return false;
   const target='Günter G.',aliases=new Set(['günther','günter']),isAlias=name=>aliases.has(normalizedPlayerName(name)),rename=name=>isAlias(name)?target:name;
@@ -1898,7 +1924,7 @@ $('#cloudAdminPanel').addEventListener('submit',e=>{
 });
 $('#cloudAdminPanel').addEventListener('click',e=>{
   const memberProfile=e.target.closest('[data-member-profile]');if(memberProfile){showPlayerProfile(memberProfile.dataset.memberProfile);return}
-  const memberSeason=e.target.closest('[data-member-season]');if(memberSeason){selectedSeasonId=memberSeason.dataset.memberSeason;persistSeasons();showSeason();return}
+  const memberSeason=e.target.closest('[data-member-season]');if(memberSeason){selectedSeasonId=memberSeason.dataset.memberSeason;persistSelectedSeason();showSeason();return}
   if(e.target.closest('[data-member-home]')){showHome();return}
   if(e.target.id==='adminLogoutBtn'||e.target.id==='memberLogoutBtn')T20Cloud.signOut();
   if(e.target.id==='removeAvatarBtn')T20Cloud.removeAvatar();
@@ -1917,7 +1943,7 @@ $('#cloudAdminPanel').addEventListener('click',e=>{
   if(e.target.id==='backupDownloadBtn')backupTriple20Data();
   if(e.target.id==='uploadLocalBtn')T20Cloud.uploadLocalWithBackup();
   if(e.target.id==='loadCloudBtn')T20Cloud.loadCloudConfirmed();
-  if(e.target.id==='forceCloudBtn'){if(confirm('Lokale Daten wirklich in der Cloud überschreiben?'))T20Cloud.syncAll({force:true})}
+  if(e.target.id==='forceCloudBtn'){if(confirm('Lokale Daten wirklich in der Cloud überschreiben?'))T20Cloud.syncAll({force:true,all:true})}
 });
 $('#cloudAdminPanel').addEventListener('change',event=>{
   const roleSelect=event.target.closest('[data-member-role]');
@@ -1928,7 +1954,7 @@ document.addEventListener('click',e=>{if(e.target.id==='cancelAvatarCropBtn'||e.
 $('#showTournamentBtn').addEventListener('click',()=>showTournament());
 $('#showHomeBtn')?.addEventListener('click',()=>showHome());
 $('#publicHomeSection')?.addEventListener('submit',event=>{if(event.target.id!=='publicScheduleForm')return;event.preventDefault();createPublicSchedule()});
-$('#publicHomeSection')?.addEventListener('click',event=>{const player=event.target.closest('[data-public-player]');if(player){showPlayerProfile(player.dataset.publicPlayer);return}const live=event.target.closest('[data-open-live]');if(live){showLive(live.dataset.openLive);return}if(event.target.closest('[data-event-login]')){showLogin();return}const registration=event.target.closest('[data-event-registration]');if(registration){changeTournamentRegistration(registration.dataset.eventRegistration,registration.dataset.registrationAction);return}const calendar=event.target.closest('[data-public-calendar]');if(calendar){addPublicEventToCalendar(calendar.dataset.publicCalendar);return}const whatsapp=event.target.closest('[data-public-whatsapp]');if(whatsapp){sharePublicEventOnWhatsApp(whatsapp.dataset.publicWhatsapp);return}const graphic=event.target.closest('[data-result-graphic]');if(graphic){openResultGraphic(graphic.dataset.resultGraphic);return}const remove=event.target.closest('[data-public-delete]');if(remove){deletePublicTournament(remove.dataset.publicDelete);return}if(event.target.closest('[data-public-past-toggle]')){publicPastExpanded=!publicPastExpanded;renderPublicHome({refreshRegistrations:false});return}const nav=event.target.closest('[data-public-nav]');if(nav?.dataset.publicNav==='turnier'){showTournament();return}if(nav?.dataset.publicNav==='saison'){showSeason();return}const seasonButton=event.target.closest('[data-season-open]');if(seasonButton){selectedSeasonId=seasonButton.dataset.seasonOpen;persistSeasons();showSeason()}});
+$('#publicHomeSection')?.addEventListener('click',event=>{const player=event.target.closest('[data-public-player]');if(player){showPlayerProfile(player.dataset.publicPlayer);return}const live=event.target.closest('[data-open-live]');if(live){showLive(live.dataset.openLive);return}if(event.target.closest('[data-event-login]')){showLogin();return}const registration=event.target.closest('[data-event-registration]');if(registration){changeTournamentRegistration(registration.dataset.eventRegistration,registration.dataset.registrationAction);return}const calendar=event.target.closest('[data-public-calendar]');if(calendar){addPublicEventToCalendar(calendar.dataset.publicCalendar);return}const whatsapp=event.target.closest('[data-public-whatsapp]');if(whatsapp){sharePublicEventOnWhatsApp(whatsapp.dataset.publicWhatsapp);return}const graphic=event.target.closest('[data-result-graphic]');if(graphic){openResultGraphic(graphic.dataset.resultGraphic);return}const remove=event.target.closest('[data-public-delete]');if(remove){deletePublicTournament(remove.dataset.publicDelete);return}if(event.target.closest('[data-public-past-toggle]')){publicPastExpanded=!publicPastExpanded;renderPublicHome({refreshRegistrations:false});return}const nav=event.target.closest('[data-public-nav]');if(nav?.dataset.publicNav==='turnier'){showTournament();return}if(nav?.dataset.publicNav==='saison'){showSeason();return}const seasonButton=event.target.closest('[data-season-open]');if(seasonButton){selectedSeasonId=seasonButton.dataset.seasonOpen;persistSelectedSeason();showSeason()}});
 document.addEventListener('click',event=>{if(event.target.id==='closeResultGraphicBtn'||event.target.id==='resultGraphicOverlay'){closeResultGraphic();return}if(event.target.id==='downloadResultGraphicBtn'){downloadResultGraphic();return}if(event.target.closest('#shareResultGraphicBtn'))shareResultGraphic()});
 document.addEventListener('click',e=>{const modeButton=e.target.closest('[data-tournament-mode]');if(modeButton){setTournamentViewMode(modeButton.dataset.tournamentMode);return}const competitionButton=e.target.closest('[data-competition]');if(competitionButton){const liveRoute=new URLSearchParams(location.search).get('bereich')==='live';if(liveRoute||!isAdmin())showLive(competitionButton.dataset.competition);else setActiveCompetition(competitionButton.dataset.competition)}});
 $('#showLiveQrBtn')?.addEventListener('click',openLiveQr);
@@ -1957,13 +1983,13 @@ $('#showLoginBtn').addEventListener('click',()=>showLogin());
 window.addEventListener('popstate',applyAppRoute);
 $('#themeMode').addEventListener('change',e=>renderThemePreview(e.target.value));
 $('#settingsForm').addEventListener('submit',e=>{e.preventDefault();const themeMode=$('#themeMode').value,preset=themeModes[themeMode]||themeModes.light;updateSettings({appName:'Triple20',mode:$('#settingsMode').value,themeMode,club:{enabled:$('#settingsMode').value==='club',name:$('#settingsClubName').value.trim(),logo:$('#settingsClubLogo').value.trim(),color:$('#settingsClubColor').value,seasonMode:$('#settingsSeasonMode').value,dropResults:appSettings.club.dropResults,pointSystem:{5:+$('#points5').value,4:+$('#points4').value,3:+$('#points3').value,2:+$('#points2').value,1:+$('#points1').value,0:+$('#points0').value}},tournament:{defaultMode:$('#settingsDefaultMode').value,defaultFormat:$('#settingsDefaultFormat').value,defaultLegs:+$('#settingsDefaultLegs').value},theme:{...preset.theme}});applyTournamentDefaults();showDashboard()});
-function createCurrentSeasonFromAction(){const h=currentHalfYear(),existing=seasonStore.seasons.find(s=>s.name===h.name);seasonFormOpen=false;if(existing){selectedSeasonId=existing.id;persistSeasons();renderSeasonView();return}createSeason({name:h.name,startDate:h.start,endDate:h.end,dropCount:+$('#seasonDrops').value||0})}
+function createCurrentSeasonFromAction(){const h=currentHalfYear(),existing=seasonStore.seasons.find(s=>s.name===h.name);seasonFormOpen=false;if(existing){selectedSeasonId=existing.id;persistSelectedSeason();renderSeasonView();return}createSeason({name:h.name,startDate:h.start,endDate:h.end,dropCount:+$('#seasonDrops').value||0})}
 $('#seasonActionSelect').addEventListener('change',e=>{const action=e.target.value;e.target.value='';if(!action)return;if(action==='edit'){seasonFormOpen=!seasonFormOpen;renderSeasonView();return}if(action==='current'){createCurrentSeasonFromAction();return}const season=selectedSeason();if(!season)return;if(action==='archive'){if(!confirm(`${season.name} archivieren?`))return;season.archived=true;saveSeason(season);return}if(action==='delete'){if(!confirm(`Saison „${season.name}“ wirklich endgültig löschen? Alle Spieltage und Saisonpunkte dieser Saison werden entfernt.`))return;deleteSeason(season.id)}});
 $('#seasonForm').addEventListener('submit',e=>{e.preventDefault();updateSeasonFromForm()});
-$('#seasonSelect').addEventListener('change',e=>{selectedSeasonId=e.target.value;seasonFormOpen=false;manualTournamentOpen=false;expandedSeasonTournamentIds.clear();persistSeasons();renderSeasonView()});
+$('#seasonSelect').addEventListener('change',e=>{selectedSeasonId=e.target.value;seasonFormOpen=false;manualTournamentOpen=false;expandedSeasonTournamentIds.clear();persistSelectedSeason();renderSeasonView()});
 document.querySelectorAll('.season-tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.season-tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');['standings','members','tournaments','stats','honors'].forEach(tab=>$('#season'+tab[0].toUpperCase()+tab.slice(1)).classList.toggle('hidden',b.dataset.seasonTab!==tab))}));
 $('#seasonStandings').addEventListener('click',e=>{const toggle=e.target.closest('[data-season-mobile-toggle]');if(toggle){const name=toggle.dataset.seasonMobileToggle,details=[...document.querySelectorAll('[data-season-mobile-details]')].find(item=>item.dataset.seasonMobileDetails===name),open=toggle.getAttribute('aria-expanded')==='true';toggle.setAttribute('aria-expanded',String(!open));toggle.closest('.season-mobile-player')?.classList.toggle('is-open',!open);details?.classList.toggle('hidden',open);return}const el=e.target.closest('[data-season-player]');if(el){const row=calculateSeasonStandings().find(item=>item.name===el.dataset.seasonPlayer);showPlayerProfile(playerProfileReference(row||{name:el.dataset.seasonPlayer}))}});
-$('#playerProfileSection')?.addEventListener('click',event=>{if(event.target.closest('[data-profile-back]')){history.length>1?history.back():showHome();return}const share=event.target.closest('[data-profile-share]');if(share){sharePlayerProfile(share.dataset.profileShare);return}const season=event.target.closest('[data-profile-season]');if(season){selectedSeasonId=season.dataset.profileSeason;persistSeasons();showSeason()}});
+$('#playerProfileSection')?.addEventListener('click',event=>{if(event.target.closest('[data-profile-back]')){history.length>1?history.back():showHome();return}const share=event.target.closest('[data-profile-share]');if(share){sharePlayerProfile(share.dataset.profileShare);return}const season=event.target.closest('[data-profile-season]');if(season){selectedSeasonId=season.dataset.profileSeason;persistSelectedSeason();showSeason()}});
 $('#seasonMembers').addEventListener('submit',e=>{if(e.target.id!=='memberForm')return;e.preventDefault();addSeasonMember($('#memberName').value);$('#memberName').value=''});
 $('#seasonMembers').addEventListener('click',e=>{const name=e.target.dataset.removeMember;if(name)removeSeasonMember(name);const linkName=e.target.dataset.linkMember;if(linkName){const profileId=e.target.closest('.member-link-control')?.querySelector('select')?.value;if(!profileId){alert('Bitte zuerst einen registrierten Benutzer auswählen.');return}linkSeasonMemberProfile(linkName,profileId)}});
 $('#seasonTournaments').addEventListener('submit',e=>{if(e.target.matches?.('[data-correction-form]')){e.preventDefault();correctSeasonTournamentFromForm(e.target);return}if(e.target.id!=='manualTournamentForm')return;e.preventDefault();addManualTournamentFromForm()});
