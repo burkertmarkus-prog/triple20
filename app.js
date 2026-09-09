@@ -506,9 +506,10 @@ window.T20Cloud={
       }
       if(this.user){this.role=await this.loadOwnRole(this.user.id);this.isAdmin=['tournament_manager','admin'].includes(this.role)}
       if(this.isAdmin){
-        const stranded=loadMemberTournament(),hasStrandedLive=!!(stranded.started||Object.values(stranded.competitions||{}).some(competition=>competition?.started));
-        if(hasStrandedLive&&!state.started&&!Object.values(state.competitions||{}).some(competition=>competition?.started)){replaceTournamentState(structuredClone(stranded));delete state.memberLocal;delete state.guestLocal;localStorage.removeItem(MEMBER_TOURNAMENT_KEY);save()}
-        else if(state.memberLocal||state.guestLocal)save();
+        // Ein zuvor auf diesem Gerät gespieltes privates Mitgliederturnier darf
+        // beim späteren Login als Turnierleitung niemals zum Vereinsturnier werden.
+        // Der zentrale Cloud-Stand wird direkt danach geladen.
+        if(state.memberLocal||state.guestLocal)replaceTournamentState(emptyCompetition());
       }
       if(this.user&&!this.isAdmin&&state.guestLocal){Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,{players:[],playerProfileIds:{},started:false,matches:[],settings:{}});localStorage.removeItem('dartTournament');localStorage.removeItem('triple20_pending_sync');this.pendingSync=false}
       if(this.user&&!this.isAdmin)this.tournamentViewMode='live';
@@ -694,6 +695,13 @@ window.T20Cloud={
       const previousCloudUpdated={...this.cloudUpdated},rows=await this.fetchCloud(),remoteChanged=new Set(rows.filter(row=>previousCloudUpdated[row.data_key]&&row.updated_at&&row.updated_at!==previousCloudUpdated[row.data_key]).map(row=>row.data_key)),cloud=this.rowsToObject(rows),hasCloud=rows.length&&Object.values(cloud).some(v=>v!==null&&v!==undefined);
       this.loadedCloudData=cloud;this.lastSyncAt=new Date().toISOString();localStorage.setItem('triple20_last_sync',this.lastSyncAt);
       if(this.user&&!this.isAdmin){const selectedCompetition=state.activeCompetition||'men';this.liveTournamentState=structuredClone(cloud.dartTournament||{players:[],playerProfileIds:{},started:false,matches:[],settings:{}});if(this.liveTournamentState.competitions?.[selectedCompetition])this.liveTournamentState.activeCompetition=selectedCompetition;applyTriple20Data({...cloud,dartTournament:this.liveTournamentState});setSyncStatus('Angemeldet – Mitglied','view-only');return}
+      // Beim ersten Laden nach einem Admin-/Spielleiter-Login ist immer die
+      // Cloud maßgeblich. Veraltete Pending-Flags eines früheren Gerätebesuchs
+      // dürfen keinen alten Turnierstand ungefragt zurück in die Cloud schreiben.
+      if(initial&&this.isAdmin&&hasCloud){
+        this.pendingKeys.clear();this.pendingSync=false;nativeRemoveItem('triple20_pending_sync');nativeRemoveItem('triple20_pending_keys');
+        applyTriple20Data(cloud);setSyncStatus('Online – aktuell','online');return;
+      }
       if(this.isAdmin&&this.pendingSync){
         // Alte App-Versionen kannten noch keine Liste geänderter Bereiche. Ein
         // bloß übrig gebliebenes Flag darf daher keinen kompletten Altstand hochladen.
@@ -707,7 +715,6 @@ window.T20Cloud={
       // Für Administrator und Turnierleitung ist nach der Anmeldung die Cloud
       // maßgeblich. Sonst startet ein zweites Gerät mit seinem alten Browserstand
       // und kann Termine und Saisonzuordnungen unbemerkt zurücksetzen.
-      if(initial&&this.isAdmin){applyTriple20Data(cloud);setSyncStatus('Online – aktuell','online');return}
       if(initial&&!hasMeaningfulLocalData()){applyTriple20Data(cloud);setSyncStatus(this.isAdmin?'Online – aktuell':'Nur Ansicht',this.isAdmin?'online':'view-only');return}
       if(!this.isAdmin){applyTriple20Data(cloud);setSyncStatus('Nur Ansicht','view-only');return}
       const safeRemoteKeys=[...remoteChanged].filter(key=>!this.pendingKeys.has(key));
