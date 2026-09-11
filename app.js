@@ -852,7 +852,7 @@ function playerBySeedEntry(entry){
   return playerBySeedName(name);
 }
 function selectedSeedingCount(){const value=$('#seedingCount')?.value??state.seedingDraft?.count??0;return value==='all'?'all':Math.max(0,Math.min(32,+value||0))}
-function selectedSeedingLimit(){const count=selectedSeedingCount();return count==='all'?state.players.length:count}
+function selectedSeedingLimit(){const count=selectedSeedingCount();return count==='all'?Number.MAX_SAFE_INTEGER:count}
 function activeSeededPlayers(){
   if($('#mode')?.value!=='double'&&!state.started)return[];
   const limit=selectedSeedingLimit(),seen=new Set();return (state.seedingDraft?.seededPlayers||[]).map(playerBySeedName).filter(name=>name&&!seen.has(normalizedPlayerName(name))&&seen.add(normalizedPlayerName(name))).slice(0,limit);
@@ -878,8 +878,10 @@ function renderSeedingOptions(){
   preview.innerHTML=games.map(match=>`<article><span>${esc(match.a||'Freilos')}</span><b>VS</b><span>${esc(match.automatic?'Freilos':match.b||'Freilos')}</span></article>`).join('');
 }
 function loadSeasonSeeding(){
-  const count=selectedSeedingCount(),limit=selectedSeedingLimit();if(!limit){alert('Bitte zuerst eine Anzahl gesetzter Spieler auswählen.');return}
-  const draft=seedingDraft(),rankingMode=$('#seedingRankingMode')?.value==='total'?'total':'clean',rows=visibleSeasonStandings(selectedSeedingSeason(),rankingMode),ranked=rows.map(playerBySeedEntry).filter(Boolean);draft.count=count;draft.rankingMode=rankingMode;draft.seededPlayers=[...new Set(ranked)].slice(0,limit);ensureSeedingDraw(true);renderPlayers()
+  const count=selectedSeedingCount(),limit=selectedSeedingLimit();if(count===0){alert('Bitte zuerst eine Anzahl gesetzter Spieler auswählen.');return}
+  const draft=seedingDraft(),rankingMode=$('#seedingRankingMode')?.value==='total'?'total':'clean',rows=visibleSeasonStandings(selectedSeedingSeason(),rankingMode),ranked=[...new Set(rows.map(playerBySeedEntry).filter(Boolean))];
+  if(!ranked.length){alert('Keiner der eingetragenen Turnierteilnehmer konnte der gewählten Saisonrangliste zugeordnet werden. Bitte zuerst die Spieler zum Turnier hinzufügen und danach die Rangliste übernehmen.');return}
+  draft.count=count;draft.rankingMode=rankingMode;draft.seededPlayers=ranked.slice(0,limit);ensureSeedingDraw(true);renderPlayers()
 }
 function addManualSeed(){const player=$('#manualSeedPlayer')?.value;if(!player)return;const draft=seedingDraft();if(draft.seededPlayers.length>=state.players.length)return alert('Alle eingetragenen Spieler sind bereits gesetzt.');draft.seededPlayers.push(player);const needed=draft.seededPlayers.length,draftCount=needed<=4?4:needed<=8?8:needed<=16?16:needed<=32?32:'all';draft.count=draftCount;$('#seedingCount').value=String(draft.count);ensureSeedingDraw(true);renderPlayers()}
 $('#seedingOptions').addEventListener('click',event=>{
