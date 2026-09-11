@@ -846,23 +846,30 @@ $('#mode').addEventListener('change',toggleModeOptions);toggleModeOptions();
 
 function seedingDraft(){state.seedingDraft=state.seedingDraft||{seededPlayers:[],drawOrder:[]};return state.seedingDraft}
 function playerBySeedName(name){const normalized=normalizedPlayerName(name);return state.players.find(player=>normalizedPlayerName(player)===normalized)||''}
+function playerBySeedEntry(entry){
+  const name=typeof entry==='string'?entry:entry?.name||'',profileId=typeof entry==='string'?'':entry?.profileId||memberIdForName(name);
+  if(profileId){const linked=state.players.find(player=>(state.playerProfileIds?.[player]||memberIdForName(player))===profileId);if(linked)return linked}
+  return playerBySeedName(name);
+}
+function selectedSeedingCount(){const value=$('#seedingCount')?.value??state.seedingDraft?.count??0;return value==='all'?'all':Math.max(0,Math.min(32,+value||0))}
+function selectedSeedingLimit(){const count=selectedSeedingCount();return count==='all'?state.players.length:count}
 function activeSeededPlayers(){
   if($('#mode')?.value!=='double'&&!state.started)return[];
-  const limit=+($('#seedingCount')?.value||state.seedingDraft?.count||0),seen=new Set();return (state.seedingDraft?.seededPlayers||[]).map(playerBySeedName).filter(name=>name&&!seen.has(normalizedPlayerName(name))&&seen.add(normalizedPlayerName(name))).slice(0,Math.min(32,limit));
+  const limit=selectedSeedingLimit(),seen=new Set();return (state.seedingDraft?.seededPlayers||[]).map(playerBySeedName).filter(name=>name&&!seen.has(normalizedPlayerName(name))&&seen.add(normalizedPlayerName(name))).slice(0,limit);
 }
 function ensureSeedingDraw(force=false){
   const draft=seedingDraft(),seeded=activeSeededPlayers(),rest=state.players.filter(player=>!seeded.includes(player));
   const valid=!force&&draft.drawOrder?.length===state.players.length&&draft.drawOrder.every(player=>state.players.includes(player))&&seeded.every((player,index)=>draft.drawOrder[index]===player);
-  if(!valid)draft.drawOrder=[...seeded,...shuffle(rest)];draft.count=+($('#seedingCount')?.value||draft.count||0);return draft.drawOrder;
+  if(!valid)draft.drawOrder=[...seeded,...shuffle(rest)];draft.count=selectedSeedingCount();return draft.drawOrder;
 }
 function selectedSeedingSeason(){return seasonStore.seasons.find(season=>String(season.id)===String($('#seedingSeason')?.value||selectedSeason()?.id||''))||selectedSeason()}
 function renderSeedingOptions(){
   const box=$('#seedingOptions');if(!box)return;const visible=!state.started&&$('#mode')?.value==='double';box.classList.toggle('hidden',!visible);if(!visible)return;
   const draft=seedingDraft(),seasonSelect=$('#seedingSeason'),current=seasonSelect?.value||selectedSeason()?.id||'';
   if(seasonSelect){seasonSelect.innerHTML=(seasonStore.seasons||[]).map(season=>`<option value="${esc(season.id)}" ${String(season.id)===String(current)?'selected':''}>${esc(season.name)}</option>`).join('')||'<option value="">Keine Saison vorhanden</option>'}
-  const count=$('#seedingCount');if(count)count.value=String([0,4,8,16,32].includes(+draft.count)?+draft.count:8);
+  const count=$('#seedingCount');if(count)count.value=draft.count==='all'?'all':String([0,4,8,16,32].includes(+draft.count)?+draft.count:8);
   const rankingMode=$('#seedingRankingMode');if(rankingMode)rankingMode.value=draft.rankingMode==='total'?'total':'clean';draft.rankingMode=rankingMode?.value||'clean';
-  draft.count=+(count?.value||0);draft.seededPlayers=(draft.seededPlayers||[]).map(playerBySeedName).filter(Boolean).slice(0,32);
+  draft.count=selectedSeedingCount();draft.seededPlayers=(draft.seededPlayers||[]).map(playerBySeedName).filter(Boolean).slice(0,state.players.length);
   const seeds=activeSeededPlayers(),available=state.players.filter(player=>!seeds.includes(player));
   const manual=$('#manualSeedPlayer');if(manual)manual.innerHTML=available.map(player=>`<option value="${esc(player)}">${esc(player)}</option>`).join('')||'<option value="">Alle Spieler gesetzt</option>';
   $('#seededPlayerList').innerHTML=seeds.length?seeds.map((player,index)=>`<div class="seeded-player"><span>${index+1}</span><b>${esc(player)}</b><button type="button" data-seed-up="${index}" ${index===0?'disabled':''} aria-label="Nach oben">↑</button><button type="button" data-seed-down="${index}" ${index===seeds.length-1?'disabled':''} aria-label="Nach unten">↓</button><button type="button" data-seed-remove="${index}" aria-label="Setzung entfernen">×</button></div>`).join(''):'<p class="option-help">Noch keine Spieler gesetzt. Du kannst eine Saisonrangliste übernehmen oder Spieler manuell hinzufügen.</p>';
@@ -871,16 +878,16 @@ function renderSeedingOptions(){
   preview.innerHTML=games.map(match=>`<article><span>${esc(match.a||'Freilos')}</span><b>VS</b><span>${esc(match.automatic?'Freilos':match.b||'Freilos')}</span></article>`).join('');
 }
 function loadSeasonSeeding(){
-  const limit=+($('#seedingCount')?.value||0);if(!limit){alert('Bitte zuerst Top 4, Top 8, Top 16 oder Top 32 auswählen.');return}
-  const draft=seedingDraft(),rankingMode=$('#seedingRankingMode')?.value==='total'?'total':'clean',rows=calculateSeasonStandings(selectedSeedingSeason(),rankingMode),ranked=rows.map(row=>playerBySeedName(row.name)).filter(Boolean);draft.rankingMode=rankingMode;draft.seededPlayers=[...new Set(ranked)].slice(0,limit);ensureSeedingDraw(true);renderPlayers()
+  const count=selectedSeedingCount(),limit=selectedSeedingLimit();if(!limit){alert('Bitte zuerst eine Anzahl gesetzter Spieler auswählen.');return}
+  const draft=seedingDraft(),rankingMode=$('#seedingRankingMode')?.value==='total'?'total':'clean',rows=visibleSeasonStandings(selectedSeedingSeason(),rankingMode),ranked=rows.map(playerBySeedEntry).filter(Boolean);draft.count=count;draft.rankingMode=rankingMode;draft.seededPlayers=[...new Set(ranked)].slice(0,limit);ensureSeedingDraw(true);renderPlayers()
 }
-function addManualSeed(){const player=$('#manualSeedPlayer')?.value;if(!player)return;const draft=seedingDraft();if(draft.seededPlayers.length>=32)return alert('Es können höchstens 32 Spieler gesetzt werden.');draft.seededPlayers.push(player);const needed=draft.seededPlayers.length,draftCount=needed<=4?4:needed<=8?8:needed<=16?16:32;draft.count=Math.max(draft.count||0,draftCount);$('#seedingCount').value=String(draft.count);ensureSeedingDraw(true);renderPlayers()}
+function addManualSeed(){const player=$('#manualSeedPlayer')?.value;if(!player)return;const draft=seedingDraft();if(draft.seededPlayers.length>=state.players.length)return alert('Alle eingetragenen Spieler sind bereits gesetzt.');draft.seededPlayers.push(player);const needed=draft.seededPlayers.length,draftCount=needed<=4?4:needed<=8?8:needed<=16?16:needed<=32?32:'all';draft.count=draftCount;$('#seedingCount').value=String(draft.count);ensureSeedingDraw(true);renderPlayers()}
 $('#seedingOptions').addEventListener('click',event=>{
   if(event.target.id==='loadSeasonSeeds'){loadSeasonSeeding();return}if(event.target.id==='addManualSeed'){addManualSeed();return}if(event.target.id==='rerollSeeding'){ensureSeedingDraw(true);renderSeedingOptions();save();return}
   const draft=seedingDraft(),up=event.target.dataset.seedUp,down=event.target.dataset.seedDown,remove=event.target.dataset.seedRemove,index=+(up??down??remove);
   if(remove!==undefined)draft.seededPlayers.splice(index,1);else if(up!==undefined&&index>0)[draft.seededPlayers[index-1],draft.seededPlayers[index]]=[draft.seededPlayers[index],draft.seededPlayers[index-1]];else if(down!==undefined&&index<draft.seededPlayers.length-1)[draft.seededPlayers[index+1],draft.seededPlayers[index]]=[draft.seededPlayers[index],draft.seededPlayers[index+1]];else return;ensureSeedingDraw(true);renderPlayers()
 });
-$('#seedingCount').addEventListener('change',()=>{const draft=seedingDraft();draft.count=+$('#seedingCount').value;draft.seededPlayers=draft.seededPlayers.slice(0,draft.count);ensureSeedingDraw(true);renderPlayers()});
+$('#seedingCount').addEventListener('change',()=>{const draft=seedingDraft();draft.count=selectedSeedingCount();draft.seededPlayers=draft.seededPlayers.slice(0,selectedSeedingLimit());ensureSeedingDraw(true);renderPlayers()});
 $('#seedingRankingMode').addEventListener('change',()=>{const draft=seedingDraft();draft.rankingMode=$('#seedingRankingMode').value==='total'?'total':'clean';save()});
 
 function addPairs(target,players,round,bracket='upper'){
@@ -1263,6 +1270,15 @@ function calculateSeasonStandings(season=selectedSeason(),rankingMode='clean'){
     ?b.totalPoints-a.totalPoints||b.wins-a.wins||a.losses-b.losses||b.played-a.played||a.name.localeCompare(b.name,'de')
     :b.cleanPoints-a.cleanPoints||b.cleanWins-a.cleanWins||a.cleanLosses-b.cleanLosses||b.cleanPlayed-a.cleanPlayed||a.name.localeCompare(b.name,'de'));
 }
+function visibleSeasonStandings(season=selectedSeason(),rankingMode='clean'){
+  const rows=calculateSeasonStandings(season,rankingMode);
+  if(!season)return rows;
+  const seasonName=season.name||'',competitions=new Set((season.tournaments||[]).map(tournament=>tournament.competition||tournament.settings?.competition).filter(Boolean));
+  const isMensSeason=/herren/i.test(seasonName)?true:/damen/i.test(seasonName)?false:competitions.has('men')&&!competitions.has('women');
+  if(!isMensSeason)return rows;
+  const hidden=new Set(['julz','julia wiesler',...(season.hiddenRankingPlayers||[])].map(normalizedPlayerName));
+  return rows.filter(row=>!hidden.has(normalizedPlayerName(row.name)));
+}
 function seasonStats(season=selectedSeason()){const rows=calculateSeasonStandings(season);return{max180:[...rows].sort((a,b)=>b.max180-a.max180)[0],checkout:[...rows].sort((a,b)=>b.checkout-a.checkout)[0],played:[...rows].sort((a,b)=>b.played-a.played)[0],participation:[...rows].sort((a,b)=>b.participation-a.participation||b.played-a.played)[0],wins:[...rows].sort((a,b)=>b.wins-a.wins)[0],winRate:[...rows].filter(r=>r.wins+r.losses>0).sort((a,b)=>b.winRate-a.winRate||b.wins-a.wins)[0]}}
 function calculateSeasonStatisticsSummary(season=selectedSeason()){const s=seasonStats(season),pick=(row,key)=>row?{player:row.name,value:row[key]||0}:null;return{updatedAt:new Date().toISOString(),max180:pick(s.max180,'max180'),checkout:pick(s.checkout,'checkout'),played:pick(s.played,'played'),participation:s.participation?{player:s.participation.name,value:s.participation.participation}:null,wins:pick(s.wins,'wins'),winRate:s.winRate?{player:s.winRate.name,value:s.winRate.winRate}:null}}
 function renderSeasonImport(winner){
@@ -1284,7 +1300,7 @@ function renderSeasonView(){
   renderSeasonHeader(season);
   renderSeasonForm(season);
   if(!season){$('#seasonOverview').innerHTML='<div class="empty-card">Noch keine Saison vorhanden. Erstelle die aktuelle Halbjahreswertung mit einem Klick.</div>';['seasonStandings','seasonMembers','seasonTournaments','seasonStats','seasonHonors','seasonPlayerDetail'].forEach(id=>$('#'+id).innerHTML='');renderMemberSuggestions();return}
-  const rows=calculateSeasonStandings(season),current=seasonForDate(todayIso());
+  const rows=visibleSeasonStandings(season),current=seasonForDate(todayIso());
   $('#seasonOverview').innerHTML=`<div class="season-cards"><article><span>Aktuelle Saison</span><b>${esc(current?.name||'Keine aktive Saison')}</b></article><article><span>Geladene Saison</span><b>${esc(season.name)}${season.archived?' · Archiv':''}</b><small>${season.startDate} bis ${season.endDate}</small></article><article><span>Turniere</span><b>${season.tournaments?.length||0}</b></article><article><span>Streicher</span><b>${season.dropCount||0}</b></article></div>`;
   renderSeasonStandings(season,rows);renderSeasonMembers(season,rows);renderSeasonTournaments(season);renderSeasonStats(season,rows);renderSeasonHonors(season,rows);renderMemberSuggestions();
 }
@@ -1301,8 +1317,8 @@ function renderSeasonForm(season=selectedSeason()){
   $('#seasonFormSubmit').innerHTML=season?'SAISON-ÄNDERUNGEN SPEICHERN <span>→</span>':'SAISON SPEICHERN <span>→</span>';
   $('#seasonName').value=s.name||h.name;$('#seasonStart').value=s.startDate||h.start;$('#seasonEnd').value=s.endDate||h.end;$('#seasonDrops').value=String(s.dropCount??0);
 }
-function renderSeasonStandings(season=selectedSeason(),rows=calculateSeasonStandings(season)){
-  rows=calculateSeasonStandings(season,seasonRankingMode);
+function renderSeasonStandings(season=selectedSeason(),rows=visibleSeasonStandings(season)){
+  rows=visibleSeasonStandings(season,seasonRankingMode);
   const ownId=T20Cloud.user?.id||'',ownNickname=T20Cloud.profile?.nickname||'';
   const modeSwitch=`<div class="season-ranking-switch" role="group" aria-label="Ansicht der Saisonrangliste"><button type="button" data-season-ranking-mode="clean" class="${seasonRankingMode==='clean'?'active':''}">Wertung nach Streicher</button><button type="button" data-season-ranking-mode="total" class="${seasonRankingMode==='total'?'active':''}">Alle Ergebnisse</button></div><p class="season-ranking-note">${seasonRankingMode==='clean'?`Offizielle Wertung: ${season.dropCount||0} Streicher werden berücksichtigt.`:'Vergleichsansicht: alle Ergebnisse werden gezählt, ohne Streicher.'}</p>`;
   const mobile=`<div class="season-mobile-ranking">${rows.map((r,i)=>{const own=!!(ownId&&r.profileId===ownId)||(!isAdmin()&&ownNickname&&normalizedPlayerName(r.name)===normalizedPlayerName(ownNickname)),podium=i<3?` podium-${i+1}`:'';return `<article class="season-mobile-player${podium}${own?' is-own-player':''}"><button class="season-mobile-summary" type="button" data-season-mobile-toggle="${esc(r.name)}" aria-expanded="false"><span class="season-mobile-rank">${i+1}</span><span class="season-mobile-name"><b>${esc(r.name)}</b>${own?'<small>Dein Profil</small>':''}</span><span class="season-mobile-points"><b>${seasonRankingMode==='clean'?r.cleanPoints:r.totalPoints}</b><small>Punkte</small></span><span class="season-mobile-chevron">⌄</span></button><div class="season-mobile-details hidden" data-season-mobile-details="${esc(r.name)}"><div><span>Gesamtpunkte</span><b>${r.totalPoints}</b></div><div><span>Nach Streicher</span><b>${r.cleanPoints}</b></div><div><span>Turniere</span><b>${r.played}</b></div><div><span>Siege</span><b>${r.wins}</b></div><div><span>Niederlagen</span><b>${r.losses}</b></div><div><span>Freilose</span><b>${r.byes||0}</b></div><div><span>Average</span><b>${r.average??'–'}</b></div><div><span>180er</span><b>${r.max180}</b></div><div><span>High Finish</span><b>${r.checkout}</b></div><div class="season-mobile-drops"><span>Streicher</span><b>${r.dropResults.map(entry=>`<i>${entry.present?entry.points:0}</i>`).join('')||'–'}</b></div><button class="link-btn season-mobile-profile" type="button" data-season-player="${esc(r.name)}">Spielerdetails öffnen</button></div></article>`}).join('')||'<div class="empty-card">Noch keine Rangliste vorhanden.</div>'}</div>`;
@@ -1401,7 +1417,7 @@ async function sharePlayerProfile(reference){
   try{if(navigator.share){await navigator.share(data);return}await navigator.clipboard.writeText(url);alert('Profil-Link wurde kopiert.')}catch(error){if(error?.name!=='AbortError')prompt('Profil-Link kopieren:',url)}
 }
 function exportSeasonJson(){const season=selectedSeason();if(!season)return;downloadFile(`${season.name.replaceAll(' ','_')}.json`,'application/json',JSON.stringify(season,null,2))}
-function exportStandingsCsv(){const season=selectedSeason();if(!season)return;const rows=calculateSeasonStandings(season),head=['Platz','Spieler','Gesamtpunkte','Bereinigte Punkte','Turniere','Siege','Niederlagen','180er','Höchstes Checkout'];const csv=[head.join(';'),...rows.map((r,i)=>[i+1,r.name,r.totalPoints,r.cleanPoints,r.played,r.wins,r.losses,r.max180,r.checkout].map(v=>`"${String(v).replaceAll('"','""')}"`).join(';'))].join('\n');downloadFile(`${season.name.replaceAll(' ','_')}_rangliste.csv`,'text/csv;charset=utf-8',csv)}
+function exportStandingsCsv(){const season=selectedSeason();if(!season)return;const rows=visibleSeasonStandings(season),head=['Platz','Spieler','Gesamtpunkte','Bereinigte Punkte','Turniere','Siege','Niederlagen','180er','Höchstes Checkout'];const csv=[head.join(';'),...rows.map((r,i)=>[i+1,r.name,r.totalPoints,r.cleanPoints,r.played,r.wins,r.losses,r.max180,r.checkout].map(v=>`"${String(v).replaceAll('"','""')}"`).join(';'))].join('\n');downloadFile(`${season.name.replaceAll(' ','_')}_rangliste.csv`,'text/csv;charset=utf-8',csv)}
 
 function publicDate(value){if(!value)return'Datum offen';const date=new Date(`${value}T12:00:00`);return Number.isNaN(date.getTime())?esc(value):date.toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'})}
 function publicStartTime(record={}){const value=record.startTime||record.settings?.startTime||record.settings?.start||'';return /^\d{2}:\d{2}$/.test(value)?`${value} Uhr`:''}
@@ -1534,7 +1550,7 @@ function renderPublicHome({refreshRegistrations=true}={}){
   $('#publicUpcomingGames').innerHTML=upcoming.map(item=>publicEventRow(item,'future')).join('')||'<div class="public-empty"><p>Derzeit sind keine zukünftigen Spieltage eingetragen.</p></div>';
   const visiblePast=publicPastExpanded?past:past.slice(0,2),pastToggle=past.length>2?`<button class="secondary public-past-toggle" type="button" data-public-past-toggle aria-expanded="${publicPastExpanded}">${publicPastExpanded?'Weniger anzeigen':`Mehr anzeigen (${past.length-2})`} <span>${publicPastExpanded?'↑':'↓'}</span></button>`:'';
   $('#publicPastGames').innerHTML=visiblePast.map(item=>publicEventRow(item,'past')).join('')+pastToggle||'<div class="public-empty"><p>Noch keine vergangenen Spiele vorhanden.</p></div>';
-  $('#publicSeasonRankings').innerHTML=(seasonStore.seasons||[]).map(season=>{const rows=calculateSeasonStandings(season);return `<article class="public-ranking-card"><div><span>${season.archived?'ARCHIV':'SAISON'}</span><h3>${esc(season.name)}</h3><small>${publicDate(season.startDate)} – ${publicDate(season.endDate)}</small></div>${rows.length?`<ol>${rows.slice(0,5).map(row=>`<li><button class="public-player-link" type="button" data-public-player="${esc(playerProfileReference(row))}">${esc(row.name)}</button><b>${row.cleanPoints} Pkt.</b></li>`).join('')}</ol>`:'<p>Noch keine Wertung vorhanden.</p>'}<button class="link-btn" type="button" data-season-open="${esc(season.id)}">Vollständige Rangliste öffnen</button></article>`}).join('')||'<div class="public-empty"><p>Noch keine Saisonranglisten vorhanden.</p></div>';
+  $('#publicSeasonRankings').innerHTML=(seasonStore.seasons||[]).map(season=>{const rows=visibleSeasonStandings(season);return `<article class="public-ranking-card"><div><span>${season.archived?'ARCHIV':'SAISON'}</span><h3>${esc(season.name)}</h3><small>${publicDate(season.startDate)} – ${publicDate(season.endDate)}</small></div>${rows.length?`<ol>${rows.slice(0,5).map(row=>`<li><button class="public-player-link" type="button" data-public-player="${esc(playerProfileReference(row))}">${esc(row.name)}</button><b>${row.cleanPoints} Pkt.</b></li>`).join('')}</ol>`:'<p>Noch keine Wertung vorhanden.</p>'}<button class="link-btn" type="button" data-season-open="${esc(season.id)}">Vollständige Rangliste öffnen</button></article>`}).join('')||'<div class="public-empty"><p>Noch keine Saisonranglisten vorhanden.</p></div>';
   if(refreshRegistrations)loadTournamentRegistrations();
 }
 
