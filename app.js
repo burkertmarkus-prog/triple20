@@ -700,19 +700,19 @@ window.T20Cloud={
       const previousCloudUpdated={...this.cloudUpdated},rows=await this.fetchCloud(),remoteChanged=new Set(rows.filter(row=>previousCloudUpdated[row.data_key]&&row.updated_at&&row.updated_at!==previousCloudUpdated[row.data_key]).map(row=>row.data_key)),cloud=this.rowsToObject(rows),hasCloud=rows.length&&Object.values(cloud).some(v=>v!==null&&v!==undefined);
       this.loadedCloudData=cloud;this.lastSyncAt=new Date().toISOString();localStorage.setItem('triple20_last_sync',this.lastSyncAt);
       if(this.user&&!this.isAdmin){const selectedCompetition=state.activeCompetition||'men';this.liveTournamentState=structuredClone(cloud.dartTournament||{players:[],playerProfileIds:{},started:false,matches:[],settings:{}});if(this.liveTournamentState.competitions?.[selectedCompetition])this.liveTournamentState.activeCompetition=selectedCompetition;applyTriple20Data({...cloud,dartTournament:this.liveTournamentState});setSyncStatus('Angemeldet – Mitglied','view-only');return}
-      // Beim ersten Laden nach einem Admin-/Spielleiter-Login ist immer die
-      // Cloud maßgeblich. Veraltete Pending-Flags eines früheren Gerätebesuchs
-      // dürfen keinen alten Turnierstand ungefragt zurück in die Cloud schreiben.
-      if(initial&&this.isAdmin&&hasCloud){
-        this.pendingKeys.clear();this.pendingSync=false;nativeRemoveItem('triple20_pending_sync');nativeRemoveItem('triple20_pending_keys');
-        applyTriple20Data(cloud);setSyncStatus('Online – aktuell','online');return;
-      }
       if(this.isAdmin&&this.pendingSync){
         // Alte App-Versionen kannten noch keine Liste geänderter Bereiche. Ein
         // bloß übrig gebliebenes Flag darf daher keinen kompletten Altstand hochladen.
         if(!this.pendingKeys.size){this.pendingSync=false;nativeRemoveItem('triple20_pending_sync');applyTriple20Data(cloud);setSyncStatus('Online – aktuell','online');return}
         for(const key of this.pendingKeys){if(previousCloudUpdated[key])this.cloudUpdated[key]=previousCloudUpdated[key];else delete this.cloudUpdated[key]}
         await this.syncAll();return
+      }
+      // Ohne konkret vorgemerkte lokale Änderungen ist beim ersten Laden die
+      // Cloud maßgeblich. Echte Offline-Änderungen wurden oben bereits zuerst
+      // hochgeladen und dürfen hier nicht mehr verworfen werden.
+      if(initial&&this.isAdmin&&hasCloud){
+        this.pendingKeys.clear();this.pendingSync=false;nativeRemoveItem('triple20_pending_sync');nativeRemoveItem('triple20_pending_keys');
+        applyTriple20Data(cloud);setSyncStatus('Online – aktuell','online');return;
       }
       if(!hasCloud){setSyncStatus(this.isAdmin&&hasMeaningfulLocalData()?'Online – Cloud leer, lokale Daten vorhanden':'Online – aktuell','online');renderCloudPanel();return}
       if(!this.user){applyTriple20Data(cloud);setSyncStatus('Öffentliche Daten aktuell','view-only');return}
@@ -753,8 +753,8 @@ window.T20Cloud={
       const client=requireSupabaseClient();
       const {data,error}=await client.from('triple20_data').upsert(payload,{onConflict:'data_key'}).select('data_key,updated_at');
       if(error)throw error;(data||[]).forEach(r=>this.cloudUpdated[r.data_key]=r.updated_at);
-      targetKeys.forEach(key=>this.pendingKeys.delete(key));this.pendingSync=this.pendingKeys.size>0;if(this.pendingSync){nativeSetItem('triple20_pending_sync','1');nativeSetItem('triple20_pending_keys',JSON.stringify([...this.pendingKeys]))}else{nativeRemoveItem('triple20_pending_sync');nativeRemoveItem('triple20_pending_keys')}this.lastSyncAt=new Date().toISOString();nativeSetItem('triple20_last_sync',this.lastSyncAt);setSyncStatus(this.pendingSync?'Weitere Änderungen werden gespeichert …':'Online gespeichert',this.pendingSync?'saving':'saved');renderCloudPanel();
-    }catch(e){console.warn('Cloud speichern fehlgeschlagen',e);this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');setSyncStatus('Offline – lokale Kopie','offline')}
+      targetKeys.forEach(key=>this.pendingKeys.delete(key));this.pendingSync=this.pendingKeys.size>0;if(this.pendingSync){nativeSetItem('triple20_pending_sync','1');nativeSetItem('triple20_pending_keys',JSON.stringify([...this.pendingKeys]));clearTimeout(this.syncTimer);this.syncTimer=setTimeout(()=>this.syncAll(),700)}else{nativeRemoveItem('triple20_pending_sync');nativeRemoveItem('triple20_pending_keys')}this.lastSyncAt=new Date().toISOString();nativeSetItem('triple20_last_sync',this.lastSyncAt);setSyncStatus(this.pendingSync?'Weitere Änderungen werden gespeichert …':'Online gespeichert',this.pendingSync?'saving':'saved');renderCloudPanel();
+    }catch(e){console.warn('Cloud speichern fehlgeschlagen',e);targetKeys.forEach(key=>this.pendingKeys.add(key));this.pendingSync=true;nativeSetItem('triple20_pending_sync','1');nativeSetItem('triple20_pending_keys',JSON.stringify([...this.pendingKeys]));setSyncStatus('Offline – lokale Kopie','offline')}
   },
   async uploadLocalWithBackup(){if(!isAdmin())return;const summary=backupPreview();backupTriple20Data('triple20_vor_cloud_upload');if(!confirm(`Lokale Triple20-Daten in die Cloud übernehmen?\n\n${summary}\n\nEin JSON-Backup wurde heruntergeladen.`))return;await this.syncAll({force:true,all:true})},
   async loadCloudConfirmed(){if(!this.loadedCloudData)await this.loadCloud();if(!this.loadedCloudData)return;backupTriple20Data('triple20_vor_cloud_laden');if(!confirm('Cloud-Daten laden? Die aktuelle lokale Version wurde vorher als Backup gesichert.'))return;applyTriple20Data(this.loadedCloudData);setSyncStatus('Online – aktuell','online')},
@@ -2068,7 +2068,7 @@ $('#seasonTournaments').addEventListener('click',e=>{
   if(deleteId){const season=selectedSeason(),tournament=season?.tournaments?.find(t=>t.id===deleteId);if(!season||!tournament)return;if(!confirm(`Spieltag „${tournament.name}“ vom ${tournament.date} wirklich aus der Saison löschen?`))return;deleteTournamentFromSeason(season.id,deleteId)}
 });
 $('#seasonPlayerDetail').addEventListener('click',e=>{if(e.target.classList.contains('close-detail'))$('#seasonPlayerDetail').innerHTML=''});
-$('#winnerCard').addEventListener('click',async e=>{if(e.target.id==='exportCurrentTournamentBtn'){exportCurrentTournamentJson();return}if(e.target.id==='seasonFromWinnerBtn'){showSeason();return}if(e.target.id!=='addToSeasonBtn')return;const id=$('#seasonImportSelect')?.value;if(!id)return;const tournament=buildCurrentTournamentRecord(),importedSeason=addTournamentToSeason(id,tournament);if(!importedSeason)return;state.seasonImportedTo=importedSeason.id;state.seasonTournamentId=tournament.id;state.started=false;save();renderSeasonImport(champion());await publishLiveTournament({notifyOnError:true});renderPublicHome({refreshRegistrations:false});alert(`Turnier wurde in „${importedSeason.name}“ übernommen und aus der Live-Ansicht entfernt.`)});
+$('#winnerCard').addEventListener('click',async e=>{if(e.target.id==='exportCurrentTournamentBtn'){exportCurrentTournamentJson();return}if(e.target.id==='seasonFromWinnerBtn'){showSeason();return}if(e.target.id!=='addToSeasonBtn')return;const id=$('#seasonImportSelect')?.value;if(!id)return;const tournament=buildCurrentTournamentRecord(),importedSeason=addTournamentToSeason(id,tournament);if(!importedSeason)return;state.seasonImportedTo=importedSeason.id;state.seasonTournamentId=tournament.id;state.started=false;save();renderSeasonImport(champion());const finalKeys=['dartTournament','tripleTwentySeasons','triple20_tournaments'];await T20Cloud.syncAll({force:true,keys:finalKeys});renderPublicHome({refreshRegistrations:false});if(finalKeys.some(key=>T20Cloud.pendingKeys.has(key))){alert(`Das Turnier ist auf diesem Gerät sicher gespeichert, konnte aber noch nicht vollständig online in „${importedSeason.name}“ übernommen werden. Bitte die App geöffnet lassen und die Internetverbindung prüfen.`);return}alert(`Turnier wurde in „${importedSeason.name}“ übernommen, online gespeichert und aus der Live-Ansicht entfernt.`)});
 $('#exportSeasonJsonBtn').addEventListener('click',exportSeasonJson);
 $('#exportStandingsCsvBtn').addEventListener('click',exportStandingsCsv);
 function renameEvent(){
