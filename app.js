@@ -1,6 +1,7 @@
 const $=s=>document.querySelector(s);
 const SETTINGS_KEY='triple20_settings';
 const TOURNAMENT_HISTORY_KEY='triple20_tournaments';
+const CLUB_DUELS_KEY='triple20_club_duels';
 const MEMBER_TOURNAMENT_KEY='triple20_member_tournament';
 const LIVE_RECOVERY_KEY='triple20_live_recovery';
 const STATS_STATION_TOKEN_KEY='triple20_stats_station_token';
@@ -24,7 +25,7 @@ const SUPABASE_PUBLISHABLE_KEY='sb_publishable_IzH5CLw7baFsaU005Bqh7w_lRMlrMLo';
 const PUSH_FUNCTION_NAME='triple20-push';
 // Die geöffnete Saison ist eine persönliche Browser-Auswahl und darf nicht
 // durch den regelmäßigen Cloud-Abgleich anderer Geräte überschrieben werden.
-const CLOUD_DATA_KEYS=['dartTournament','tripleTwentySeasons','triple20_settings','triple20_tournaments'];
+const CLOUD_DATA_KEYS=['dartTournament','tripleTwentySeasons','triple20_settings','triple20_tournaments',CLUB_DUELS_KEY];
 let supabaseClient=null;
 let T20_SUPPRESS_SYNC=false;
 const nativeSetItem=localStorage.setItem.bind(localStorage),nativeRemoveItem=localStorage.removeItem.bind(localStorage);
@@ -54,6 +55,8 @@ let manualTournamentOpen=false;
 let seasonFormOpen=false;
 let editingSeasonTournamentId='';
 let publicPastExpanded=false;
+let clubDuelSetupOpen=false;
+let selectedClubDuelId='';
 const expandedSeasonTournamentIds=new Set();
 const COMPETITION_KEYS=['players','playerProfileIds','started','liveSessionId','liveStartedAt','matches','settings','groups','withdrawn','endedEarly','savedToHistory','seasonImportedTo','seasonTournamentId','scheduledEventId','scheduledSeasonId','groupStage','scoreAudit','scoreUndoStack','seedingDraft'];
 function emptyCompetition(){return{players:[],playerProfileIds:{},started:false,matches:[],settings:{}}}
@@ -157,11 +160,11 @@ async function ensureSupabaseLibrary(){
 }
 function safeJsonParse(value,fallback=null){try{return JSON.parse(value)}catch{return fallback}}
 function localValueForKey(key){const raw=localStorage.getItem(key);if(raw===null)return null;if(key==='tripleTwentySelectedSeason')return raw;return safeJsonParse(raw,raw)}
-function hasMeaningfulLocalData(){return !!(state.players?.length||state.matches?.length||seasonStore.seasons?.length||loadTournamentHistory().length)}
+function hasMeaningfulLocalData(){return !!(state.players?.length||state.matches?.length||seasonStore.seasons?.length||loadTournamentHistory().length||loadClubDuels().duels.length)}
 function collectTriple20Data(){return Object.fromEntries(CLOUD_DATA_KEYS.map(k=>[k,localValueForKey(k)]))}
 function backupTriple20Data(prefix='triple20_backup'){const data={createdAt:new Date().toISOString(),app:'Triple20',data:collectTriple20Data()};downloadFile(`${prefix}_${new Date().toISOString().slice(0,19).replaceAll(':','-')}.json`,'application/json',JSON.stringify(data,null,2));return data}
 function applyTriple20Data(data){
-  const visibleSection=['tvSection','publicHomeSection','authSection','settingsSection','seasonSection','shopSection','statsStationSection','setupSection','tournamentSection'].find(id=>!$('#'+id)?.classList.contains('hidden'))||'';
+  const visibleSection=['tvSection','clubDuelTvSection','publicHomeSection','authSection','settingsSection','seasonSection','clubDuelsSection','shopSection','statsStationSection','setupSection','tournamentSection'].find(id=>!$('#'+id)?.classList.contains('hidden'))||'';
   if(!data)return;
   T20_SUPPRESS_SYNC=true;
   try{
@@ -186,10 +189,12 @@ function applyTriple20Data(data){
   applyTheme();applyTournamentDefaults();renderPlayers();renderSettingsForm();renderSeasonView();renderTournament();
   if(!$('#shopSection')?.classList.contains('hidden'))renderShop();
   if(visibleSection==='tvSection')refreshVisibleTv();
+  else if(visibleSection==='clubDuelTvSection')renderClubDuelTv();
   else if(visibleSection==='publicHomeSection')showHome(false);
   else if(visibleSection==='authSection')showLogin();
   else if(visibleSection==='settingsSection')showSettings();
   else if(visibleSection==='seasonSection')showSeason();
+  else if(visibleSection==='clubDuelsSection')showClubDuels(false);
   else if(visibleSection==='shopSection')showShop();
   else if(visibleSection==='statsStationSection')showStatsStation(false,true);
   else if(visibleSection==='tournamentSection'||visibleSection==='setupSection')showTournament();
@@ -204,7 +209,7 @@ function mergeRemoteStationSuggestions(remote){
   if(changed){T20_SUPPRESS_SYNC=true;try{syncActiveCompetition();localStorage.setItem('dartTournament',JSON.stringify(state));if(!$('#tournamentSection')?.classList.contains('hidden'))renderTournament();if(!$('#statsStationSection')?.classList.contains('hidden'))renderStatsStation(false,true)}finally{T20_SUPPRESS_SYNC=false}}
   return changed;
 }
-function backupPreview(data=collectTriple20Data()){const seasons=data.tripleTwentySeasons?.seasons||[],tournaments=data.triple20_tournaments||[],current=data.dartTournament||{};return `${seasons.length} Saison(en), ${tournaments.length} gespeicherte Turnier(e), aktuelles Turnier: ${current.started?'läuft':'nicht gestartet'}${current.players?.length?`, ${current.players.length} Spieler`:''}`;}
+function backupPreview(data=collectTriple20Data()){const seasons=data.tripleTwentySeasons?.seasons||[],tournaments=data.triple20_tournaments||[],duels=data[CLUB_DUELS_KEY]?.duels||[],current=data.dartTournament||{};return `${seasons.length} Saison(en), ${tournaments.length} gespeicherte Turnier(e), ${duels.length} Vereinsduell(e), aktuelles Turnier: ${current.started?'läuft':'nicht gestartet'}${current.players?.length?`, ${current.players.length} Spieler`:''}`;}
 function setSyncStatus(text,cls='view-only'){const bar=$('#syncStatusBar'),label=$('#syncStatusText');if(!bar||!label)return;bar.className=`sync-status ${cls}`;label.textContent=text;const last=$('#syncLastSaved');if(last)last.textContent=T20Cloud?.lastSyncAt?`Letzte Synchronisierung: ${new Date(T20Cloud.lastSyncAt).toLocaleString('de-AT')}`:'Noch nicht synchronisiert'}
 function isAdmin(){return !!window.T20Cloud?.isAdmin}
 function isFullAdmin(){return window.T20Cloud?.role==='admin'}
@@ -1771,21 +1776,106 @@ async function saveStatsStationResult(form){
 }
 async function deleteStatsStationResult(){if(!isAdmin())return;const item=statsStationMatches[Number($('#statsStationMatch')?.value)],competition=item?.key===state.activeCompetition?state:state.competitions?.[item?.key],match=(item?.match?.nodeId?competition?.matches?.find(entry=>entry.nodeId===item.match.nodeId):null)||competition?.matches?.[item?.index];if(!match?.autodartsStats)return;if(!confirm(`Teststatistik für ${match.a} gegen ${match.b} wirklich löschen?`))return;delete match.autodartsStats;statsStationPending=null;save();await publishLiveTournament({notifyOnError:true});renderStatsStation(false);$('#statsStationStatus').textContent='Die gespeicherten Testwerte wurden gelöscht.'}
 
+function loadClubDuels(){
+  const data=safeJsonParse(localStorage.getItem(CLUB_DUELS_KEY)||'null');
+  return data&&Array.isArray(data.duels)?data:{version:1,duels:[]};
+}
+function saveClubDuels(store){localStorage.setItem(CLUB_DUELS_KEY,JSON.stringify({version:1,duels:store.duels||[]}))}
+function clubDuelId(){return crypto.randomUUID?.()||`duel-${Date.now()}-${Math.random().toString(16).slice(2)}`}
+function clubDuelModeLabel(mode){return mode==='tdsv'?'TDSV-Steeldart':'Freundschaftsspiel'}
+function parseClubRoster(value){return [...new Set(String(value||'').split(/[\n,;]+/).map(name=>name.trim().replace(/\s+/g,' ')).filter(Boolean))]}
+function clubDuelDate(value){if(!value)return'–';const date=new Date(`${value}T12:00:00`);return Number.isNaN(date.getTime())?value:new Intl.DateTimeFormat('de-AT',{dateStyle:'medium'}).format(date)}
+function clubDuelScore(duel){
+  return (duel.matches||[]).reduce((score,match)=>{if(match.homeLegs===null||match.guestLegs===null)return score;score.homeLegs+=match.homeLegs;score.guestLegs+=match.guestLegs;if(match.homeLegs>match.guestLegs)score.home++;else score.guest++;score.played++;return score},{home:0,guest:0,homeLegs:0,guestLegs:0,played:0});
+}
+function clubDuelMatches(settings){
+  let number=0,singleNumber=0,doubleNumber=0;const matches=[];
+  const add=(section,type,count)=>{for(let i=1;i<=count;i++){const label=type==='double'?`Offenes Doppel ${++doubleNumber}`:`Offenes Einzel ${++singleNumber}`;matches.push({id:clubDuelId(),number:++number,section,type,label,homePlayers:[],guestPlayers:[],homeLegs:null,guestLegs:null})}};
+  add(1,'single',settings.firstSingles);add(2,'double',settings.doubles);add(3,'single',settings.lastSingles);return matches;
+}
+function clubDuelPlayerOptions(players,selected=''){return `<option value="">Spieler wählen …</option>${players.map(name=>`<option value="${esc(name)}" ${name===selected?'selected':''}>${esc(name)}</option>`).join('')}`}
+function clubDuelPlayerSelectors(duel,match,side){
+  const players=side==='home'?duel.homePlayers:duel.guestPlayers,chosen=side==='home'?match.homePlayers:match.guestPlayers,slots=match.type==='double'?2:1;
+  return `<div class="club-duel-player-selects">${Array.from({length:slots},(_,index)=>`<select data-duel-player="${side}" data-slot="${index}" aria-label="${side==='home'?'Heim':'Gast'} Spieler ${index+1}" ${isAdmin()?'':'disabled'}>${clubDuelPlayerOptions(players,chosen?.[index]||'')}</select>`).join('')}</div>`;
+}
+function clubDuelScoreOptions(legs,value){return `<option value="">–</option>${Array.from({length:legs+1},(_,i)=>`<option value="${i}" ${value===i?'selected':''}>${i}</option>`).join('')}`}
+function clubDuelMatchCard(duel,match,index){
+  const done=match.homeLegs!==null&&match.guestLegs!==null,canEdit=isAdmin()&&duel.status!=='completed';
+  return `<article class="club-duel-match ${done?'is-done':''}" data-duel-match="${index}"><header><span>${esc(match.label)}</span><small>Abschnitt ${match.section} · ${duel.startScore} ${duel.outMode==='double'?'Double Out':'Single Out'} · Best of ${duel.legsToWin*2-1}</small></header><div class="club-duel-match-teams"><section><b>${esc(duel.homeClub)}</b>${clubDuelPlayerSelectors(duel,match,'home')}</section><strong>VS</strong><section><b>${esc(duel.guestClub)}</b>${clubDuelPlayerSelectors(duel,match,'guest')}</section></div><div class="club-duel-score-controls"><select data-duel-score="home" ${canEdit?'':'disabled'}>${clubDuelScoreOptions(duel.legsToWin,match.homeLegs)}</select><b>:</b><select data-duel-score="guest" ${canEdit?'':'disabled'}>${clubDuelScoreOptions(duel.legsToWin,match.guestLegs)}</select>${canEdit?`<button class="primary" type="button" data-duel-save-score="${index}">${done?'ÄNDERN':'SPEICHERN'}</button>`:''}</div></article>`;
+}
+function renderClubDuelSetup(){
+  const box=$('#clubDuelSetup');if(!box)return;box.classList.toggle('hidden',!clubDuelSetupOpen||!isAdmin());if(!clubDuelSetupOpen||!isAdmin()){box.innerHTML='';return}
+  const members=(T20Cloud.publicMembers||[]).map(item=>item.nickname).filter(Boolean).sort((a,b)=>a.localeCompare(b,'de'));
+  box.innerHTML=`<form id="clubDuelSetupForm"><div class="club-duel-form-head"><div><span class="eyebrow">NEUES VEREINSDUELL</span><h2>Begegnung einrichten</h2><p>Die TDSV-Vorlage ist fix. Beim Freundschaftsspiel kannst du das Format anpassen.</p></div><button class="secondary" type="button" data-duel-cancel>Abbrechen</button></div><div class="grid club-duel-main-fields"><label>Regelvorlage<select id="clubDuelMode"><option value="tdsv">TDSV-Steeldart</option><option value="friendly">Freundschaftsspiel</option></select></label><label>Datum<input id="clubDuelDate" type="date" value="${todayIso()}" required></label><label>Heimverein<input id="clubDuelHomeClub" value="${esc(appSettings.club.name||'Dartclub Achensee')}" maxlength="60" required></label><label>Gastverein<input id="clubDuelGuestClub" maxlength="60" placeholder="Name des Gastvereins" required></label><label>Spielort<input id="clubDuelVenue" maxlength="80" placeholder="z. B. Dartlokal Buchau"></label><label>Bezeichnung<input id="clubDuelName" maxlength="80" placeholder="optional"></label></div><div id="clubDuelFormatFields" class="club-duel-format-fields"><label>Start<select id="clubDuelStartScore"><option value="501">501</option><option value="301">301</option></select></label><label>Finish<select id="clubDuelOutMode"><option value="double">Double Out</option><option value="single">Single Out</option></select></label><label>Legs zum Sieg<select id="clubDuelLegs"><option value="2">2 · Best of 3</option><option value="3" selected>3 · Best of 5</option><option value="4">4 · Best of 7</option><option value="5">5 · Best of 9</option></select></label><label>Einzel Abschnitt 1<input id="clubDuelFirstSingles" type="number" min="0" max="20" value="4"></label><label>Doppel<input id="clubDuelDoubles" type="number" min="0" max="20" value="2"></label><label>Einzel Abschnitt 3<input id="clubDuelLastSingles" type="number" min="0" max="20" value="4"></label></div><div class="club-duel-rosters"><label><span>Spieler ${esc(appSettings.club.name||'Heimverein')}</span><textarea id="clubDuelHomePlayers" rows="7" placeholder="Ein Name pro Zeile" required></textarea><small>Gespeicherte Mitglieder können übernommen oder Namen frei eingetragen werden.</small><div class="club-duel-member-chips">${members.map(name=>`<button type="button" data-duel-member="${esc(name)}">+ ${esc(name)}</button>`).join('')}</div></label><label><span>Spieler Gastverein</span><textarea id="clubDuelGuestPlayers" rows="7" placeholder="Ein Name pro Zeile" required></textarea><small>Mindestens 4, höchstens 6 Spieler bei TDSV.</small></label></div><div id="clubDuelSetupHint" class="club-duel-rule-hint"></div><button class="primary" type="submit">VEREINSDUELL ANLEGEN <span>→</span></button></form>`;
+  updateClubDuelModeFields();
+}
+function updateClubDuelModeFields(){
+  const tdsv=$('#clubDuelMode')?.value!=='friendly',format=$('#clubDuelFormatFields');if(!format)return;
+  const values={clubDuelStartScore:'501',clubDuelOutMode:'double',clubDuelLegs:'3',clubDuelFirstSingles:'4',clubDuelDoubles:'2',clubDuelLastSingles:'4'};
+  for(const [id,value] of Object.entries(values)){const field=$('#'+id);if(tdsv)field.value=value;field.disabled=tdsv}
+  $('#clubDuelSetupHint').innerHTML=tdsv?'<b>TDSV-Vorlage:</b> 4 offene Einzel, 2 offene Doppel und 4 offene Einzel · 501 Double Out · Best of 5 Legs · 4 bis 6 Spieler je Mannschaft. Das offizielle TDSV-Protokoll bleibt für Ligaspiele verbindlich.':'<b>Freundschaftsspiel:</b> Spielzahl und Legmodus können frei vereinbart werden.';
+}
+function createClubDuel(form){
+  if(!isAdmin())return;const mode=$('#clubDuelMode').value,homePlayers=parseClubRoster($('#clubDuelHomePlayers').value),guestPlayers=parseClubRoster($('#clubDuelGuestPlayers').value);
+  if(mode==='tdsv'&&(homePlayers.length<4||homePlayers.length>6||guestPlayers.length<4||guestPlayers.length>6)){alert('Für die TDSV-Vorlage benötigt jede Mannschaft mindestens 4 und höchstens 6 Spieler.');return}
+  if(!homePlayers.length||!guestPlayers.length){alert('Bitte für beide Vereine Spieler eintragen.');return}
+  const settings=mode==='tdsv'?{startScore:501,outMode:'double',legsToWin:3,firstSingles:4,doubles:2,lastSingles:4}:{startScore:+$('#clubDuelStartScore').value,outMode:$('#clubDuelOutMode').value,legsToWin:+$('#clubDuelLegs').value,firstSingles:+$('#clubDuelFirstSingles').value,doubles:+$('#clubDuelDoubles').value,lastSingles:+$('#clubDuelLastSingles').value};
+  if(settings.firstSingles+settings.doubles+settings.lastSingles<1){alert('Das Vereinsduell benötigt mindestens eine Begegnung.');return}
+  const duel={id:clubDuelId(),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),status:'live',mode,date:$('#clubDuelDate').value,venue:$('#clubDuelVenue').value.trim(),name:$('#clubDuelName').value.trim(),homeClub:$('#clubDuelHomeClub').value.trim(),guestClub:$('#clubDuelGuestClub').value.trim(),homePlayers,guestPlayers,...settings};duel.matches=clubDuelMatches(settings);
+  const store=loadClubDuels();store.duels.push(duel);saveClubDuels(store);selectedClubDuelId=duel.id;clubDuelSetupOpen=false;renderClubDuels();
+}
+function saveClubDuelMatch(index){
+  if(!isAdmin())return;const store=loadClubDuels(),duel=store.duels.find(item=>item.id===selectedClubDuelId),card=$(`[data-duel-match="${index}"]`),match=duel?.matches?.[index];if(!duel||!match||!card)return;
+  const readPlayers=side=>[...card.querySelectorAll(`[data-duel-player="${side}"]`)].map(select=>select.value).filter(Boolean),homePlayers=readPlayers('home'),guestPlayers=readPlayers('guest'),required=match.type==='double'?2:1;
+  if(homePlayers.length!==required||guestPlayers.length!==required||new Set(homePlayers).size!==required||new Set(guestPlayers).size!==required){alert(`Bitte für beide Vereine ${required===2?'zwei unterschiedliche Spieler':'einen Spieler'} auswählen.`);return}
+  const home=card.querySelector('[data-duel-score="home"]').value,guest=card.querySelector('[data-duel-score="guest"]').value;
+  if(home===''||guest===''||home===guest||Math.max(+home,+guest)!==duel.legsToWin){alert(`Bitte ein eindeutiges Ergebnis eintragen. Der Sieger benötigt ${duel.legsToWin} Legs.`);return}
+  match.homePlayers=homePlayers;match.guestPlayers=guestPlayers;match.homeLegs=+home;match.guestLegs=+guest;match.updatedAt=new Date().toISOString();duel.updatedAt=match.updatedAt;saveClubDuels(store);renderClubDuels();
+}
+function finishClubDuel(){
+  if(!isAdmin())return;const store=loadClubDuels(),duel=store.duels.find(item=>item.id===selectedClubDuelId);if(!duel)return;const open=duel.matches.filter(match=>match.homeLegs===null||match.guestLegs===null).length;if(open){alert(`Noch ${open} Begegnung${open===1?' ist':'en sind'} offen.`);return}const score=clubDuelScore(duel);if(!confirm(`Vereinsduell mit ${score.home}:${score.guest} abschließen und speichern?`))return;duel.status='completed';duel.completedAt=new Date().toISOString();duel.updatedAt=duel.completedAt;saveClubDuels(store);selectedClubDuelId='';renderClubDuels();
+}
+function reopenClubDuel(id){if(!isAdmin())return;const store=loadClubDuels(),duel=store.duels.find(item=>item.id===id);if(!duel)return;duel.status='live';delete duel.completedAt;duel.updatedAt=new Date().toISOString();saveClubDuels(store);selectedClubDuelId=id;renderClubDuels()}
+function deleteClubDuel(id){if(!isAdmin())return;const store=loadClubDuels(),duel=store.duels.find(item=>item.id===id);if(!duel||!confirm(`Vereinsduell „${duel.homeClub} gegen ${duel.guestClub}“ wirklich löschen?`))return;store.duels=store.duels.filter(item=>item.id!==id);if(selectedClubDuelId===id)selectedClubDuelId='';saveClubDuels(store);renderClubDuels()}
+function renderClubDuelLive(duel){
+  const box=$('#clubDuelLive');if(!box)return;box.classList.toggle('hidden',!duel);if(!duel){box.innerHTML='';return}const score=clubDuelScore(duel),open=duel.matches.length-score.played;
+  box.innerHTML=`<section class="club-duel-live-head"><div><span class="eyebrow">${esc(clubDuelModeLabel(duel.mode))}</span><h1>${esc(duel.homeClub)} <small>gegen</small> ${esc(duel.guestClub)}</h1><p>${clubDuelDate(duel.date)}${duel.venue?` · ${esc(duel.venue)}`:''} · ${score.played}/${duel.matches.length} Begegnungen</p></div><div class="club-duel-total"><span><small>${esc(duel.homeClub)}</small><b>${score.home}</b></span><i>:</i><span><small>${esc(duel.guestClub)}</small><b>${score.guest}</b></span><em>Legs ${score.homeLegs}:${score.guestLegs}</em></div></section>${duel.mode==='tdsv'?'<p class="club-duel-official-note">TDSV-Vorlage zur Durchführung und Speicherung. Bei offiziellen Ligaspielen bleibt das TDSV-Spielprotokoll maßgeblich.</p>':''}<div class="club-duel-match-list">${[1,2,3].map(section=>{const matches=duel.matches.map((match,index)=>({match,index})).filter(item=>item.match.section===section);if(!matches.length)return'';return `<section class="club-duel-section"><h2>Abschnitt ${section}<small>${section===2?'Doppel':'Einzel'}</small></h2>${matches.map(item=>clubDuelMatchCard(duel,item.match,item.index)).join('')}</section>`}).join('')}</div><div class="club-duel-live-actions"><button class="secondary" type="button" data-duel-back>Zur Übersicht</button><button class="secondary" type="button" data-duel-tv="${esc(duel.id)}">TV-Ansicht öffnen</button>${isAdmin()?`<button class="primary" type="button" data-duel-finish ${open?'disabled':''}>DUELL ABSCHLIESSEN <span>✓</span></button>`:''}</div>`;
+}
+function clubDuelHistoryCard(duel){const score=clubDuelScore(duel),winner=score.home===score.guest?'Unentschieden':score.home>score.guest?duel.homeClub:duel.guestClub;return `<details class="club-duel-history-card"><summary><time>${clubDuelDate(duel.date)}</time><span><b>${esc(duel.homeClub)} <i>${score.home}:${score.guest}</i> ${esc(duel.guestClub)}</b><small>${esc(clubDuelModeLabel(duel.mode))}${duel.venue?` · ${esc(duel.venue)}`:''}</small></span><strong>${esc(winner)}</strong></summary><div class="club-duel-history-detail"><p>Legs gesamt: <b>${score.homeLegs}:${score.guestLegs}</b></p>${duel.matches.map(match=>`<div><small>${esc(match.label)}</small><span>${esc(match.homePlayers.join(' / '))}</span><b>${match.homeLegs}:${match.guestLegs}</b><span>${esc(match.guestPlayers.join(' / '))}</span></div>`).join('')}${isAdmin()?`<footer><button class="secondary" type="button" data-duel-reopen="${esc(duel.id)}">Ergebnisse bearbeiten</button><button class="danger" type="button" data-duel-delete="${esc(duel.id)}">Löschen</button></footer>`:''}</div></details>`}
+function renderClubDuels(){
+  const store=loadClubDuels(),live=store.duels.filter(item=>item.status!=='completed').sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||'')),history=store.duels.filter(item=>item.status==='completed').sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  if(selectedClubDuelId&&!store.duels.some(item=>item.id===selectedClubDuelId))selectedClubDuelId='';const selected=store.duels.find(item=>item.id===selectedClubDuelId)||null;
+  $('#newClubDuelBtn')?.classList.toggle('hidden',!isAdmin()||clubDuelSetupOpen);
+  const status=$('#clubDuelStatus');if(status)status.innerHTML=selected?'':live.length?`<div class="club-duel-live-list"><div><span class="eyebrow">LAUFEND</span><h2>${live.length===1?'Ein Vereinsduell ist':'Mehrere Vereinsduelle sind'} noch offen</h2></div>${live.map(duel=>{const score=clubDuelScore(duel);return `<button type="button" data-duel-open="${esc(duel.id)}"><span>${esc(duel.homeClub)} <b>${score.home}:${score.guest}</b> ${esc(duel.guestClub)}</span><small>${score.played}/${duel.matches.length} Begegnungen · öffnen →</small></button>`}).join('')}</div>`:'<div class="club-duel-empty"><span>🤝</span><div><h2>Noch kein laufendes Vereinsduell</h2><p>Neue Begegnungen werden unabhängig von Saison und Vereinsturnieren gespeichert.</p></div></div>';
+  renderClubDuelSetup();renderClubDuelLive(selected);const archive=$('#clubDuelHistory');if(archive)archive.innerHTML=history.length?history.map(clubDuelHistoryCard).join(''):'<p class="view-note">Noch keine abgeschlossenen Vereinsduelle gespeichert.</p>';
+}
+function showClubDuels(updateUrl=true){hideMainSections();$('#clubDuelsSection')?.classList.remove('hidden');renderClubDuels();renderNavigation();if(updateUrl)updateAppUrl('vereinsduelle')}
+function clubDuelTvUrl(id){const url=new URL(TRIPLE20_PUBLIC_URL);url.searchParams.set('bereich','vereinsduell-tv');url.searchParams.set('duell',id);return url.href}
+function showClubDuelTv(id='',updateUrl=true){selectedClubDuelId=id||selectedClubDuelId;hideMainSections();document.body.classList.add('club-duel-tv-mode');$('#clubDuelTvSection')?.classList.remove('hidden');renderClubDuelTv();if(updateUrl)updateAppUrl('vereinsduell-tv',{duell:selectedClubDuelId})}
+function renderClubDuelTv(){
+  const duel=loadClubDuels().duels.find(item=>item.id===selectedClubDuelId),content=$('#clubDuelTvContent');if(!content)return;if(!duel){$('#clubDuelTvTitle').textContent='Vereinsduell nicht gefunden';$('#clubDuelTvMeta').textContent='Bitte den Link in Triple20 erneut öffnen.';content.innerHTML='';return}
+  const score=clubDuelScore(duel),open=(duel.matches||[]).filter(match=>match.homeLegs===null||match.guestLegs===null).slice(0,6),last=[...(duel.matches||[])].filter(match=>match.homeLegs!==null&&match.guestLegs!==null).slice(-3).reverse();$('#clubDuelTvTitle').textContent=`${duel.homeClub} gegen ${duel.guestClub}`;$('#clubDuelTvMeta').textContent=`${clubDuelModeLabel(duel.mode)} · ${score.played}/${duel.matches.length} Begegnungen · ${new Date().toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'})} Uhr`;
+  const pairing=match=>`<article><small>${esc(match.label)}</small><div><b>${esc(match.homePlayers?.join(' / ')||'Noch aufstellen')}</b><strong>${match.homeLegs===null?'–':match.homeLegs}:${match.guestLegs===null?'–':match.guestLegs}</strong><b>${esc(match.guestPlayers?.join(' / ')||'Noch aufstellen')}</b></div></article>`;
+  content.innerHTML=`<section class="club-duel-tv-score"><div><small>${esc(duel.homeClub)}</small><b>${score.home}</b></div><i>:</i><div><small>${esc(duel.guestClub)}</small><b>${score.guest}</b></div><span>Legs ${score.homeLegs}:${score.guestLegs}</span></section><div class="club-duel-tv-columns"><section><h2>Nächste Begegnungen</h2>${open.length?open.map(pairing).join(''):'<p>Alle Begegnungen gespielt.</p>'}</section><section><h2>Letzte Ergebnisse</h2>${last.length?last.map(pairing).join(''):'<p>Noch kein Ergebnis eingetragen.</p>'}</section></div>`;
+}
+
 function updateAppUrl(area,extras={},replace=false){
   if(applyingRoute)return;
   const url=new URL(location.href);url.searchParams.set('bereich',area);
-  ['produkt','kategorie','bewerb','spieler'].forEach(key=>{const value=extras[key];if(value)url.searchParams.set(key,value);else url.searchParams.delete(key)});
+  ['produkt','kategorie','bewerb','spieler','duell'].forEach(key=>{const value=extras[key];if(value)url.searchParams.set(key,value);else url.searchParams.delete(key)});
   const next=url.pathname+(url.searchParams.size?`?${url.searchParams}`:'')+url.hash;
   history[replace?'replaceState':'pushState']({},document.title,next);
 }
 async function applyAppRoute(){
-  const params=new URLSearchParams(location.search),area=params.get('bereich')||'start',product=params.get('produkt')||'',category=params.get('kategorie')||'',competition=params.get('bewerb')||'men',player=params.get('spieler')||'';
+  const params=new URLSearchParams(location.search),area=params.get('bereich')||'start',product=params.get('produkt')||'',category=params.get('kategorie')||'',competition=params.get('bewerb')||'men',player=params.get('spieler')||'',duel=params.get('duell')||'';
   applyingRoute=true;
   try{
     if(area==='tv'){showTv(false);return}
+    if(area==='vereinsduell-tv'){showClubDuelTv(duel,false);return}
     if(area==='statistikstation'){showStatsStation(false);return}
     if(area==='empfehlungen'||product){await showShop({productId:product,category,updateUrl:false});return}
     if(area==='spieler'&&player){showPlayerProfile(player,false);return}
+    if(area==='vereinsduelle'){showClubDuels(false);return}
     if(area==='saison'){showSeason(false);return}
     if(area==='konto'){showLogin(false);return}
     if(area==='einstellungen'){showSettings(false);return}
@@ -1794,7 +1884,7 @@ async function applyAppRoute(){
     showHome(false);
   }finally{applyingRoute=false}
 }
-function hideMainSections(){stopTvRefresh();document.body.classList.remove('tv-mode');['tvSection','publicHomeSection','playerProfileSection','dashboardSection','authSection','settingsSection','seasonSection','shopSection','statsStationSection','tournamentSubnav','competitionNav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
+function hideMainSections(){stopTvRefresh();document.body.classList.remove('tv-mode','club-duel-tv-mode');['tvSection','clubDuelTvSection','publicHomeSection','playerProfileSection','dashboardSection','authSection','settingsSection','seasonSection','clubDuelsSection','shopSection','statsStationSection','tournamentSubnav','competitionNav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
 function renderNavigation(){
   const admin=isAdmin(),member=isMember(),guest=!admin&&!member;
   $('.club-settings-block')?.classList.remove('hidden');
@@ -2037,6 +2127,22 @@ $('#cloudAdminPanel').addEventListener('change',event=>{
 $('#cloudAdminPanel').addEventListener('change',e=>{if(e.target.id==='backupImportInput')handleBackupImport(e.target.files?.[0]);if(e.target.id==='profileAvatarInput'&&e.target.files?.[0])openAvatarCrop(e.target.files[0]).catch(error=>{T20Cloud.authError=`Bild konnte nicht geöffnet werden: ${error?.message||'Unbekannter Fehler'}`;renderCloudPanel()})});
 document.addEventListener('click',e=>{if(e.target.id==='cancelAvatarCropBtn'||e.target.id==='avatarCropOverlay')closeAvatarCrop();if(e.target.id==='saveAvatarCropBtn')saveAvatarCrop()});
 $('#showTournamentBtn').addEventListener('click',()=>showTournament());
+$('#showClubDuelsBtn')?.addEventListener('click',()=>showClubDuels());
+$('#newClubDuelBtn')?.addEventListener('click',()=>{if(!assertAdminAction())return;selectedClubDuelId='';clubDuelSetupOpen=true;renderClubDuels()});
+$('#clubDuelsSection')?.addEventListener('change',event=>{if(event.target.id==='clubDuelMode')updateClubDuelModeFields()});
+$('#clubDuelsSection')?.addEventListener('submit',event=>{if(event.target.id!=='clubDuelSetupForm')return;event.preventDefault();createClubDuel(event.target)});
+$('#clubDuelsSection')?.addEventListener('click',event=>{
+  if(event.target.closest('[data-duel-cancel]')){clubDuelSetupOpen=false;renderClubDuels();return}
+  const member=event.target.closest('[data-duel-member]');if(member){const field=$('#clubDuelHomePlayers'),players=parseClubRoster(field?.value);if(!players.some(name=>name.toLowerCase()===member.dataset.duelMember.toLowerCase()))players.push(member.dataset.duelMember);if(field)field.value=players.join('\n');return}
+  const open=event.target.closest('[data-duel-open]');if(open){selectedClubDuelId=open.dataset.duelOpen;clubDuelSetupOpen=false;renderClubDuels();return}
+  const saveScore=event.target.closest('[data-duel-save-score]');if(saveScore){saveClubDuelMatch(+saveScore.dataset.duelSaveScore);return}
+  const tv=event.target.closest('[data-duel-tv]');if(tv){window.open(clubDuelTvUrl(tv.dataset.duelTv),'_blank','noopener');return}
+  if(event.target.closest('[data-duel-finish]')){finishClubDuel();return}
+  if(event.target.closest('[data-duel-back]')){selectedClubDuelId='';renderClubDuels();return}
+  const reopen=event.target.closest('[data-duel-reopen]');if(reopen){reopenClubDuel(reopen.dataset.duelReopen);return}
+  const remove=event.target.closest('[data-duel-delete]');if(remove)deleteClubDuel(remove.dataset.duelDelete);
+});
+$('#clubDuelTvFullscreenBtn')?.addEventListener('click',toggleTvFullscreen);
 $('#showHomeBtn')?.addEventListener('click',()=>showHome());
 $('#publicHomeSection')?.addEventListener('submit',event=>{if(event.target.id!=='publicScheduleForm')return;event.preventDefault();createPublicSchedule()});
 $('#publicHomeSection')?.addEventListener('click',event=>{const player=event.target.closest('[data-public-player]');if(player){showPlayerProfile(player.dataset.publicPlayer);return}const live=event.target.closest('[data-open-live]');if(live){showLive(live.dataset.openLive);return}if(event.target.closest('[data-event-login]')){showLogin();return}const registration=event.target.closest('[data-event-registration]');if(registration){changeTournamentRegistration(registration.dataset.eventRegistration,registration.dataset.registrationAction);return}const calendar=event.target.closest('[data-public-calendar]');if(calendar){addPublicEventToCalendar(calendar.dataset.publicCalendar);return}const whatsapp=event.target.closest('[data-public-whatsapp]');if(whatsapp){sharePublicEventOnWhatsApp(whatsapp.dataset.publicWhatsapp);return}const graphic=event.target.closest('[data-result-graphic]');if(graphic){openResultGraphic(graphic.dataset.resultGraphic);return}const remove=event.target.closest('[data-public-delete]');if(remove){deletePublicTournament(remove.dataset.publicDelete);return}if(event.target.closest('[data-public-past-toggle]')){publicPastExpanded=!publicPastExpanded;renderPublicHome({refreshRegistrations:false});return}const nav=event.target.closest('[data-public-nav]');if(nav?.dataset.publicNav==='turnier'){showTournament();return}if(nav?.dataset.publicNav==='saison'){showSeason();return}const seasonButton=event.target.closest('[data-season-open]');if(seasonButton){selectedSeasonId=seasonButton.dataset.seasonOpen;persistSelectedSeason();showSeason()}});

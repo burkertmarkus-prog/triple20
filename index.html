@@ -34,12 +34,12 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260918-40">
+  <link rel="stylesheet" href="styles.css?v=20260918-41">
 </head>
 <body>
   <header class="hero">
     <div class="brand"><button id="menuToggle" class="menu-toggle" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><div><strong>Triple<span>20</span></strong><small id="brandSubtitle">Turnierleitung</small></div></div>
-    <div class="main-actions"><button id="showHomeBtn" class="ghost">Start</button><button id="showTournamentBtn" class="ghost">Spiele</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="showShopBtn" class="ghost">Empfehlungen</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="showLoginBtn" class="ghost">Anmelden</button></div>
+    <div class="main-actions"><button id="showHomeBtn" class="ghost">Start</button><button id="showTournamentBtn" class="ghost">Spiele</button><button id="showClubDuelsBtn" class="ghost">Vereinsduelle</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="showShopBtn" class="ghost">Empfehlungen</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="showLoginBtn" class="ghost">Anmelden</button></div>
   </header>
   <div id="syncStatusBar" class="sync-status view-only"><span id="syncStatusText">Nur Ansicht</span><small id="syncLastSaved">Noch nicht synchronisiert</small></div>
 
@@ -206,6 +206,19 @@
       <div class="export-actions"><button id="exportSeasonJsonBtn" class="secondary">Saison als JSON exportieren</button><button id="exportStandingsCsvBtn" class="secondary">Rangliste als CSV exportieren</button></div>
     </section>
 
+    <section id="clubDuelsSection" class="club-duels-section hidden" aria-labelledby="clubDuelsTitle">
+      <div class="section-title club-duels-title"><div><span class="eyebrow">VEREIN GEGEN VEREIN</span><h2 id="clubDuelsTitle">Vereinsduelle</h2><p>TDSV-Steeldart oder frei vereinbartes Freundschaftsspiel</p></div><button id="newClubDuelBtn" class="primary hidden" type="button">NEUES DUELL <span>→</span></button></div>
+      <div id="clubDuelStatus" class="club-duel-status"></div>
+      <section id="clubDuelSetup" class="card slim-card hidden"></section>
+      <section id="clubDuelLive" class="hidden"></section>
+      <section class="club-duel-history-block"><div class="public-home-heading"><div><span>ARCHIV</span><h2>Gespeicherte Vereinsduelle</h2></div></div><div id="clubDuelHistory" class="club-duel-history"></div></section>
+    </section>
+
+    <section id="clubDuelTvSection" class="club-duel-tv hidden" aria-label="TV-Ansicht Vereinsduell">
+      <header><div><span>TRIPLE20 · VEREINSDUELL</span><h1 id="clubDuelTvTitle">Vereinsduell</h1><p id="clubDuelTvMeta"></p></div><button id="clubDuelTvFullscreenBtn" type="button">Vollbild</button></header>
+      <div id="clubDuelTvContent"></div>
+    </section>
+
     <section id="statsStationSection" class="stats-station hidden" aria-labelledby="statsStationTitle">
       <div class="stats-station-head">
         <div><span class="eyebrow">TESTBETRIEB</span><h1 id="statsStationTitle">Autodarts-Statistikstation</h1><p>Screenshot auswählen, erkannte Werte kontrollieren und direkt beim Spiel speichern.</p></div>
@@ -271,8 +284,8 @@
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <script src="double-ko.js?v=20260918-40"></script>
-  <script src="app.js?v=20260918-40"></script>
-  <script src="pwa.js?v=20260918-40"></script>
+  <script src="double-ko.js?v=20260918-41"></script>
+  <script src="app.js?v=20260918-41"></script>
+  <script src="pwa.js?v=20260918-41"></script>
 </body>
 </html>
