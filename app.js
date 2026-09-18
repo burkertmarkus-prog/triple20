@@ -1846,6 +1846,11 @@ function createClubDuel(form){
   const duel={id:clubDuelId(),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),status:'live',mode,date:$('#clubDuelDate').value,venue:$('#clubDuelVenue').value.trim(),name:$('#clubDuelName').value.trim(),homeClub:$('#clubDuelHomeClub').value.trim(),guestClub:$('#clubDuelGuestClub').value.trim(),homePlayers,guestPlayers,...settings};duel.matches=clubDuelMatches(settings);
   const store=loadClubDuels();store.duels.push(duel);saveClubDuels(store);selectedClubDuelId=duel.id;clubDuelSetupOpen=false;renderClubDuels();
 }
+function saveClubDuelLineup(index,card){
+  if(!isAdmin())return;const store=loadClubDuels(),duel=store.duels.find(item=>item.id===selectedClubDuelId&&!item.deletedAt),match=duel?.matches?.[index];if(!duel||!match||duel.status==='completed'||!card)return;
+  const readPlayers=side=>[...card.querySelectorAll(`[data-duel-player="${side}"]`)].map(select=>select.value).filter(Boolean),updatedAt=new Date().toISOString();
+  match.homePlayers=readPlayers('home');match.guestPlayers=readPlayers('guest');match.updatedAt=updatedAt;duel.updatedAt=updatedAt;saveClubDuels(store);
+}
 function saveClubDuelMatch(index){
   if(!isAdmin())return;const store=loadClubDuels(),duel=store.duels.find(item=>item.id===selectedClubDuelId),card=$(`[data-duel-match="${index}"]`),match=duel?.matches?.[index];if(!duel||!match||!card)return;
   const readPlayers=side=>[...card.querySelectorAll(`[data-duel-player="${side}"]`)].map(select=>select.value).filter(Boolean),homePlayers=readPlayers('home'),guestPlayers=readPlayers('guest'),required=match.type==='double'?2:1;
@@ -2151,7 +2156,7 @@ document.addEventListener('click',e=>{if(e.target.id==='cancelAvatarCropBtn'||e.
 $('#showTournamentBtn').addEventListener('click',()=>showTournament());
 $('#showClubDuelsBtn')?.addEventListener('click',()=>showClubDuels());
 $('#newClubDuelBtn')?.addEventListener('click',()=>{if(!assertAdminAction())return;selectedClubDuelId='';clubDuelSetupOpen=true;renderClubDuels()});
-$('#clubDuelsSection')?.addEventListener('change',event=>{if(event.target.id==='clubDuelMode')updateClubDuelModeFields()});
+$('#clubDuelsSection')?.addEventListener('change',event=>{if(event.target.id==='clubDuelMode'){updateClubDuelModeFields();return}const player=event.target.closest('[data-duel-player]'),card=player?.closest('[data-duel-match]');if(card)saveClubDuelLineup(+card.dataset.duelMatch,card)});
 $('#clubDuelsSection')?.addEventListener('submit',event=>{if(event.target.id!=='clubDuelSetupForm')return;event.preventDefault();createClubDuel(event.target)});
 $('#clubDuelsSection')?.addEventListener('click',event=>{
   if(event.target.closest('[data-duel-cancel]')){clubDuelSetupOpen=false;renderClubDuels();return}
