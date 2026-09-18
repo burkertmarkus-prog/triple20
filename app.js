@@ -1820,7 +1820,7 @@ function clubDuelPlayerSelectors(duel,match,side){
   return `<div class="club-duel-player-selects">${Array.from({length:slots},(_,index)=>`<select data-duel-player="${side}" data-slot="${index}" aria-label="${side==='home'?'Heim':'Gast'} Spieler ${index+1}" ${isAdmin()?'':'disabled'}>${clubDuelPlayerOptions(players,chosen?.[index]||'')}</select>`).join('')}</div>`;
 }
 function clubDuelScoreOptions(legs,value){return `<option value="">–</option>${Array.from({length:legs+1},(_,i)=>`<option value="${i}" ${value===i?'selected':''}>${i}</option>`).join('')}`}
-function clubDuelLegsToWin(duel,match){return match?.type==='double'?(+duel.doubleLegsToWin||+duel.legsToWin||2):(+duel.singleLegsToWin||+duel.legsToWin||3)}
+function clubDuelLegsToWin(duel,match){return match?.type==='double'?(+duel.doubleLegsToWin||+duel.legsToWin||3):(+duel.singleLegsToWin||+duel.legsToWin||3)}
 function clubDuelMatchCard(duel,match,index){
   const done=match.homeLegs!==null&&match.guestLegs!==null,canEdit=isAdmin()&&duel.status!=='completed',legsToWin=clubDuelLegsToWin(duel,match);
   return `<article class="club-duel-match ${done?'is-done':''}" data-duel-match="${index}"><header><span>${esc(match.label)}</span><small>Abschnitt ${match.section} · ${duel.startScore} ${duel.outMode==='double'?'Double Out':'Single Out'} · Best of ${legsToWin*2-1}</small></header><div class="club-duel-match-teams"><section><b>${esc(duel.homeClub)}</b>${clubDuelPlayerSelectors(duel,match,'home')}</section><strong>VS</strong><section><b>${esc(duel.guestClub)}</b>${clubDuelPlayerSelectors(duel,match,'guest')}</section></div><div class="club-duel-score-controls"><select data-duel-score="home" ${canEdit?'':'disabled'}>${clubDuelScoreOptions(legsToWin,match.homeLegs)}</select><b>:</b><select data-duel-score="guest" ${canEdit?'':'disabled'}>${clubDuelScoreOptions(legsToWin,match.guestLegs)}</select>${canEdit?`<button class="primary" type="button" data-duel-save-score="${index}">${done?'ÄNDERN':'SPEICHERN'}</button>`:''}</div></article>`;
@@ -1833,15 +1833,15 @@ function renderClubDuelSetup(){
 }
 function updateClubDuelModeFields(){
   const tdsv=$('#clubDuelMode')?.value!=='friendly',format=$('#clubDuelFormatFields');if(!format)return;
-  const values={clubDuelStartScore:'501',clubDuelOutMode:'double',clubDuelSingleLegs:'3',clubDuelDoubleLegs:'2',clubDuelFirstSingles:'4',clubDuelDoubles:'2',clubDuelLastSingles:'4'};
+  const values={clubDuelStartScore:'501',clubDuelOutMode:'double',clubDuelSingleLegs:'3',clubDuelDoubleLegs:'3',clubDuelFirstSingles:'4',clubDuelDoubles:'2',clubDuelLastSingles:'4'};
   for(const [id,value] of Object.entries(values)){const field=$('#'+id);if(tdsv)field.value=value;field.disabled=tdsv}
-  $('#clubDuelSetupHint').innerHTML=tdsv?'<b>TDSV-Vorlage:</b> 4 offene Einzel (Best of 5), 2 offene Doppel (Best of 3) und 4 offene Einzel (Best of 5) · 501 Double Out · 4 bis 6 Spieler je Mannschaft. Das offizielle TDSV-Protokoll bleibt für Ligaspiele verbindlich.':'<b>Freundschaftsspiel:</b> Spielzahl und Legmodus können frei vereinbart werden.';
+  $('#clubDuelSetupHint').innerHTML=tdsv?'<b>TDSV-Vorlage:</b> 4 offene Einzel, 2 offene Doppel und 4 offene Einzel · alle Best of 5 · 501 Double Out · 4 bis 6 Spieler je Mannschaft. Das offizielle TDSV-Protokoll bleibt für Ligaspiele verbindlich.':'<b>Freundschaftsspiel:</b> Spielzahl sowie Legmodus für Einzel und Doppel können getrennt vereinbart werden.';
 }
 function createClubDuel(form){
   if(!isAdmin())return;const mode=$('#clubDuelMode').value,homePlayers=parseClubRoster($('#clubDuelHomePlayers').value),guestPlayers=parseClubRoster($('#clubDuelGuestPlayers').value);
   if(mode==='tdsv'&&(homePlayers.length<4||homePlayers.length>6||guestPlayers.length<4||guestPlayers.length>6)){alert('Für die TDSV-Vorlage benötigt jede Mannschaft mindestens 4 und höchstens 6 Spieler.');return}
   if(!homePlayers.length||!guestPlayers.length){alert('Bitte für beide Vereine Spieler eintragen.');return}
-  const settings=mode==='tdsv'?{startScore:501,outMode:'double',singleLegsToWin:3,doubleLegsToWin:2,firstSingles:4,doubles:2,lastSingles:4}:{startScore:+$('#clubDuelStartScore').value,outMode:$('#clubDuelOutMode').value,singleLegsToWin:+$('#clubDuelSingleLegs').value,doubleLegsToWin:+$('#clubDuelDoubleLegs').value,firstSingles:+$('#clubDuelFirstSingles').value,doubles:+$('#clubDuelDoubles').value,lastSingles:+$('#clubDuelLastSingles').value};
+  const settings=mode==='tdsv'?{startScore:501,outMode:'double',singleLegsToWin:3,doubleLegsToWin:3,firstSingles:4,doubles:2,lastSingles:4}:{startScore:+$('#clubDuelStartScore').value,outMode:$('#clubDuelOutMode').value,singleLegsToWin:+$('#clubDuelSingleLegs').value,doubleLegsToWin:+$('#clubDuelDoubleLegs').value,firstSingles:+$('#clubDuelFirstSingles').value,doubles:+$('#clubDuelDoubles').value,lastSingles:+$('#clubDuelLastSingles').value};
   if(settings.firstSingles+settings.doubles+settings.lastSingles<1){alert('Das Vereinsduell benötigt mindestens eine Begegnung.');return}
   const duel={id:clubDuelId(),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),status:'live',mode,date:$('#clubDuelDate').value,venue:$('#clubDuelVenue').value.trim(),name:$('#clubDuelName').value.trim(),homeClub:$('#clubDuelHomeClub').value.trim(),guestClub:$('#clubDuelGuestClub').value.trim(),homePlayers,guestPlayers,...settings};duel.matches=clubDuelMatches(settings);
   const store=loadClubDuels();store.duels.push(duel);saveClubDuels(store);selectedClubDuelId=duel.id;clubDuelSetupOpen=false;renderClubDuels();
