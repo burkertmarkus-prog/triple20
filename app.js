@@ -58,7 +58,7 @@ let publicPastExpanded=false;
 let clubDuelSetupOpen=false;
 let selectedClubDuelId='';
 const expandedSeasonTournamentIds=new Set();
-const COMPETITION_KEYS=['players','playerProfileIds','started','liveSessionId','liveStartedAt','matches','settings','groups','withdrawn','endedEarly','savedToHistory','seasonImportedTo','seasonTournamentId','scheduledEventId','scheduledSeasonId','groupStage','scoreAudit','scoreUndoStack','seedingDraft'];
+const COMPETITION_KEYS=['players','playerProfileIds','started','liveSessionId','liveStartedAt','matches','settings','groups','withdrawn','endedEarly','savedToHistory','seasonImportedTo','seasonTournamentId','scheduledEventId','scheduledSeasonId','scheduledViaTournamentManagement','groupStage','scoreAudit','scoreUndoStack','seedingDraft'];
 function emptyCompetition(){return{players:[],playerProfileIds:{},started:false,matches:[],settings:{}}}
 function competitionSnapshot(source=state){const out={};for(const key of COMPETITION_KEYS)if(source[key]!==undefined)out[key]=structuredClone(source[key]);return{...emptyCompetition(),...out}}
 function ensureTournamentDayState(target=state){
@@ -306,7 +306,7 @@ const PushNotifications={
     // Nur ein über den offiziellen Admin-Check-in übernommener Termin besitzt
     // eine scheduledEventId. Frei gestartete Trainings- und Testturniere lösen
     // bewusst keine Nachricht an alle Mitglieder aus.
-    if(!isAdmin()||!state.scheduledEventId||appSettings.pushNotificationsEnabled===false)return false;
+    if(!isAdmin()||!state.scheduledEventId||state.scheduledViaTournamentManagement!==true||appSettings.pushNotificationsEnabled===false)return false;
     const eventKey=`${state.scheduledEventId}|${state.activeCompetition||'open'}`;
     const title=`Jetzt live: ${state.eventName||'Dartturnier'}`,body=`Der Bewerb ${competitionLabel()} wurde gestartet. Spielplan und Ergebnisse sind jetzt live verfügbar.`;
     try{await this.invoke({action:'live',eventKey,title,body,url:'/?bereich=live'});return true}
@@ -320,15 +320,6 @@ function renderAdminPush(){if(!isAdmin())return'';const p=PushNotifications,coun
 async function setGlobalPushEnabled(enabled){if(!isAdmin())return;appSettings=mergeSettings(appSettings,{pushNotificationsEnabled:!!enabled});saveSettings();PushNotifications.error='';PushNotifications.message=enabled?'Pushnachrichten sind wieder eingeschaltet.':'Pushnachrichten sind vollständig ausgeschaltet.';renderCloudPanel();await T20Cloud.syncAll({force:true,keys:[SETTINGS_KEY]});renderCloudPanel()}
 function upcomingAdminEvents(){
   const today=todayIso(),activeScheduleIds=new Set([state.scheduledEventId,...Object.values(state.competitions||{}).map(competition=>competition?.scheduledEventId)].filter(Boolean));return publicTournamentRecords().filter(item=>item.planned&&!activeScheduleIds.has(item.id)&&item.date>=today).sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.startTime||'').localeCompare(b.startTime||'')||(a.name||'').localeCompare(b.name||'','de'));
-}
-function linkPlannedEventBeforeStart(){
-  if(state.scheduledEventId)return true;
-  const competition=state.activeCompetition||'men',today=todayIso(),candidates=upcomingAdminEvents().filter(event=>event.date===today&&(event.competition===competition||event.competition==='open'));
-  if(!candidates.length)return true;
-  if(candidates.length>1){alert('Für heute gibt es mehrere passende geplante Turniere. Bitte öffne im Adminbereich „Turnierleitung“ und bereite dort den richtigen Termin vor. So bleiben Pushnachricht und Saisonzuordnung eindeutig.');return false}
-  const event=candidates[0],season=seasonStore.seasons.find(item=>String(item.id)===String(event.seasonId||''))||seasonForScheduledEvent(event.id);
-  state.scheduledEventId=event.id||'';state.scheduledSeasonId=season?.id||'';
-  return true;
 }
 function checkInData(event){
   const eventKey=registrationEventKey(event),registered=tournamentRegistrations.filter(row=>row.event_key===eventKey);
@@ -950,7 +941,7 @@ function makeMatches(){
   else addPairs(arr,shuffle(state.players),1,'upper');
   return arr;
 }
-$('#startBtn').addEventListener('click',async()=>{if(!linkPlannedEventBeforeStart())return;state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];state.scoreAudit=[];state.scoreUndoStack=[];delete state.endedEarly;delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;state.liveSessionId=crypto.randomUUID?.()||`${Date.now()}-${Math.random().toString(16).slice(2)}`;state.liveStartedAt=new Date().toISOString();const doubleMode=$('#mode').value==='double',draw=doubleMode?[...ensureSeedingDraw()]:[],seeds=doubleMode?[...activeSeededPlayers()]:[],seedingRankingMode=state.seedingDraft?.rankingMode==='total'?'total':'clean';state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value,doubleKoDrawOrder:draw,doubleKoSeededPlayers:seeds,doubleKoSeedingRankingMode:seedingRankingMode};state.matches=makeMatches();state.started=true;delete state.seedingDraft;save();renderTournament();const published=await publishLiveTournament({notifyOnError:true});if(published)await PushNotifications.sendLiveTournament()});
+$('#startBtn').addEventListener('click',async()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];state.scoreAudit=[];state.scoreUndoStack=[];delete state.endedEarly;delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;state.liveSessionId=crypto.randomUUID?.()||`${Date.now()}-${Math.random().toString(16).slice(2)}`;state.liveStartedAt=new Date().toISOString();const doubleMode=$('#mode').value==='double',draw=doubleMode?[...ensureSeedingDraw()]:[],seeds=doubleMode?[...activeSeededPlayers()]:[],seedingRankingMode=state.seedingDraft?.rankingMode==='total'?'total':'clean';state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value,doubleKoDrawOrder:draw,doubleKoSeededPlayers:seeds,doubleKoSeedingRankingMode:seedingRankingMode};state.matches=makeMatches();state.started=true;delete state.seedingDraft;save();renderTournament();const published=await publishLiveTournament({notifyOnError:true});if(published)await PushNotifications.sendLiveTournament()});
 
 function playerLosses(){const losses=Object.fromEntries(state.players.map(p=>[p,0]));state.matches.filter(m=>m.sa!==null&&m.b!=='Freilos').forEach(m=>{losses[m.sa>m.sb?m.b:m.a]++});return losses}
 function standingsFor(players,matches=state.matches){return players.map(name=>{const played=matches.filter(m=>m.sa!==null&&(m.a===name||m.b===name));let w=0,lf=0,la=0;played.forEach(m=>{const own=m.a===name?m.sa:m.sb,other=m.a===name?m.sb:m.sa;lf+=own;la+=other;if(own>other)w++});return{name,p:played.length,w,l:played.length-w,lf,la,pts:w*2}}).sort((a,b)=>b.pts-a.pts||(b.lf-b.la)-(a.lf-a.la)||b.lf-a.lf)}
@@ -1001,7 +992,7 @@ function renderWithdrawCard(){
   const visible=state.started&&state.settings.mode==='swiss'&&!champion()&&canEditCurrentTournament();
   card.classList.toggle('hidden',!visible);if(!visible)return;
   const active=activeSwissPlayers(),withdrawn=withdrawnPlayers();
-  const entered=new Set(state.players.map(p=>p.toLowerCase())),suggestions=seasonMembers(selectedSeason()).filter(p=>!entered.has(p.toLowerCase()));
+  const entered=new Set(state.players.map(p=>p.toLowerCase())),suggestions=seasonMembers(setupSeason()).filter(p=>!entered.has(p.toLowerCase()));
   card.innerHTML=`<div><h3>Ein-/Ausstieg im Schweizer System</h3><p>Nach einer abgeschlossenen Runde kannst du Spieler aus dem weiteren Turnier nehmen oder neue Spieler ab der nächsten ungespielten Runde hinzufügen. Danach wird diese Runde neu gepaart.</p>${withdrawn.length?`<div class="withdrawn-list">Ausgestiegen: ${withdrawn.map(p=>`<span>${esc(p)}</span>`).join('')}</div>`:''}</div><div class="swiss-change-actions"><div class="withdraw-actions"><select id="withdrawPlayerSelect" aria-label="Spieler zum Aussteigen auswählen">${active.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select><button id="withdrawPlayerBtn" class="danger" ${active.length<1?'disabled':''}>Spieler steigt aus</button></div><div class="late-join-fields"><select id="joinMemberSelect" aria-label="Gespeichertes Mitglied hinzufügen"><option value="">Mitglied auswählen …</option>${suggestions.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select><input id="joinPlayerName" placeholder="Oder neuen Spieler eingeben" autocomplete="off"></div><button id="joinPlayerBtn" class="secondary">Spieler steigt ein</button></div>`;
 }
 function canRebuildSwissRound(){
@@ -1029,7 +1020,7 @@ function joinSwissPlayer(name){
   const {round,roundStarted}=status,targetRound=roundStarted?round+1:round;
   if(targetRound>(state.settings.swissRounds||4)){alert('Es gibt keine weitere Schweizer Runde mehr, in die der Spieler einsteigen kann.');return}
   state.players.push(name);state.playerProfileIds=state.playerProfileIds||{};const profileId=memberIdForName(name);if(profileId)state.playerProfileIds[name]=profileId;state.players=sortBySeasonWins(state.players);
-  const season=selectedSeason();if(season&&!seasonMembers(season).some(p=>p.toLowerCase()===name.toLowerCase()))saveSeasonMembers(season,[...seasonMembers(season),name]);
+  const season=setupSeason();if(season&&!seasonMembers(season).some(p=>p.toLowerCase()===name.toLowerCase()))saveSeasonMembers(season,[...seasonMembers(season),name]);
   rebuildSwissRound(targetRound);
   save();renderTournament();
 }
@@ -1567,7 +1558,7 @@ function transferAdminCheckInToTournament(){
   if((targetState.started||targetState.players?.length||targetState.matches?.length)&&!confirm(`Der vorbereitete Bewerb „${competitionLabel(targetCompetition)}“ wird durch den Check-in ersetzt. Fortfahren?`))return;
   syncActiveCompetition();state.activeCompetition=targetCompetition;loadActiveCompetition();
   const scheduledSeason=seasonStore.seasons.find(season=>String(season.id)===String(event.seasonId||''))||seasonForScheduledEvent(event.id),eventName=event.eventName||event.name||'Dartturnier';
-  for(const key of COMPETITION_KEYS)delete state[key];Object.assign(state,emptyCompetition(),{players:players.map(item=>item.name),playerProfileIds:Object.fromEntries(players.filter(item=>item.id).map(item=>[item.name,item.id])),scheduledEventId:event.id||'',scheduledSeasonId:scheduledSeason?.id||'',settings:{eventName,competition:targetCompetition}});state.eventName=eventName;syncActiveCompetition();save();
+  for(const key of COMPETITION_KEYS)delete state[key];Object.assign(state,emptyCompetition(),{players:players.map(item=>item.name),playerProfileIds:Object.fromEntries(players.filter(item=>item.id).map(item=>[item.name,item.id])),scheduledEventId:event.id||'',scheduledSeasonId:scheduledSeason?.id||'',scheduledViaTournamentManagement:true,settings:{eventName,competition:targetCompetition}});state.eventName=eventName;syncActiveCompetition();save();
   $('#tournamentName').value=state.eventName;applyTournamentDefaults();renderPlayers();adminCheckInEventKey='';showTournament();document.querySelector('#setupSection')?.scrollIntoView({behavior:'smooth',block:'start'});
 }
 function publicEventRow(tournament,status){
