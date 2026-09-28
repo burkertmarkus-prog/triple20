@@ -169,6 +169,10 @@ main{padding-top:34px}
   .withdraw-actions{grid-template-columns:1fr}.withdraw-actions button{width:100%}
   .mode-card{padding:20px}.mode-card h2{font-size:28px}.mode-choice-grid button{min-height:120px}
 }
+.public-schedule-status{grid-column:1/-1;margin:0;padding:12px 14px;border-radius:12px;font-weight:800}
+.public-schedule-status.is-saving{background:#fff4cc;color:#6f5200}
+.public-schedule-status.is-success{background:#dff7e8;color:#126b37}
+.public-schedule-status.is-error{background:#ffe2e2;color:#a10f1b;border:2px solid #d52b3a}
 
 /* Empfehlungen verwalten */
 .shop-admin{margin:22px 0 26px;border:1px solid color-mix(in srgb,var(--blue) 28%,var(--line));background:color-mix(in srgb,var(--paper) 94%,var(--blue) 6%)}

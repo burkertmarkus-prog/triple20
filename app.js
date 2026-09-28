@@ -1502,9 +1502,14 @@ function addPublicEventToCalendar(key){
   const tournament=publicTournamentRecords().find(item=>item._publicKey===key),content=tournament&&publicEventCalendarText(tournament);if(!content){alert('Für diesen Termin fehlen Datum oder Startzeit.');return}
   const filename=`Triple20_${(tournament.name||'Spieltag').replace(/[^a-z0-9äöüß]+/gi,'_').replace(/^_|_$/g,'')}_${tournament.date}.ics`;downloadFile(filename,'text/calendar;charset=utf-8',content);
 }
-function sharePublicEventOnWhatsApp(key){
+async function scheduledTournamentExistsOnline(id){
+  if(!id||!T20Cloud.client)return false;const result=await withTimeout(T20Cloud.client.from('triple20_data').select('data,updated_at').eq('data_key',SEASON_KEY).maybeSingle(),12000,'Die Online-Kontrolle hat zu lange gedauert.');if(result.error)throw result.error;if(result.data?.updated_at)T20Cloud.cloudUpdated[SEASON_KEY]=result.data.updated_at;return !!result.data?.data?.seasons?.some(item=>(item.tournaments||[]).some(tournament=>String(tournament.id)===String(id)));
+}
+async function sharePublicEventOnWhatsApp(key){
   const tournament=publicTournamentRecords().find(item=>item._publicKey===key);if(!tournament)return;
+  if(tournament.planned){try{if(!await scheduledTournamentExistsOnline(tournament.id)){alert('Dieser Termin ist noch nicht sicher online gespeichert und kann deshalb noch nicht geteilt werden. Bitte die Internetverbindung prüfen und den Termin erneut veröffentlichen.');return}}catch(error){alert(`Der Termin konnte vor dem Teilen nicht online bestätigt werden: ${error?.message||'Bitte später erneut versuchen.'}`);return}}
   const title=tournament.name||tournament.eventName||'Triple20 Spieltag',date=publicDate(tournament.date),time=publicStartTime(tournament),details=[tournament.competitionLabel,tournament.seasonName].filter(Boolean).join(' · '),message=[`🎯 ${title}`,`📅 ${date}${time?` um ${time.replace(' Uhr','')}`:''}`,details?`🏆 ${details}`:'','',`Alle Informationen findest du in der Triple20-App:`,publicEventShareUrl()].filter(line=>line!==null&&line!==undefined).join('\n');
+  if(navigator.share){try{await navigator.share({title,text:message});return}catch(error){if(error?.name==='AbortError')return}}
   window.open(`https://wa.me/?text=${encodeURIComponent(message)}`,'_blank','noopener,noreferrer');
 }
 function resultGraphicPlayers(tournament={}){
@@ -1571,11 +1576,19 @@ function publicEventRow(tournament,status){
 }
 async function createPublicSchedule(){
   if(!isAdmin())return;
-  const season=seasonStore.seasons.find(item=>item.id===$('#publicScheduleSeason')?.value),date=$('#publicScheduleDate')?.value,startTime=$('#publicScheduleTime')?.value,name=$('#publicScheduleName')?.value.trim(),competition=$('#publicScheduleCompetition')?.value||'open';
+  const form=$('#publicScheduleForm'),submit=form?.querySelector('button[type="submit"]'),status=$('#publicScheduleStatus'),setStatus=(message,type='')=>{if(!status)return;status.textContent=message;status.className=`public-schedule-status ${type?`is-${type}`:''}`},season=seasonStore.seasons.find(item=>item.id===$('#publicScheduleSeason')?.value),date=$('#publicScheduleDate')?.value,startTime=$('#publicScheduleTime')?.value,name=$('#publicScheduleName')?.value.trim(),competition=$('#publicScheduleCompetition')?.value||'open';
   if(!season||!date||!startTime||!name){alert('Bitte Datum, Startzeit, Bezeichnung und Saison vollständig auswählen.');return}
   if(date<todayIso()&&!confirm('Das gewählte Datum liegt in der Vergangenheit. Termin trotzdem eintragen?'))return;
   const label=competition==='women'?'Damen':competition==='men'?'Herren':'Offen',record={id:`scheduled-${Date.now()}`,seasonId:season.id,name,date,startTime,competition,competitionLabel:label,planned:true,players:[],participantCount:0,matches:[],results:[],createdAt:new Date().toISOString()};
-  season.tournaments=season.tournaments||[];season.tournaments.push(record);season.tournaments.sort((a,b)=>(a.date||'').localeCompare(b.date||''));saveSeason(season);renderPublicHome();await T20Cloud.syncAll({force:true});if(T20Cloud.pendingSync){alert('Der Termin ist lokal gespeichert, konnte aber noch nicht veröffentlicht werden. Bitte prüfe die Internetverbindung und melde dich noch nicht ab.');return}$('#publicScheduleName').value='';alert('Der zukünftige Spieltermin wurde veröffentlicht und online gespeichert.');
+  season.tournaments=season.tournaments||[];season.tournaments.push(record);season.tournaments.sort((a,b)=>(a.date||'').localeCompare(b.date||''));saveSeason(season);renderPublicHome();if(submit)submit.disabled=true;setStatus('Termin wird online gespeichert und anschließend kontrolliert …','saving');
+  try{
+    await T20Cloud.syncAll({force:true,keys:[SEASON_KEY]});
+    const online=await scheduledTournamentExistsOnline(record.id);
+    if(!online)throw new Error('Der Termin wurde von Supabase nicht bestätigt.');
+    setStatus(`✓ Online bestätigt: ${name} am ${publicDate(date)}.`,'success');$('#publicScheduleName').value='';alert('Der zukünftige Spieltermin wurde online gespeichert und nochmals erfolgreich aus Supabase gelesen.');
+  }catch(error){
+    T20Cloud.pendingKeys.add(SEASON_KEY);T20Cloud.pendingSync=true;nativeSetItem('triple20_pending_sync','1');nativeSetItem('triple20_pending_keys',JSON.stringify([...T20Cloud.pendingKeys]));setSyncStatus('Termin nur lokal – Online-Speicherung fehlt','conflict');setStatus(`NICHT ONLINE GESPEICHERT: ${error?.message||'Supabase hat den Termin nicht bestätigt.'} Diese Seite geöffnet lassen und nicht abmelden.`,'error');alert('ACHTUNG: Der Termin ist nur auf diesem Gerät gespeichert und noch nicht online veröffentlicht. Bitte die Seite geöffnet lassen, Internetverbindung prüfen und nicht abmelden.');
+  }finally{if(submit)submit.disabled=false}
 }
 async function deletePublicTournament(key){
   if(!isAdmin()||!key)return;
