@@ -34,12 +34,12 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260823-19">
+  <link rel="stylesheet" href="styles.css?v=20261005-50">
 </head>
 <body>
   <header class="hero">
     <div class="brand"><button id="menuToggle" class="menu-toggle" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><div><strong>Triple<span>20</span></strong><small id="brandSubtitle">Turnierleitung</small></div></div>
-    <div class="main-actions"><button id="showHomeBtn" class="ghost">Start</button><button id="showTournamentBtn" class="ghost">Spiele</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="showShopBtn" class="ghost">Empfehlungen</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="showLoginBtn" class="ghost">Anmelden</button></div>
+    <div class="main-actions"><button id="showHomeBtn" class="ghost">Start</button><button id="showTournamentBtn" class="ghost">Spiele</button><button id="showClubDuelsBtn" class="ghost">Vereinsduelle</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="showLoginBtn" class="ghost">Anmelden</button></div>
   </header>
   <div id="syncStatusBar" class="sync-status view-only"><span id="syncStatusText">Nur Ansicht</span><small id="syncLastSaved">Noch nicht synchronisiert</small></div>
 
@@ -60,6 +60,7 @@
           <label>Bewerb<select id="publicScheduleCompetition"><option value="men">Herren</option><option value="women">Damen</option><option value="open">Offen</option></select></label>
           <label>Saison<select id="publicScheduleSeason" required></select></label>
           <button class="primary" type="submit">TERMIN VERÖFFENTLICHEN <span>→</span></button>
+          <p id="publicScheduleStatus" class="public-schedule-status hidden" role="status" aria-live="assertive"></p>
         </form>
       </section>
       <section class="public-home-block" aria-labelledby="publicLiveTitle">
@@ -78,6 +79,15 @@
         <div class="public-home-heading"><div><span>SAISONEN</span><h2 id="publicSeasonsTitle">Saisonranglisten</h2></div><button class="secondary" type="button" data-public-nav="saison">Alle Ranglisten öffnen</button></div>
         <div id="publicSeasonRankings" class="public-ranking-grid"></div>
       </section>
+    </section>
+
+    <section id="tvSection" class="tv-section hidden" aria-labelledby="tvTitle">
+      <header class="tv-header">
+        <div><p>TRIPLE20 · LIVE</p><h1 id="tvTitle">Turnierübersicht</h1><small id="tvUpdatedAt">Warte auf aktuelle Turnierdaten …</small></div>
+        <div class="tv-header-actions"><button id="tvRefreshBtn" type="button">Aktualisieren</button><button id="tvFullscreenBtn" type="button">Vollbild</button></div>
+      </header>
+      <div id="tvCompetitions" class="tv-competitions" aria-live="polite"></div>
+      <footer class="tv-footer"><span id="tvFooterMessage">Offene Paarungen der aktuellen Runde</span><strong>Good darts!</strong></footer>
     </section>
 
     <section id="playerProfileSection" class="public-player-profile hidden" aria-labelledby="playerProfileTitle">
@@ -197,6 +207,34 @@
       <div class="export-actions"><button id="exportSeasonJsonBtn" class="secondary">Saison als JSON exportieren</button><button id="exportStandingsCsvBtn" class="secondary">Rangliste als CSV exportieren</button></div>
     </section>
 
+    <section id="clubDuelsSection" class="club-duels-section hidden" aria-labelledby="clubDuelsTitle">
+      <div class="section-title club-duels-title"><div><span class="eyebrow">VEREIN GEGEN VEREIN</span><h2 id="clubDuelsTitle">Vereinsduelle</h2><p>TDSV-Steeldart oder frei vereinbartes Freundschaftsspiel</p></div><button id="newClubDuelBtn" class="primary hidden" type="button">NEUES DUELL <span>→</span></button></div>
+      <div id="clubDuelStatus" class="club-duel-status"></div>
+      <section id="clubDuelSetup" class="card slim-card hidden"></section>
+      <section id="clubDuelLive" class="hidden"></section>
+      <section class="club-duel-history-block"><div class="public-home-heading"><div><span>ARCHIV</span><h2>Gespeicherte Vereinsduelle</h2></div></div><div id="clubDuelHistory" class="club-duel-history"></div></section>
+    </section>
+
+    <section id="clubDuelTvSection" class="club-duel-tv hidden" aria-label="TV-Ansicht Vereinsduell">
+      <header><div><span>TRIPLE20 · VEREINSDUELL</span><h1 id="clubDuelTvTitle">Vereinsduell</h1><p id="clubDuelTvMeta"></p></div><button id="clubDuelTvFullscreenBtn" type="button">Vollbild</button></header>
+      <div id="clubDuelTvContent"></div>
+    </section>
+
+    <section id="statsStationSection" class="stats-station hidden" aria-labelledby="statsStationTitle">
+      <div class="stats-station-head">
+        <div><span class="eyebrow">TESTBETRIEB</span><h1 id="statsStationTitle">Autodarts-Statistikstation</h1><p>Screenshot auswählen, erkannte Werte kontrollieren und direkt beim Spiel speichern.</p></div>
+        <button id="closeStatsStationBtn" class="secondary" type="button">Zurück zur Startseite</button>
+      </div>
+      <section class="card stats-station-card">
+        <div id="statsStationAuthorization" class="stats-station-authorization"></div>
+        <label>Laufende Paarung<select id="statsStationMatch"></select></label>
+        <label class="stats-station-upload">Autodarts-Screenshot auswählen<input id="statsStationFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
+        <div id="statsStationStatus" class="view-note">Wähle zuerst ein laufendes Spiel und anschließend den Screenshot aus.</div>
+        <div id="statsStationStored" class="stats-station-stored hidden"></div>
+      </section>
+      <section id="statsStationPreview" class="stats-station-preview hidden"></section>
+    </section>
+
     <nav id="tournamentSubnav" class="tournament-subnav hidden" aria-label="Turnieransicht"></nav>
     <nav id="competitionNav" class="competition-nav" aria-label="Bewerb auswählen"></nav>
     <section id="memberLiveEmpty" class="card slim-card member-live-empty hidden"><h3>Derzeit läuft kein Vereinsturnier</h3><p>Sobald die Turnierleitung ein Turnier startet, kannst du hier den Spielplan und die Tabelle ansehen.</p></section>
@@ -211,14 +249,30 @@
       </div>
       <div id="groupOptions" class="group-options"><label>Anzahl Gruppen<select id="groupCount"><option selected>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label><label>Weiter pro Gruppe<select id="qualifiers"><option selected>1</option><option>2</option><option>3</option><option>4</option></select></label></div>
       <div id="swissOptions" class="group-options hidden"><label>Anzahl Runden<select id="swissRounds"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label><p class="option-help">Nach jeder abgeschlossenen Runde wird anhand der Tabelle neu gepaart. Gleiche Paarungen werden möglichst vermieden.</p></div>
+      <details id="seedingOptions" class="seeding-options hidden">
+        <summary><span><b>Setzliste</b><small>Gesetzte Spieler möglichst weit auseinander platzieren</small></span></summary>
+        <div class="seeding-body">
+          <div class="seeding-toolbar">
+            <label>Saisonrangliste<select id="seedingSeason"></select></label>
+            <label>Anzahl gesetzter Spieler<select id="seedingCount"><option value="0">Keine</option><option value="4">Top 4</option><option value="8" selected>Top 8</option><option value="16">Top 16</option><option value="32">Top 32</option><option value="all">Gesamte Rangliste setzen</option></select></label>
+            <label>Ranglistenwertung<select id="seedingRankingMode"><option value="clean" selected>Nach Streicher</option><option value="total">Alle Ergebnisse</option></select></label>
+            <button id="loadSeasonSeeds" class="secondary" type="button">Rangliste übernehmen</button>
+          </div>
+          <div class="seeding-manual"><label>Spieler manuell setzen<select id="manualSeedPlayer"></select></label><button id="addManualSeed" class="secondary" type="button">Zur Setzliste</button></div>
+          <div id="seededPlayerList" class="seeded-player-list"></div>
+          <div class="draw-preview-head"><div><b>Vorschau der ersten Runde</b><small>Die übrigen Plätze werden zufällig ausgelost.</small></div><button id="rerollSeeding" class="secondary" type="button">Ungesetzte neu losen</button></div>
+          <div id="seedingPreview" class="seeding-preview"></div>
+        </div>
+      </details>
       <div class="players-head"><div><h3>Spieler</h3><p id="playerCount">0 Spieler eingetragen</p></div></div>
-      <form id="playerForm" class="player-form"><input id="playerName" placeholder="Name des Spielers" maxlength="30" autocomplete="off" list="memberSuggestions"><datalist id="memberSuggestions"></datalist><button type="submit">+ Hinzufügen</button></form>
+      <form id="playerForm" class="player-form"><select id="memberSuggestions" aria-label="Gespeichertes Mitglied auswählen"><option value="">Mitglied auswählen …</option></select><input id="playerName" placeholder="Oder neuen Spieler eingeben" maxlength="30" autocomplete="off"><button type="submit">+ Hinzufügen</button></form>
       <div id="playerList" class="player-list"></div>
       <button id="startBtn" class="primary" disabled>TURNIER STARTEN <span>→</span></button>
     </section>
 
     <section id="tournamentSection" class="hidden">
-      <div class="tournament-head"><div><p class="eyebrow" id="liveCompetitionLabel">LIVE-TURNIER</p><h2 id="liveTitle"></h2><p id="liveMeta"></p><p id="liveViewerStatus" class="live-viewer-status"></p><div class="live-tournament-actions"><button id="showLiveQrBtn" class="secondary hidden" type="button">QR-Code anzeigen</button><button id="renameEventBtn" class="secondary hidden" type="button">Spieltag umbenennen</button><button id="undoLastScoreBtn" class="secondary hidden" type="button">Letztes Ergebnis rückgängig</button><button id="endTournamentBtn" class="danger hidden" type="button">Turnier beenden</button></div></div><div class="progress-ring"><strong id="progressText">0%</strong><span>gespielt</span></div></div>
+      <div class="tournament-head"><div><p class="eyebrow" id="liveCompetitionLabel">LIVE-TURNIER</p><h2 id="liveTitle"></h2><p id="liveMeta"></p><p id="liveViewerStatus" class="live-viewer-status"></p><div class="live-tournament-actions"><details id="tournamentActionsMenu" class="tournament-actions-menu hidden"><summary>Turnier-Aktionen</summary><div><button id="openTvViewBtn" class="secondary hidden" type="button">TV-Ansicht öffnen</button><button id="openStatsStationBtn" class="secondary hidden" type="button">Statistikstation testen</button><button id="showLiveQrBtn" class="secondary hidden" type="button">QR-Code anzeigen</button><button id="renameEventBtn" class="secondary hidden" type="button">Spieltag umbenennen</button><button id="undoLastScoreBtn" class="secondary hidden" type="button">Letztes Ergebnis rückgängig</button><button id="endTournamentBtn" class="danger hidden" type="button">Turnier beenden</button></div></details></div></div><div class="progress-ring"><strong id="progressText">0%</strong><span>gespielt</span></div></div>
+      <div id="tvDisplayControls" class="tv-display-controls hidden"><strong>TV-Ansicht steuern</strong><span>Anzeige auf dem verbundenen Fernseher</span><div><button type="button" data-tv-display="matches">Paarungen</button><button type="button" data-tv-display="standings">Top 10</button><button type="button" data-tv-display="bracket">Raster</button><button type="button" data-tv-display="finals">Finalphase</button><button type="button" data-tv-display="auto">Automatisch</button></div><small id="tvDisplayHelp">Die automatische Anzeige wechselt passend zum Turniermodus.</small></div>
       <div id="withdrawCard" class="withdraw-card hidden"></div>
       <div class="tabs"><button class="tab active" data-tab="matches">Spielplan</button><button id="bracketTab" class="tab hidden" data-tab="bracket">Turnierbaum</button><button class="tab" data-tab="table">Tabelle</button></div>
       <div id="matchesView"><div id="matchList" class="match-list"></div><section id="scoreHistoryCard" class="score-history-card hidden"></section></div>
@@ -231,7 +285,8 @@
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <script src="app.js?v=20260823-19"></script>
-  <script src="pwa.js?v=20260823-19"></script>
+  <script src="double-ko.js?v=20261005-50"></script>
+  <script src="app.js?v=20261005-50"></script>
+  <script src="pwa.js?v=20261005-50"></script>
 </body>
 </html>
