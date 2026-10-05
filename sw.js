@@ -1,7 +1,7 @@
-const CACHE_VERSION='triple20-shell-20261005-51';
-const DATA_CACHE='triple20-data-20261005-51';
+const CACHE_VERSION='triple20-shell-20260823-19';
+const DATA_CACHE='triple20-data-20260823-19';
 const APP_SHELL=[
-  './','./index.html','./styles.css','./double-ko.js','./app.js','./pwa.js','./manifest.webmanifest','./shop-products.json',
+  './','./index.html','./styles.css','./app.js','./pwa.js','./manifest.webmanifest','./shop-products.json',
   './icons/triple20-icon-192.png','./icons/triple20-icon-512.png','./icons/apple-touch-icon.png','./icons/triple20-icon.svg',
   './product-images/dartboard_aspar.jpg','./product-images/kameraautodarts.jpg','./product-images/led-stripe-autodarts.jpg',
   './product-images/red-dragon-nitrotech-shafts-v2.jpg','./product-images/red-dragon-razor-edge.jpg',
@@ -9,8 +9,7 @@ const APP_SHELL=[
 ];
 const OPTIONAL_EXTERNAL=[
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
-  'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js',
-  'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
+  'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js'
 ];
 
 self.addEventListener('install',event=>{
