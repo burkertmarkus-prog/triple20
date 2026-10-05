@@ -34,12 +34,12 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260928-49">
+  <link rel="stylesheet" href="styles.css?v=20261005-51">
 </head>
 <body>
   <header class="hero">
     <div class="brand"><button id="menuToggle" class="menu-toggle" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><div><strong>Triple<span>20</span></strong><small id="brandSubtitle">Turnierleitung</small></div></div>
-    <div class="main-actions"><button id="showHomeBtn" class="ghost">Start</button><button id="showTournamentBtn" class="ghost">Spiele</button><button id="showClubDuelsBtn" class="ghost">Vereinsduelle</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="showShopBtn" class="ghost">Empfehlungen</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="showLoginBtn" class="ghost">Anmelden</button></div>
+    <div class="main-actions"><button id="showHomeBtn" class="ghost">Start</button><button id="showTournamentBtn" class="ghost">Spiele</button><button id="showClubDuelsBtn" class="ghost">Vereinsduelle</button><button id="showSeasonBtn" class="ghost">Saison</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="showLoginBtn" class="ghost">Anmelden</button></div>
   </header>
   <div id="syncStatusBar" class="sync-status view-only"><span id="syncStatusText">Nur Ansicht</span><small id="syncLastSaved">Noch nicht synchronisiert</small></div>
 
@@ -140,6 +140,12 @@
     <section id="authSection" class="settings-section hidden">
       <div class="section-title"><div><h2>Konto</h2><p>Mitgliederprofil und Turnierleitung verwalten</p></div></div>
       <div id="cloudAdminPanel" class="cloud-panel card slim-card"></div>
+    </section>
+
+    <section id="dartVisionLabSection" class="dartvision-lab hidden" aria-labelledby="dartVisionLabTitle">
+      <div class="section-title dartvision-lab-title"><div><span class="eyebrow">NICHT ÖFFENTLICH · NUR LOKAL</span><h2 id="dartVisionLabTitle">DartVision-Labor</h2><p>Manuelles Zählsystem als sichere Grundlage für die spätere Kamera-Auswertung.</p></div><button id="closeDartVisionLabBtn" class="secondary" type="button">Zurück zum Konto</button></div>
+      <div class="dartvision-local-warning"><strong>Abgeschotteter Testbereich</strong><span>Diese Daten bleiben nur auf diesem Gerät. Sie werden weder zu Supabase hochgeladen noch in Turniere oder Saisonwertungen übernommen.</span></div>
+      <div id="dartVisionLabContent"></div>
     </section>
 
     <section id="settingsSection" class="settings-section hidden">
@@ -285,8 +291,8 @@
   <footer><span id="footerAppName">Triple20</span> · Lokal gespeichert · <span>Good darts!</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <script src="double-ko.js?v=20260928-49"></script>
-  <script src="app.js?v=20260928-49"></script>
-  <script src="pwa.js?v=20260928-49"></script>
+  <script src="double-ko.js?v=20261005-51"></script>
+  <script src="app.js?v=20261005-51"></script>
+  <script src="pwa.js?v=20261005-51"></script>
 </body>
 </html>

@@ -5,6 +5,7 @@ const CLUB_DUELS_KEY='triple20_club_duels';
 const MEMBER_TOURNAMENT_KEY='triple20_member_tournament';
 const LIVE_RECOVERY_KEY='triple20_live_recovery';
 const STATS_STATION_TOKEN_KEY='triple20_stats_station_token';
+const DARTVISION_LAB_KEY='triple20_dartvision_lab_local';
 const APP_ANALYTICS_DEVICE_KEY='triple20_analytics_device';
 const APP_ANALYTICS_LAST_KEY='triple20_analytics_last_visit';
 const SHOP_CONFIG_URL='shop-products.json';
@@ -347,7 +348,8 @@ function renderPersonalMemberOverview(){
 }
 function renderStaffMemberIdentity(){
   const c=T20Cloud,p=c.profile||{},roleLabel=c.role==='admin'?'Vereinsadministrator':'Turnierleitung',initial=esc((p.nickname||p.display_name||c.user?.email||'?').trim().charAt(0).toUpperCase()||'?'),avatar=c.avatarSignedUrl?`<img src="${esc(c.avatarSignedUrl)}" alt="Profilfoto">`:initial,nickname=p.nickname||'Spitzname noch nicht eingetragen';
-  return `<section class="staff-member-identity"><div class="profile-heading"><div><span class="profile-avatar">${avatar}</span><div><span class="eyebrow">MITGLIED &amp; ${esc(roleLabel.toUpperCase())}</span><h3>${esc(nickname)}</h3><p class="view-note">${esc(p.display_name||'Vor- und Zuname fehlen')} · ${esc(c.user?.email||'')}</p></div></div><button id="adminLogoutBtn" class="secondary" type="button">Abmelden</button></div>${renderPersonalMemberOverview()}<details id="staffProfileSettings" class="member-account-settings"><summary><span><b>Profil &amp; Benachrichtigungen</b><small>Push, Profilfoto und persönliche Angaben verwalten</small></span><i aria-hidden="true">⌄</i></summary><div class="member-account-settings-body">${renderMemberPush()}<section class="member-profile-settings"><div class="member-settings-heading"><span class="eyebrow">PROFIL</span><h3>Persönliche Angaben</h3></div><div class="avatar-actions"><label class="secondary avatar-upload">${c.avatarBusy?'Bild wird verarbeitet …':'Profilfoto auswählen'}<input id="profileAvatarInput" type="file" accept="image/*" ${c.avatarBusy?'disabled':''}></label>${p.avatar_url?`<button id="removeAvatarBtn" class="danger" type="button" ${c.avatarBusy?'disabled':''}>Foto entfernen</button>`:''}<small>Profilfoto, Spitzname und vollständigen Namen hier verwalten.</small></div><p id="loginError" class="login-error">${esc(c.authError||'')}</p><p class="login-success ${c.authMessage?'':'hidden'}">${esc(c.authMessage||'')}</p><form id="memberProfileForm" class="profile-form"><label>Spitzname<input id="profileNickname" maxlength="30" value="${esc(p.nickname||'')}" required></label><label>Vor- und Zuname<input id="profileDisplayName" maxlength="60" value="${esc(p.display_name||'')}" autocomplete="name" required></label><button class="primary" type="submit">${c.profileBusy?'Wird gespeichert …':'PROFIL SPEICHERN'}</button></form></section></div></details></section>`;
+  const lab=isFullAdmin()?'<button id="openDartVisionLabBtn" class="secondary dartvision-account-link" type="button">DartVision-Labor öffnen</button>':'';
+  return `<section class="staff-member-identity"><div class="profile-heading"><div><span class="profile-avatar">${avatar}</span><div><span class="eyebrow">MITGLIED &amp; ${esc(roleLabel.toUpperCase())}</span><h3>${esc(nickname)}</h3><p class="view-note">${esc(p.display_name||'Vor- und Zuname fehlen')} · ${esc(c.user?.email||'')}</p></div></div><button id="adminLogoutBtn" class="secondary" type="button">Abmelden</button></div>${renderPersonalMemberOverview()}${lab}<details id="staffProfileSettings" class="member-account-settings"><summary><span><b>Profil &amp; Benachrichtigungen</b><small>Push, Profilfoto und persönliche Angaben verwalten</small></span><i aria-hidden="true">⌄</i></summary><div class="member-account-settings-body">${renderMemberPush()}<section class="member-profile-settings"><div class="member-settings-heading"><span class="eyebrow">PROFIL</span><h3>Persönliche Angaben</h3></div><div class="avatar-actions"><label class="secondary avatar-upload">${c.avatarBusy?'Bild wird verarbeitet …':'Profilfoto auswählen'}<input id="profileAvatarInput" type="file" accept="image/*" ${c.avatarBusy?'disabled':''}></label>${p.avatar_url?`<button id="removeAvatarBtn" class="danger" type="button" ${c.avatarBusy?'disabled':''}>Foto entfernen</button>`:''}<small>Profilfoto, Spitzname und vollständigen Namen hier verwalten.</small></div><p id="loginError" class="login-error">${esc(c.authError||'')}</p><p class="login-success ${c.authMessage?'':'hidden'}">${esc(c.authMessage||'')}</p><form id="memberProfileForm" class="profile-form"><label>Spitzname<input id="profileNickname" maxlength="30" value="${esc(p.nickname||'')}" required></label><label>Vor- und Zuname<input id="profileDisplayName" maxlength="60" value="${esc(p.display_name||'')}" autocomplete="name" required></label><button class="primary" type="submit">${c.profileBusy?'Wird gespeichert …':'PROFIL SPEICHERN'}</button></form></section></div></details></section>`;
 }
 function renderCloudPanel(){
   const panel=$('#cloudAdminPanel');if(!panel||!window.T20Cloud)return;
@@ -1931,18 +1933,19 @@ async function applyAppRoute(){
     if(area==='tv'){showTv(false);return}
     if(area==='vereinsduell-tv'){showClubDuelTv(duel,false);return}
     if(area==='statistikstation'){showStatsStation(false);return}
-    if(area==='empfehlungen'||product){await showShop({productId:product,category,updateUrl:false});return}
+    if(area==='empfehlungen'||product){showHome(false);return}
     if(area==='spieler'&&player){showPlayerProfile(player,false);return}
     if(area==='vereinsduelle'){showClubDuels(false);return}
     if(area==='saison'){showSeason(false);return}
     if(area==='konto'){showLogin(false);return}
+    if(area==='dartvision-lab'){showDartVisionLab(false);return}
     if(area==='einstellungen'){showSettings(false);return}
     if(area==='live'){showLive(competition,false);return}
     if(area==='turnier'){showTournament(false);return}
     showHome(false);
   }finally{applyingRoute=false}
 }
-function hideMainSections(){stopTvRefresh();document.body.classList.remove('tv-mode','club-duel-tv-mode');['tvSection','clubDuelTvSection','publicHomeSection','playerProfileSection','dashboardSection','authSection','settingsSection','seasonSection','clubDuelsSection','shopSection','statsStationSection','tournamentSubnav','competitionNav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
+function hideMainSections(){stopTvRefresh();document.body.classList.remove('tv-mode','club-duel-tv-mode');['tvSection','clubDuelTvSection','publicHomeSection','playerProfileSection','dashboardSection','authSection','settingsSection','seasonSection','clubDuelsSection','shopSection','statsStationSection','dartVisionLabSection','tournamentSubnav','competitionNav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
 function renderNavigation(){
   const admin=isAdmin(),member=isMember(),guest=!admin&&!member;
   $('.club-settings-block')?.classList.remove('hidden');
@@ -1991,6 +1994,34 @@ function openLiveQr(){
 }
 function showLogin(updateUrl=true){hideMainSections();$('#authSection')?.classList.remove('hidden');renderCloudPanel();renderNavigation();if(updateUrl)updateAppUrl('konto')}
 function showSettings(updateUrl=true){if(!isFullAdmin()){showLogin(updateUrl);return}hideMainSections();$('#settingsSection').classList.remove('hidden');renderSettingsForm();renderNavigation();if(updateUrl)updateAppUrl('einstellungen')}
+function emptyDartVisionBoard(){return{started:false,playerA:'Spieler 1',playerB:'Spieler 2',startScore:501,bestOf:3,scores:[501,501],legs:[0,0],activePlayer:0,winner:'',history:[],updatedAt:''}}
+function loadDartVisionLab(){
+  const stored=safeJsonParse(localStorage.getItem(DARTVISION_LAB_KEY),{}),boards={};
+  for(let number=1;number<=4;number++){const board=stored?.boards?.[number]||{};boards[number]={...emptyDartVisionBoard(),...board,scores:Array.isArray(board.scores)?board.scores:[board.startScore||501,board.startScore||501],legs:Array.isArray(board.legs)?board.legs:[0,0],history:Array.isArray(board.history)?board.history:[]}}
+  return{version:1,activeBoard:Math.min(4,Math.max(1,+stored.activeBoard||1)),boards}
+}
+let dartVisionLab=loadDartVisionLab();
+function saveDartVisionLab(){localStorage.setItem(DARTVISION_LAB_KEY,JSON.stringify(dartVisionLab))}
+function dartVisionBoard(){return dartVisionLab.boards[dartVisionLab.activeBoard]}
+function dartVisionLegsToWin(board=dartVisionBoard()){return Math.floor((+board.bestOf||3)/2)+1}
+function renderDartVisionLab(){
+  const box=$('#dartVisionLabContent');if(!box)return;if(!isFullAdmin()){box.innerHTML='';return}
+  const board=dartVisionBoard(),boardTabs=Array.from({length:4},(_,index)=>`<button type="button" data-dartvision-board="${index+1}" class="${dartVisionLab.activeBoard===index+1?'active':''}">Board ${index+1}${dartVisionLab.boards[index+1].started?' · läuft':''}</button>`).join('');
+  if(!board.started){box.innerHTML=`<div class="dartvision-board-tabs">${boardTabs}</div><form id="dartVisionSetupForm" class="card slim-card dartvision-setup"><div><span class="eyebrow">VIRTUELLES BOARD ${dartVisionLab.activeBoard}</span><h3>Testspiel vorbereiten</h3><p>Hier testen wir zuerst Spiellogik und Bedienung. Kameradaten werden später an genau dieselbe Schnittstelle angeschlossen.</p></div><div class="grid"><label>Spieler 1<input id="dartVisionPlayerA" maxlength="30" value="${esc(board.playerA)}" required></label><label>Spieler 2<input id="dartVisionPlayerB" maxlength="30" value="${esc(board.playerB)}" required></label><label>Spielmodus<select id="dartVisionStartScore"><option value="301" ${board.startScore===301?'selected':''}>301</option><option value="501" ${board.startScore===501?'selected':''}>501</option></select></label><label>Legs<select id="dartVisionBestOf"><option value="1" ${board.bestOf===1?'selected':''}>Best of 1</option><option value="3" ${board.bestOf===3?'selected':''}>Best of 3</option><option value="5" ${board.bestOf===5?'selected':''}>Best of 5</option></select></label></div><button class="primary" type="submit">TESTSPIEL STARTEN <span>→</span></button></form>`;return}
+  const names=[board.playerA,board.playerB],needed=dartVisionLegsToWin(board),winner=board.winner,history=board.history.slice(-8).reverse();
+  box.innerHTML=`<div class="dartvision-board-tabs">${boardTabs}</div><section class="dartvision-scoreboard"><header><div><span class="eyebrow">BOARD ${dartVisionLab.activeBoard} · ${board.startScore} · BEST OF ${board.bestOf}</span><h3>${winner?`${esc(winner)} gewinnt`:`Leg ${board.legs[0]+board.legs[1]+1}`}</h3></div><button class="danger" type="button" data-dartvision-reset>Testspiel löschen</button></header><div class="dartvision-players">${names.map((name,index)=>`<article class="${!winner&&board.activePlayer===index?'is-active':''} ${winner===name?'is-winner':''}"><small>${index===0?'SPIELER 1':'SPIELER 2'}</small><h2>${esc(name)}</h2><strong>${board.scores[index]}</strong><span>${board.legs[index]} / ${needed} Legs</span></article>`).join('')}</div>${winner?`<div class="dartvision-finished"><p>Das Testspiel bleibt ausschließlich lokal gespeichert.</p><button class="primary" type="button" data-dartvision-new>Neues Testspiel</button></div>`:`<form id="dartVisionThrowForm" class="dartvision-throw"><label>Aufnahme für <b>${esc(names[board.activePlayer])}</b><input id="dartVisionThrowScore" type="number" inputmode="numeric" min="0" max="180" step="1" placeholder="0–180" required autofocus></label><button class="primary" type="submit">AUFNAHME EINTRAGEN</button><button class="secondary" type="button" data-dartvision-undo ${board.history.length?'':'disabled'}>Rückgängig</button></form>`}<div class="dartvision-history"><h4>Letzte Aufnahmen</h4>${history.length?history.map(entry=>`<div><span>${esc(entry.player)}</span><b>${entry.score}</b><small>${esc(entry.note||'')}</small></div>`).join(''):'<p>Noch keine Aufnahme eingetragen.</p>'}</div></section>`;
+}
+function showDartVisionLab(updateUrl=true){if(!isFullAdmin()){showLogin(updateUrl);return}hideMainSections();$('#dartVisionLabSection')?.classList.remove('hidden');renderDartVisionLab();renderNavigation();if(updateUrl)updateAppUrl('dartvision-lab')}
+function startDartVisionTest(){
+  const board=dartVisionBoard(),startScore=+$('#dartVisionStartScore').value||501;Object.assign(board,{started:true,playerA:$('#dartVisionPlayerA').value.trim(),playerB:$('#dartVisionPlayerB').value.trim(),startScore,bestOf:+$('#dartVisionBestOf').value||3,scores:[startScore,startScore],legs:[0,0],activePlayer:0,winner:'',history:[],updatedAt:new Date().toISOString()});saveDartVisionLab();renderDartVisionLab()
+}
+function enterDartVisionThrow(score){
+  const board=dartVisionBoard();if(!board.started||board.winner||!Number.isInteger(score)||score<0||score>180)return false;const before={scores:[...board.scores],legs:[...board.legs],activePlayer:board.activePlayer,winner:board.winner},player=board.activePlayer,next=board.scores[player]-score;let note='';
+  if(next<0||next===1){note='Überworfen';board.activePlayer=1-player}else if(next===0){board.legs[player]++;note='Leg gewonnen';if(board.legs[player]>=dartVisionLegsToWin(board)){board.winner=player===0?board.playerA:board.playerB}else{board.scores=[board.startScore,board.startScore];board.activePlayer=1-player}}else{board.scores[player]=next;board.activePlayer=1-player}
+  board.history.push({player:player===0?board.playerA:board.playerB,score,note,before});board.history=board.history.slice(-100);board.updatedAt=new Date().toISOString();saveDartVisionLab();renderDartVisionLab();return true
+}
+function undoDartVisionThrow(){const board=dartVisionBoard(),entry=board.history.pop();if(!entry)return;Object.assign(board,entry.before);board.updatedAt=new Date().toISOString();saveDartVisionLab();renderDartVisionLab()}
+function resetDartVisionBoard(){const current=dartVisionBoard();if(current.started&&!confirm(`Testspiel auf Board ${dartVisionLab.activeBoard} wirklich löschen?`))return;dartVisionLab.boards[dartVisionLab.activeBoard]=emptyDartVisionBoard();saveDartVisionLab();renderDartVisionLab()}
 function validPartnerUrl(value){try{const url=new URL(value);return url.protocol==='https:'&&/(^|\.)amazon\.de$/i.test(url.hostname)}catch{return false}}
 function validProductImage(value){return typeof value==='string'&&(/^product-images\/[a-z0-9][a-z0-9._-]*\.(?:avif|jpe?g|png|webp)$/i.test(value)||/^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(value))}
 function shopIcon(icon='target'){return({target:'🎯',camera:'📷',club:'👥',starter:'✨',case:'💼',light:'💡',board:'◉',tools:'🔧'})[icon]||'🎯'}
@@ -2170,6 +2201,7 @@ $('#cloudAdminPanel').addEventListener('click',e=>{
   if(e.target.closest('[data-checkin-transfer]')){transferAdminCheckInToTournament();return}
   if(e.target.closest('[data-admin-home]')){showHome();return}
   if(e.target.closest('[data-admin-tournament]')){showTournament();return}
+  if(e.target.id==='openDartVisionLabBtn'){showDartVisionLab();return}
   if(e.target.id==='closeAuthTabBtn'){try{window.close()}catch{}}
   if(e.target.id==='continueAuthTabBtn'){clearTimeout(T20Cloud.authHandoffCloseTimer);T20Cloud.authHandoffActive=false;showLogin()}
   if(e.target.id==='backupDownloadBtn')backupTriple20Data();
@@ -2214,7 +2246,6 @@ $('#tvRefreshBtn')?.addEventListener('click',()=>T20Cloud.loadLiveTournament().t
 window.addEventListener('storage',event=>{if(event.key!=='dartTournament'||$('#tvSection')?.classList.contains('hidden')||!event.newValue)return;const next=safeJsonParse(event.newValue);if(!next)return;Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,next);ensureTournamentDayState();loadActiveCompetition();renderTvView()});
 document.addEventListener('click',async event=>{if(event.target.id==='closeLiveQrBtn'||event.target.id==='liveQrOverlay'){$('#liveQrOverlay')?.remove();return}const switchButton=event.target.closest('[data-live-qr-competition]');if(switchButton){renderLiveQrCode(switchButton.dataset.liveQrCompetition);return}const copyButton=event.target.closest('#copyLiveQrLinkBtn');if(copyButton){const value=$('#liveQrLink')?.href||'';try{await navigator.clipboard.writeText(value);copyButton.firstChild.textContent='LINK KOPIERT '}catch{prompt('Live-Link kopieren:',value)}}});
 $('#showSeasonBtn').addEventListener('click',()=>showSeason());
-$('#showShopBtn').addEventListener('click',()=>showShop());
 $('#showSettingsBtn').addEventListener('click',()=>showSettings());
 $('#shopCategoryFilters')?.addEventListener('click',e=>{const button=e.target.closest('[data-shop-category]');if(!button)return;shopProductTarget='';shopCategory=button.dataset.shopCategory;renderShop();updateAppUrl('empfehlungen',{kategorie:shopCategory==='all'?'':shopCategory})});
 $('#shopProductGrid')?.addEventListener('click',event=>{const link=event.target.closest('[data-shop-click]');if(link)trackRecommendationClick(link.dataset.shopClick)});
@@ -2229,6 +2260,9 @@ $('#shopAdminPanel')?.addEventListener('click',event=>{
 });
 $('#shopAdminImageInput')?.addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file)return;const input=event.target;input.disabled=true;try{shopAdminImage=await prepareShopImage(file);$('#shopAdminImagePreview').innerHTML=`<img src="${esc(shopAdminImage)}" alt="Produktbild-Vorschau">`}catch(error){alert(`Bild konnte nicht verarbeitet werden: ${error?.message||'Unbekannter Fehler'}`)}finally{input.disabled=false;input.value=''}});
 $('#showLoginBtn').addEventListener('click',()=>showLogin());
+$('#closeDartVisionLabBtn')?.addEventListener('click',()=>showLogin());
+$('#dartVisionLabSection')?.addEventListener('submit',event=>{event.preventDefault();if(event.target.id==='dartVisionSetupForm'){startDartVisionTest();return}if(event.target.id==='dartVisionThrowForm'){const input=$('#dartVisionThrowScore'),score=Number(input?.value);if(!enterDartVisionThrow(score))alert('Bitte eine ganze Zahl zwischen 0 und 180 eingeben.')}});
+$('#dartVisionLabSection')?.addEventListener('click',event=>{const board=event.target.closest('[data-dartvision-board]');if(board){dartVisionLab.activeBoard=+board.dataset.dartvisionBoard;saveDartVisionLab();renderDartVisionLab();return}if(event.target.closest('[data-dartvision-undo]')){undoDartVisionThrow();return}if(event.target.closest('[data-dartvision-reset]')){resetDartVisionBoard();return}if(event.target.closest('[data-dartvision-new]'))resetDartVisionBoard()});
 window.addEventListener('popstate',applyAppRoute);
 $('#themeMode').addEventListener('change',e=>renderThemePreview(e.target.value));
 $('#settingsForm').addEventListener('submit',e=>{e.preventDefault();const themeMode=$('#themeMode').value,preset=themeModes[themeMode]||themeModes.light;updateSettings({appName:'Triple20',mode:$('#settingsMode').value,themeMode,club:{enabled:$('#settingsMode').value==='club',name:$('#settingsClubName').value.trim(),logo:$('#settingsClubLogo').value.trim(),color:$('#settingsClubColor').value,seasonMode:$('#settingsSeasonMode').value,dropResults:appSettings.club.dropResults,pointSystem:{5:+$('#points5').value,4:+$('#points4').value,3:+$('#points3').value,2:+$('#points2').value,1:+$('#points1').value,0:+$('#points0').value}},tournament:{defaultMode:$('#settingsDefaultMode').value,defaultFormat:$('#settingsDefaultFormat').value,defaultLegs:+$('#settingsDefaultLegs').value},theme:{...preset.theme}});applyTournamentDefaults();showDashboard()});
