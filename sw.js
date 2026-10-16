@@ -1,5 +1,5 @@
-const CACHE_VERSION='triple20-shell-20261005-50';
-const DATA_CACHE='triple20-data-20261005-50';
+const CACHE_VERSION='triple20-shell-20261016-53';
+const DATA_CACHE='triple20-data-20261016-53';
 const APP_SHELL=[
   './','./index.html','./styles.css','./double-ko.js','./app.js','./pwa.js','./manifest.webmanifest','./shop-products.json',
   './icons/triple20-icon-192.png','./icons/triple20-icon-512.png','./icons/apple-touch-icon.png','./icons/triple20-icon.svg',
@@ -47,7 +47,11 @@ self.addEventListener('fetch',event=>{
   if(request.mode==='navigate'){event.respondWith(networkFirst(request));return}
   if(url.origin===self.location.origin){
     if(url.pathname.endsWith('/shop-products.json')){event.respondWith(networkFirst(request,'./shop-products.json'));return}
-    event.respondWith(caches.match(request,{ignoreSearch:true}).then(cached=>cached||staleWhileRevalidate(request)));return;
+    // Versionsabhaengige Programmdateien duerfen nie aus einem aelteren Cache
+    // mit einer neuen index.html gemischt werden. Genau diese Mischung legt die
+    // Navigation lahm, obwohl sich der Hamburger optisch noch oeffnen laesst.
+    if(/\.(?:html|css|js)$/i.test(url.pathname)){event.respondWith(networkFirst(request));return}
+    event.respondWith(caches.match(request).then(cached=>cached||staleWhileRevalidate(request)));return;
   }
   if(url.hostname==='cdn.jsdelivr.net'){event.respondWith(staleWhileRevalidate(request))}
 });
