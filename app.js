@@ -2011,7 +2011,7 @@ function showLogin(updateUrl=true){hideMainSections();$('#authSection')?.classLi
 function showSettings(updateUrl=true){if(!isFullAdmin()){showLogin(updateUrl);return}hideMainSections();$('#settingsSection').classList.remove('hidden');renderSettingsForm();renderNavigation();if(updateUrl)updateAppUrl('einstellungen')}
 function emptyDartVisionBoard(){return{started:false,playerA:'Spieler 1',playerB:'Spieler 2',startScore:501,bestOf:3,scores:[501,501],legs:[0,0],activePlayer:0,winner:'',history:[],updatedAt:''}}
 function loadDartVisionLab(){
-  const stored=safeJsonParse(localStorage.getItem(DARTVISION_LAB_KEY),{}),boards={};
+  const parsed=safeJsonParse(localStorage.getItem(DARTVISION_LAB_KEY),{}),stored=parsed&&typeof parsed==='object'?parsed:{},boards={};
   for(let number=1;number<=4;number++){const board=stored?.boards?.[number]||{};boards[number]={...emptyDartVisionBoard(),...board,scores:Array.isArray(board.scores)?board.scores:[board.startScore||501,board.startScore||501],legs:Array.isArray(board.legs)?board.legs:[0,0],history:Array.isArray(board.history)?board.history:[]}}
   return{version:1,activeBoard:Math.min(4,Math.max(1,+stored.activeBoard||1)),boards}
 }
