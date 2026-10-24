@@ -1790,7 +1790,7 @@ function tvCompetitionHtml(key,tournament,displayMode,boardAssignments=[]){
 }
 function renderTvView(){
   const container=$('#tvCompetitions');if(!container)return;
-  const live=liveTvCompetitions(),displayMode=effectiveTvDisplayMode(),treeCompetition=displayMode==='bracket'&&live.length>1?(live.find(item=>item.key===(state.activeCompetition||'men'))||live[0]):null,visibleLive=treeCompetition?[treeCompetition]:live,boardAssignments=displayMode==='matches'?tvBoardAssignments(live):[];container.classList.toggle('single',visibleLive.length===1);container.innerHTML=visibleLive.length?visibleLive.map(item=>tvCompetitionHtml(item.key,item.tournament,displayMode,boardAssignments)).join(''):'<div class="tv-no-live"><div><b>Derzeit läuft kein Turnier</b><p>Die Anzeige aktualisiert sich automatisch, sobald ein Bewerb gestartet wird.</p></div></div>';
+  const live=liveTvCompetitions(),displayMode=effectiveTvDisplayMode(),treeMode=displayMode==='bracket'&&tvHasDoubleElimination(live),treeCompetition=treeMode&&live.length>1?(live.find(item=>item.key===(state.activeCompetition||'men'))||live[0]):null,visibleLive=treeCompetition?[treeCompetition]:live,boardAssignments=displayMode==='matches'?tvBoardAssignments(live):[];document.body.classList.toggle('tv-tree-mode',treeMode);container.classList.toggle('single',visibleLive.length===1);container.innerHTML=visibleLive.length?visibleLive.map(item=>tvCompetitionHtml(item.key,item.tournament,displayMode,boardAssignments)).join(''):'<div class="tv-no-live"><div><b>Derzeit läuft kein Turnier</b><p>Die Anzeige aktualisiert sich automatisch, sobald ein Bewerb gestartet wird.</p></div></div>';
   const footerMessage=$('#tvFooterMessage');if(footerMessage)footerMessage.textContent=displayMode==='standings'?'Aktuelle Top 10 der laufenden Bewerbe':displayMode==='bracket'?'Vollständiger Doppel-K.-o.-Turnierbaum':'Vier aktuelle Boards · nächste Paarung rückt automatisch nach';
   const updated=$('#tvUpdatedAt'),stamp=T20Cloud.lastSyncAt?new Date(T20Cloud.lastSyncAt):new Date();if(updated)updated.textContent=`Automatisch aktuell · ${stamp.toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit',second:'2-digit'})} Uhr`;
 }
@@ -2006,7 +2006,7 @@ async function applyAppRoute(){
     showHome(false);
   }finally{applyingRoute=false}
 }
-function hideMainSections(){stopTvRefresh();document.body.classList.remove('tv-mode','club-duel-tv-mode');['tvSection','clubDuelTvSection','publicHomeSection','playerProfileSection','dashboardSection','authSection','settingsSection','seasonSection','clubDuelsSection','shopSection','statsStationSection','dartVisionLabSection','tournamentSubnav','competitionNav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
+function hideMainSections(){stopTvRefresh();document.body.classList.remove('tv-mode','tv-tree-mode','club-duel-tv-mode');['tvSection','clubDuelTvSection','publicHomeSection','playerProfileSection','dashboardSection','authSection','settingsSection','seasonSection','clubDuelsSection','shopSection','statsStationSection','dartVisionLabSection','tournamentSubnav','competitionNav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
 function renderNavigation(){
   const admin=isAdmin(),member=isMember(),guest=!admin&&!member;
   $('.club-settings-block')?.classList.remove('hidden');
