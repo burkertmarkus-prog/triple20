@@ -1771,9 +1771,9 @@ function tvFullDoubleTreeHtml(tournament){
   const preview=T20DoubleKO.evaluate(plan,tournament.matches||[]).preview,stages=kind=>[...new Set(plan.nodes.filter(node=>node.bracket===kind).map(node=>node.stage))].sort((a,b)=>a-b);
   const upperStages=stages('upper'),lowerStages=stages('lower');
   const column=(kind,stage,label,extra='')=>{const games=preview.filter(match=>match.bracket===kind&&match.stage===stage&&!match.automatic),placeholder=kind==='upper'?'Sieger':'Teilnehmer';return `<section class="tv-tree-column ${kind} ${extra}"><h3>${esc(label)}</h3><div>${games.map(match=>tvBracketGame(match,placeholder)).join('')||'<p class="tv-bracket-empty">Noch offen</p>'}</div></section>`};
-  const lower=[...lowerStages].reverse().map(stage=>column('lower',stage,`${stage}. Verliererrunde`)).join('');
+  const lower=[...lowerStages].reverse().map(stage=>column('lower',stage,`Verlierer RND ${stage}`)).join('');
   const base=column('upper',upperStages[0],'Startrunde','base');
-  const upper=upperStages.slice(1).map((stage,index)=>column('upper',stage,index===upperStages.length-2?'Finale Gewinnerrunde':`${index+1}. Gewinnerrunde`)).join('');
+  const upper=upperStages.slice(1).map((stage,index)=>column('upper',stage,index===upperStages.length-2?'Finale GR':`Gewinner RND ${index+1}`)).join('');
   const finals=preview.filter(match=>match.bracket==='grand'&&!match.automatic),finalColumn=`<section class="tv-tree-column grand"><h3>Finale</h3><div>${finals.map(match=>tvBracketGame(match,'Finalist')).join('')||'<p class="tv-bracket-empty">Noch offen</p>'}</div></section>`;
   return `<div class="tv-full-tree" style="--tree-columns:${lowerStages.length+upperStages.length+1}">${lower}${base}${upper}${finalColumn}</div>`;
 }
