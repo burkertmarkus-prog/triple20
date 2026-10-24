@@ -1705,7 +1705,7 @@ function tvStandingsHtml(tournament){
 }
 function tvBracketGame(match,label='Noch offen'){
   if(!match)return`<div class="tv-bracket-game placeholder"><span>${esc(label)}</span><b>–</b><span>${esc(label)}</span><b>–</b></div>`;
-  if(match.automatic)return `<div class="tv-bracket-game automatic"><span>${esc(match.a)}</span><b>→</b><span>Freilos · weiter</span><b>–</b></div>`;
+  if(match.automatic)return `<div class="tv-bracket-game automatic"><span>${esc(match.a)}</span><b>→</b><span>Freilos</span><b>–</b></div>`;
   const done=match.sa!==null,winner=done?(match.sa>match.sb?'a':'b'):'';
   return `<div class="tv-bracket-game ${done?'done':'open'}"><span class="${winner==='a'?'is-winner':''}">${esc(match.a||label)}</span><b>${done?match.sa:'–'}</b><span class="${winner==='b'?'is-winner':''}">${esc(match.b||label)}</span><b>${done?match.sb:'–'}</b></div>`;
 }
@@ -1770,7 +1770,9 @@ function tvFullDoubleTreeHtml(tournament){
   if(plan.size>32)return tvDoubleBracketHtml(tournament);
   const preview=T20DoubleKO.evaluate(plan,tournament.matches||[]).preview,stages=kind=>[...new Set(plan.nodes.filter(node=>node.bracket===kind).map(node=>node.stage))].sort((a,b)=>a-b);
   const upperStages=stages('upper'),lowerStages=stages('lower');
-  const column=(kind,stage,label,extra='')=>{const games=preview.filter(match=>match.bracket===kind&&match.stage===stage&&!match.automatic),placeholder=kind==='upper'?'Sieger':'Teilnehmer';return `<section class="tv-tree-column ${kind} ${extra}"><h3>${esc(label)}</h3><div>${games.map(match=>tvBracketGame(match,placeholder)).join('')||'<p class="tv-bracket-empty">Noch offen</p>'}</div></section>`};
+  // Automatic bye nodes are real positions in the 32-slot tree. Keeping them
+  // visible prevents a 28-player event from collapsing from 16 to 12 rows.
+  const column=(kind,stage,label,extra='')=>{const games=preview.filter(match=>match.bracket===kind&&match.stage===stage),placeholder=kind==='upper'?'Sieger':'Teilnehmer';return `<section class="tv-tree-column ${kind} ${extra}"><h3>${esc(label)}</h3><div>${games.map(match=>tvBracketGame(match,placeholder)).join('')||'<p class="tv-bracket-empty">Noch offen</p>'}</div></section>`};
   const lower=[...lowerStages].reverse().map(stage=>column('lower',stage,`Verlierer RND ${stage}`)).join('');
   const base=column('upper',upperStages[0],'Startrunde','base');
   const upper=upperStages.slice(1).map((stage,index)=>column('upper',stage,index===upperStages.length-2?'Finale GR':`Gewinner RND ${index+1}`)).join('');
