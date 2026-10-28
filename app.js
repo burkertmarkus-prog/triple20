@@ -85,7 +85,12 @@ function loadActiveCompetition(){
   state.settings={...(state.settings||{}),competition:state.activeCompetition};
 }
 function competitionLabel(key=state.activeCompetition){return key==='women'?'Damen':'Herren'}
-function competitionEventName(source=state){return source.settings?.eventName||source.eventName||state.eventName||'Spieltag'}
+function baseCompetitionEventName(value=''){return String(value||'').replace(/\s+[–-]\s+(Herren|Damen)$/i,'').trim()}
+function competitionEventName(source=state){
+  const direct=baseCompetitionEventName(source?.settings?.eventName||source?.eventName||'');if(direct)return direct;
+  const competition=source?.settings?.competition||source?.competition||(source===state?state.activeCompetition:'men'),assigned=assignedSeasonForTournament(source),pattern=competition==='women'?/damen/i:/herren/i,season=assigned||(seasonStore.seasons||[]).find(item=>!item.archived&&pattern.test(item.name||'')),seasonName=baseCompetitionEventName(season?.name||'');
+  return seasonName||baseCompetitionEventName(state.eventName)||'Spieltag';
+}
 function competitionTitle(){return `${competitionEventName()} – ${competitionLabel()}`}
 function competitionAlreadyInSeason(source){if(!source)return false;if(source.seasonImportedTo||source.seasonTournamentId)return true;const history=source.savedToHistory?loadTournamentHistory().find(record=>String(record.id)===String(source.savedToHistory)):null,competition=source.competition||source.settings?.competition||'',players=[...(source.players||[])].map(normalizedPlayerName).sort().join('|');return (seasonStore.seasons||[]).some(season=>(season.tournaments||[]).some(record=>{if(record.planned)return false;if(source.scheduledEventId&&String(record.scheduledEventId||'')===String(source.scheduledEventId))return true;if(!history||record.date!==history.date||(record.competition||record.settings?.competition||'')!==competition)return false;return [...(record.players||[])].map(normalizedPlayerName).sort().join('|')===players}))}
 function competitionIsLive(source){return !!source?.started&&!competitionAlreadyInSeason(source)}
@@ -489,7 +494,7 @@ window.T20Cloud={
       // automatisch veröffentlichen. Zuerst und ausschließlich den zentralen
       // Cloud-Stand laden; ein Turnier wird nur durch eine bewusste Startaktion
       // der Turnierleitung veröffentlicht.
-      try{await this.loadCloud({initial:true})}catch(e){console.warn('Cloud-Startladen fehlgeschlagen',e)}
+      try{await this.loadCloud({initial:true});if(this.isAdmin)await repairOctober27TournamentData()}catch(e){console.warn('Cloud-Startladen oder Datenreparatur fehlgeschlagen',e)}
     }catch(error){
       console.warn('Session nach Start konnte nicht geladen werden:',error);
       this.authError=authRedirectErrorMessage()||`Anmeldung konnte nicht abgeschlossen werden: ${error?.message||'Bitte fordere einen neuen Link an.'}`;this.authMessage='';this.authRedirectPending=false;cleanAuthRedirectUrl();setSyncStatus('Nur Ansicht','view-only');showLogin();renderCloudPanel();
@@ -848,7 +853,7 @@ function renderCompetitionNav(){
 }
 function setActiveCompetition(key){
   if(!['men','women'].includes(key)||key===state.activeCompetition)return;
-  if(!state.started&&$('#tournamentName')?.value.trim())state.eventName=$('#tournamentName').value.trim();
+  if(!state.started&&$('#tournamentName')?.value.trim()){state.settings=state.settings||{};state.settings.eventName=baseCompetitionEventName($('#tournamentName').value.trim());state.settings.name=`${state.settings.eventName} – ${competitionLabel(state.activeCompetition)}`}
   syncActiveCompetition();state.activeCompetition=key;loadActiveCompetition();save();renderPlayers();showTournament();
 }
 $('#playerForm').addEventListener('submit',e=>{e.preventDefault();const input=$('#playerName'),memberSelect=$('#memberSuggestions'),name=memberSelect?.value||input.value;if(!name){alert('Bitte ein Mitglied auswählen oder einen Namen eingeben.');return}if(addTournamentPlayer(name)){input.value='';if(memberSelect)memberSelect.value='';memberSelect?.focus()}});
@@ -1162,6 +1167,27 @@ async function mergeGuenterSeasonEntries(){
   }
   persistSeasons();await T20Cloud.syncAll({force:true});if(T20Cloud.pendingSync){console.warn('Namenszusammenführung ist lokal erfolgt, aber noch nicht online gespeichert.');return false}nativeSetItem(migrationKey,'done');renderSeasonView();alert('„Günter G.“ und „Günter“ wurden zu „Günter“ zusammengeführt. Doppelte Freilose wurden entfernt und die Saisonwertung wurde neu berechnet.');return true;
 }
+async function repairOctober27TournamentData(){
+  const migrationKey='triple20_repair_2026_10_27_v1';if(localStorage.getItem(migrationKey)==='done'||!isAdmin())return false;
+  const badHistoryIds=new Set(['tournament-1793172340403','tournament-1793174525665']),history=loadTournamentHistory(),womenHistory=history.find(record=>record.id==='tournament-1793132010998'),menSeason=(seasonStore.seasons||[]).find(season=>season.id==='season-1784121408788'||/herren/i.test(season.name||'')),womenSeason=(seasonStore.seasons||[]).find(season=>season.id==='season-1785850888957'||/damen/i.test(season.name||''));
+  const foreignWomenNames=new Set(['fabi','joggl 180','pdf','pdf 1','pdf1']),foreignWomenPresent=[...(womenSeason?.members||[]),...(womenSeason?.players||[])].some(name=>foreignWomenNames.has(normalizedPlayerName(name))),womenMissing=!!womenHistory&&!womenSeason?.tournaments?.some(record=>record.id===womenHistory.id),womenMisnamed=!!womenHistory&&(!/damen/i.test(womenHistory.eventName||'')||/herren/i.test(womenHistory.eventName||'')),menRecord=menSeason?.tournaments?.find(record=>record.id==='tournament-1793138290563'||(record.date==='2026-10-27'&&!record.planned&&(record.competition||record.settings?.competition)==='men')),menMisranked=!!menRecord&&(menRecord.results||[]).some((result,index,results)=>results.some(other=>(other.points||0)>(result.points||0)&&(other.rank||999)>(result.rank||999))),needsRepair=history.some(record=>badHistoryIds.has(record.id))||foreignWomenPresent||womenMissing||womenMisnamed||menMisranked;
+  if(!needsRepair){nativeSetItem(migrationKey,'done');return false}
+  try{if(!localStorage.getItem('triple20_backup_before_2026_10_27_repair'))nativeSetItem('triple20_backup_before_2026_10_27_repair',JSON.stringify({createdAt:new Date().toISOString(),history,seasons:seasonStore}))}catch(error){console.warn('Sicherung vor der Spieltagreparatur nicht möglich:',error)}
+  const repairedHistory=history.filter(record=>!badHistoryIds.has(record.id));
+  const setCorrectWomenName=record=>{if(!record)return;record.date='2026-10-27';record.eventName='DCA Herbstliga Damen';record.name='DCA Herbstliga Damen – Damen';record.competition='women';record.competitionLabel='Damen';record.settings={...(record.settings||{}),eventName:record.eventName,name:record.name,competition:'women'};record.correctedAt=new Date().toISOString()};
+  setCorrectWomenName(womenHistory);
+  if(womenSeason){
+    const foreign=new Set([...foreignWomenNames].map(normalizedPlayerName)),hasWomenResult=name=>(womenSeason.tournaments||[]).some(tournament=>!tournament.planned&&(tournament.results||[]).some(result=>normalizedPlayerName(result.name)===normalizedPlayerName(name)));
+    womenSeason.members=(womenSeason.members||[]).filter(name=>!foreign.has(normalizedPlayerName(name))||hasWomenResult(name));womenSeason.players=(womenSeason.players||[]).filter(name=>!foreign.has(normalizedPlayerName(name))||hasWomenResult(name));for(const name of Object.keys(womenSeason.memberProfileIds||{}))if(foreign.has(normalizedPlayerName(name))&&!hasWomenResult(name))delete womenSeason.memberProfileIds[name];
+    if(womenHistory&&!womenSeason.tournaments?.some(record=>record.id===womenHistory.id)){const record=structuredClone(womenHistory);record.scheduledSeasonId=womenSeason.id;womenSeason.tournaments=womenSeason.tournaments||[];womenSeason.tournaments.push(record)}
+    const womenRecord=(womenSeason.tournaments||[]).find(record=>record.id===womenHistory?.id);setCorrectWomenName(womenRecord);womenSeason.tournaments.sort((a,b)=>(a.date||'').localeCompare(b.date||''));womenSeason.stats=calculateSeasonStatisticsSummary(womenSeason);womenSeason.updatedAt=new Date().toISOString();
+  }
+  if(menSeason){if(menRecord)recalculateTournamentRecord(menRecord,menSeason);menSeason.stats=calculateSeasonStatisticsSummary(menSeason);menSeason.updatedAt=new Date().toISOString()}
+  const menHistory=repairedHistory.find(record=>record.id==='tournament-1793138286820');if(menHistory)recalculateTournamentRecord(menHistory,menSeason);
+  localStorage.setItem(TOURNAMENT_HISTORY_KEY,JSON.stringify(repairedHistory));persistSeasons();await T20Cloud.syncAll({force:true,keys:[TOURNAMENT_HISTORY_KEY,SEASON_KEY]});
+  if(T20Cloud.pendingSync){console.warn('Spieltagreparatur ist lokal erfolgt, aber noch nicht online gespeichert.');return false}
+  nativeSetItem(migrationKey,'done');renderSeasonView();renderPublicHome();alert('Die Spieltage vom 27./28.10. wurden bereinigt: Testeinträge entfernt, Damen korrekt zugeordnet und Platzierungen neu berechnet.');return true;
+}
 function createSeason(data={}){
   if(!isClubMode())return null;
   const half=currentHalfYear(),season={id:data.id||`season-${Date.now()}`,name:data.name||half.name,startDate:data.startDate||half.start,endDate:data.endDate||half.end,tournaments:data.tournaments||[],players:data.players||[],members:data.members||data.players||[],pointSystem:data.pointSystem||defaultPointSystem(),dropCount:+(data.dropCount??appSettings.club.dropResults??0),stats:data.stats||{},archived:!!data.archived,createdAt:data.createdAt||new Date().toISOString()};
@@ -1218,17 +1244,29 @@ function aggregateAutodartsStats(name,matches=state.matches){
   const valid=key=>rows.filter(row=>Number.isFinite(Number(row[key]))),mean=key=>{const values=valid(key);return values.length?Number((values.reduce((sum,row)=>sum+Number(row[key]),0)/values.length).toFixed(1)):null},averageRows=valid('average'),weightedDarts=averageRows.reduce((sum,row)=>sum+(Number(row.darts)||0),0),average=averageRows.length?(weightedDarts?averageRows.reduce((sum,row)=>sum+Number(row.average)*(Number(row.darts)||0),0)/weightedDarts:mean('average')):null;
   return{average:average===null?null:Number(average.toFixed(1)),first9:mean('first9'),checkoutRate:mean('checkoutRate'),until170:mean('until170'),highestFinish:Math.max(0,...valid('highestFinish').map(row=>Number(row.highestFinish))),darts:valid('darts').reduce((sum,row)=>sum+Number(row.darts),0),max180:valid('max180').reduce((sum,row)=>sum+Number(row.max180),0),matches:rows.length};
 }
+function tournamentRecordDate(source=state){
+  const scheduledId=source?.scheduledEventId||'',scheduled=(seasonStore.seasons||[]).flatMap(season=>season.tournaments||[]).find(tournament=>String(tournament.id)===String(scheduledId));
+  if(scheduled?.date)return scheduled.date;
+  const entered=$('#seasonTournamentDate')?.value;if(entered)return entered;
+  if(source?.liveStartedAt){const started=new Date(source.liveStartedAt);if(!Number.isNaN(started.getTime()))return localDateKey(started)}
+  return todayIso();
+}
+function orderedTournamentResults(players,matches,pointSystem=defaultPointSystem()){
+  const rows=standingsFor(players,matches),rowMap=new Map(rows.map(row=>[row.name,row]));
+  return players.map(name=>{const wins=tournamentWins(name,matches),losses=tournamentLosses(name,matches),byes=tournamentByes(name,matches),row=rowMap.get(name)||{};return{name,wins,losses,byes,points:pointsForWins(wins,pointSystem)+byes,row}}).sort((a,b)=>b.points-a.points||b.wins-a.wins||a.losses-b.losses||((b.row.lf||0)-(b.row.la||0))-((a.row.lf||0)-(a.row.la||0))||(b.row.lf||0)-(a.row.lf||0)||a.name.localeCompare(b.name,'de'));
+}
 function buildCurrentTournamentRecord(){
-  const rows=standings(),pointSystem=defaultPointSystem(),date=$('#seasonTournamentDate')?.value||todayIso(),stats={};
+  const rows=standings(),pointSystem=defaultPointSystem(),date=tournamentRecordDate(state),stats={},ordered=orderedTournamentResults(state.players,state.matches,pointSystem),rankByName=new Map(ordered.map((result,index)=>[result.name,index+1]));
   document.querySelectorAll('[data-stat-player]').forEach(row=>{const p=row.dataset.statPlayer;stats[p]={max180:+(row.querySelector('[data-stat-180]')?.value||0),checkout:+(row.querySelector('[data-stat-checkout]')?.value||0)}});
   const playerProfileIds=Object.fromEntries(state.players.map(name=>[name,state.playerProfileIds?.[name]||memberIdForName(name)]).filter(([,id])=>id));
-  const results=state.players.map(name=>{const wins=tournamentWins(name,state.matches),losses=tournamentLosses(name,state.matches),byes=tournamentByes(name,state.matches),row=rows.find(r=>r.name===name)||{},profileId=playerProfileIds[name]||'',auto=aggregateAutodartsStats(name);return{name,profileId,wins,losses,byes,rank:(rows.findIndex(r=>r.name===name)+1)||0,legsFor:row.lf||0,legsAgainst:row.la||0,points:pointsForWins(wins,pointSystem)+byes,max180:stats[name]?.max180??auto.max180,checkout:stats[name]?.checkout??auto.highestFinish,average:auto.average,first9:auto.first9,checkoutRate:auto.checkoutRate,until170:auto.until170,darts:auto.darts,statMatches:auto.matches}});
+  const results=state.players.map(name=>{const wins=tournamentWins(name,state.matches),losses=tournamentLosses(name,state.matches),byes=tournamentByes(name,state.matches),row=rows.find(r=>r.name===name)||{},profileId=playerProfileIds[name]||'',auto=aggregateAutodartsStats(name);return{name,profileId,wins,losses,byes,rank:rankByName.get(name)||0,legsFor:row.lf||0,legsAgainst:row.la||0,points:pointsForWins(wins,pointSystem)+byes,max180:stats[name]?.max180??auto.max180,checkout:stats[name]?.checkout??auto.highestFinish,average:auto.average,first9:auto.first9,checkoutRate:auto.checkoutRate,until170:auto.until170,darts:auto.darts,statMatches:auto.matches}});
   const eventName=competitionEventName();
-  return{id:`tournament-${Date.now()}`,scheduledEventId:state.scheduledEventId||'',scheduledSeasonId:state.scheduledSeasonId||assignedSeasonForTournament(state)?.id||'',name:competitionTitle(),eventName,competition:state.activeCompetition,competitionLabel:competitionLabel(),date,mode:state.settings.mode,players:[...state.players],participantCount:state.players.length,winner:rows[0]?.name||'',top3:rows.slice(0,3).map(r=>r.name),playerProfileIds,settings:{...state.settings,name:competitionTitle(),eventName,competition:state.activeCompetition},matches:state.matches.map(m=>({...m})),results,createdAt:new Date().toISOString()};
+  return{id:`tournament-${Date.now()}`,scheduledEventId:state.scheduledEventId||'',scheduledSeasonId:state.scheduledSeasonId||assignedSeasonForTournament(state)?.id||'',name:competitionTitle(),eventName,competition:state.activeCompetition,competitionLabel:competitionLabel(),date,mode:state.settings.mode,players:[...state.players],participantCount:state.players.length,winner:ordered[0]?.name||'',top3:ordered.slice(0,3).map(r=>r.name),playerProfileIds,settings:{...state.settings,name:competitionTitle(),eventName,competition:state.activeCompetition},matches:state.matches.map(m=>({...m})),results,createdAt:new Date().toISOString()};
 }
 function loadTournamentHistory(){try{const data=JSON.parse(localStorage.getItem(TOURNAMENT_HISTORY_KEY)||'[]');return Array.isArray(data)?data:[]}catch{return[]}}
 function saveTournamentToHistory(){
-  if(!T20Cloud.user||state.savedToHistory||!state.matches?.length||(!state.endedEarly&&!state.matches.every(m=>m.sa!==null)))return;
+  const completedReal=(state.matches||[]).filter(match=>match.sa!==null&&match.b!=='Freilos').length,minimumForAborted=Math.max(2,Math.floor((state.players?.length||0)/2));
+  if(!T20Cloud.user||state.savedToHistory||!state.matches?.length||(!state.endedEarly&&!state.matches.every(m=>m.sa!==null))||(state.endedEarly&&completedReal<minimumForAborted))return;
   const history=loadTournamentHistory(),record=buildCurrentTournamentRecord();history.push(record);localStorage.setItem(TOURNAMENT_HISTORY_KEY,JSON.stringify(history));state.savedToHistory=record.id;save();
 }
 function exportCurrentTournamentJson(){const record=state.savedToHistory?loadTournamentHistory().find(t=>t.id===state.savedToHistory)||buildCurrentTournamentRecord():buildCurrentTournamentRecord();downloadFile(`${(record.name||'Turnier').replaceAll(' ','_')}.json`,'application/json',JSON.stringify(record,null,2))}
@@ -1322,7 +1360,7 @@ function calculateSeasonStandings(season=selectedSeason(),rankingMode='clean'){
     :b.cleanPoints-a.cleanPoints||b.cleanWins-a.cleanWins||a.cleanLosses-b.cleanLosses||b.cleanPlayed-a.cleanPlayed||a.name.localeCompare(b.name,'de'));
 }
 function visibleSeasonStandings(season=selectedSeason(),rankingMode='clean'){
-  const rows=calculateSeasonStandings(season,rankingMode);
+  const rows=calculateSeasonStandings(season,rankingMode).filter(row=>row.played>0);
   if(!season)return rows;
   const seasonName=season.name||'',competitions=new Set((season.tournaments||[]).map(tournament=>tournament.competition||tournament.settings?.competition).filter(Boolean));
   const isMensSeason=/herren/i.test(seasonName)?true:/damen/i.test(seasonName)?false:competitions.has('men')&&!competitions.has('women');
@@ -1330,7 +1368,7 @@ function visibleSeasonStandings(season=selectedSeason(),rankingMode='clean'){
   const hidden=new Set(['julz','julia wiesler',...(season.hiddenRankingPlayers||[])].map(normalizedPlayerName));
   return rows.filter(row=>!hidden.has(normalizedPlayerName(row.name)));
 }
-function seasonStats(season=selectedSeason()){const rows=calculateSeasonStandings(season);return{max180:[...rows].sort((a,b)=>b.max180-a.max180)[0],checkout:[...rows].sort((a,b)=>b.checkout-a.checkout)[0],played:[...rows].sort((a,b)=>b.played-a.played)[0],participation:[...rows].sort((a,b)=>b.participation-a.participation||b.played-a.played)[0],wins:[...rows].sort((a,b)=>b.wins-a.wins)[0],winRate:[...rows].filter(r=>r.wins+r.losses>0).sort((a,b)=>b.winRate-a.winRate||b.wins-a.wins)[0]}}
+function seasonStats(season=selectedSeason()){const rows=calculateSeasonStandings(season).filter(row=>row.played>0);return{max180:[...rows].sort((a,b)=>b.max180-a.max180)[0],checkout:[...rows].sort((a,b)=>b.checkout-a.checkout)[0],played:[...rows].sort((a,b)=>b.played-a.played)[0],participation:[...rows].sort((a,b)=>b.participation-a.participation||b.played-a.played)[0],wins:[...rows].sort((a,b)=>b.wins-a.wins)[0],winRate:[...rows].filter(r=>r.wins+r.losses>0).sort((a,b)=>b.winRate-a.winRate||b.wins-a.wins)[0]}}
 function calculateSeasonStatisticsSummary(season=selectedSeason()){const s=seasonStats(season),pick=(row,key)=>row?{player:row.name,value:row[key]||0}:null;return{updatedAt:new Date().toISOString(),max180:pick(s.max180,'max180'),checkout:pick(s.checkout,'checkout'),played:pick(s.played,'played'),participation:s.participation?{player:s.participation.name,value:s.participation.participation}:null,wins:pick(s.wins,'wins'),winRate:s.winRate?{player:s.winRate.name,value:s.winRate.winRate}:null}}
 function renderSeasonImport(winner){
   const card=$('#seasonImportCard');if(!card)return;const complete=!!winner&&state.matches.length&&(state.endedEarly||state.matches.every(m=>m.sa!==null));
@@ -1341,8 +1379,8 @@ function renderSeasonImport(winner){
   const seasons=seasonStore.seasons.filter(s=>!s.archived);
   if(state.seasonImportedTo){const s=seasonStore.seasons.find(x=>x.id===state.seasonImportedTo);card.innerHTML=`<h3>Saisonwertung</h3><p>Dieses Turnier wurde bereits in ${esc(s?.name||'eine Saison')} übernommen.</p>`;return}
   if(!seasons.length){card.innerHTML='<h3>In Saisonwertung übernehmen</h3><p>Lege zuerst im Modul „Saison“ eine Saison an.</p><button id="seasonFromWinnerBtn" class="secondary">Zur Saisonverwaltung</button>';return}
-  const assigned=assignedSeasonForTournament(state),current=assigned||seasonForDate(todayIso())||seasons[0];
-  card.innerHTML=`<h3>In Saisonwertung übernehmen</h3><div class="grid"><label>Saison${assigned?' (automatisch)':''}<select id="seasonImportSelect" ${assigned?'disabled':''}>${seasons.map(s=>`<option value="${esc(s.id)}" ${s.id===current.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select>${assigned?`<small>Aus dem geplanten ${esc(competitionLabel())}-Termin übernommen.</small>`:''}</label><label>Turnierdatum<input id="seasonTournamentDate" type="date" value="${todayIso()}"></label></div><button id="addToSeasonBtn" class="primary">IN SAISONWERTUNG ÜBERNEHMEN <span>→</span></button>`;
+  const recordDate=tournamentRecordDate(state),assigned=assignedSeasonForTournament(state),current=assigned||seasonForDate(recordDate)||seasons[0];
+  card.innerHTML=`<h3>In Saisonwertung übernehmen</h3><div class="grid"><label>Saison${assigned?' (automatisch)':''}<select id="seasonImportSelect" ${assigned?'disabled':''}>${seasons.map(s=>`<option value="${esc(s.id)}" ${s.id===current.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select>${assigned?`<small>Aus dem geplanten ${esc(competitionLabel())}-Termin übernommen.</small>`:''}</label><label>Turnierdatum<input id="seasonTournamentDate" type="date" value="${recordDate}"></label></div><button id="addToSeasonBtn" class="primary">IN SAISONWERTUNG ÜBERNEHMEN <span>→</span></button>`;
 }
 function renderSeasonView(){
   if(!isClubMode()){$('#seasonSection')?.classList.add('hidden');return}
@@ -1397,9 +1435,9 @@ function tournamentCorrectionForm(tournament){
   return `<form class="season-correction-form" data-correction-form="${esc(tournament.id)}"><div class="season-correction-note"><b>Ergebnisse nachträglich korrigieren</b><p>Nur die Spielstände werden geändert. Paarungen und nachfolgende Runden bleiben unverändert; Platzierung und Saisonwertung werden neu berechnet.</p></div><div class="season-correction-matches">${matches.map(match=>`<div class="season-correction-row" data-correction-match="${match.index}"><small>Runde ${match.round||1}</small><b>${esc(tournamentPlayerName(tournament,match.a))}</b><input type="number" min="0" max="30" value="${match.sa}" aria-label="Legs ${esc(tournamentPlayerName(tournament,match.a))}" required><span>:</span><input type="number" min="0" max="30" value="${match.sb}" aria-label="Legs ${esc(tournamentPlayerName(tournament,match.b))}" required><b>${esc(tournamentPlayerName(tournament,match.b))}</b></div>`).join('')}</div><div class="season-correction-actions"><button class="primary" type="submit">KORREKTUR SPEICHERN</button><button class="secondary" type="button" data-cancel-correction="${esc(tournament.id)}">Abbrechen</button></div></form>`;
 }
 function recalculateTournamentRecord(tournament,season){
-  const rows=standingsFor(tournament.players||[],tournament.matches||[]),pointSystem=season?.pointSystem||defaultPointSystem(),previous=new Map((tournament.results||[]).map(result=>[normalizedPlayerName(result.name),result]));
-  tournament.results=(tournament.players||[]).map(name=>{const old=previous.get(normalizedPlayerName(name))||{},wins=tournamentWins(name,tournament.matches||[]),losses=tournamentLosses(name,tournament.matches||[]),byes=tournamentByes(name,tournament.matches||[]),row=rows.find(item=>item.name===name)||{};return{...old,name,profileId:old.profileId||tournament.playerProfileIds?.[name]||memberIdForName(name),wins,losses,byes,rank:(rows.findIndex(item=>item.name===name)+1)||0,legsFor:row.lf||0,legsAgainst:row.la||0,points:pointsForWins(wins,pointSystem)+byes}});
-  tournament.winner=rows[0]?.name||'';tournament.top3=rows.slice(0,3).map(row=>row.name);tournament.correctedAt=new Date().toISOString();return tournament;
+  const players=tournament.players||[],matches=tournament.matches||[],rows=standingsFor(players,matches),pointSystem=season?.pointSystem||defaultPointSystem(),ordered=orderedTournamentResults(players,matches,pointSystem),rankByName=new Map(ordered.map((result,index)=>[result.name,index+1])),previous=new Map((tournament.results||[]).map(result=>[normalizedPlayerName(result.name),result]));
+  tournament.results=players.map(name=>{const old=previous.get(normalizedPlayerName(name))||{},wins=tournamentWins(name,matches),losses=tournamentLosses(name,matches),byes=tournamentByes(name,matches),row=rows.find(item=>item.name===name)||{};return{...old,name,profileId:old.profileId||tournament.playerProfileIds?.[name]||memberIdForName(name),wins,losses,byes,rank:rankByName.get(name)||0,legsFor:row.lf||0,legsAgainst:row.la||0,points:pointsForWins(wins,pointSystem)+byes}});
+  tournament.winner=ordered[0]?.name||'';tournament.top3=ordered.slice(0,3).map(row=>row.name);tournament.correctedAt=new Date().toISOString();return tournament;
 }
 function correctSeasonTournamentFromForm(form){
   if(!canManageClubData())return;const season=selectedSeason(),tournamentId=form.dataset.correctionForm,tournament=season?.tournaments?.find(item=>String(item.id)===String(tournamentId));if(!season||!tournament)return;
