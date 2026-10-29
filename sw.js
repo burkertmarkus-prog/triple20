@@ -1,5 +1,5 @@
-const CACHE_VERSION='triple20-shell-20261028-69';
-const DATA_CACHE='triple20-data-20261028-69';
+const CACHE_VERSION='triple20-shell-20261029-70';
+const DATA_CACHE='triple20-data-20261029-70';
 const APP_SHELL=[
   './','./index.html','./styles.css','./double-ko.js','./app.js','./pwa.js','./manifest.webmanifest','./shop-products.json','./brand-assets/tyroldarts-logo-white.png',
   './icons/triple20-icon-192.png','./icons/triple20-icon-512.png','./icons/apple-touch-icon.png','./icons/triple20-icon.svg',
