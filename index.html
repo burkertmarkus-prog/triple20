@@ -34,7 +34,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20261115-81">
+  <link rel="stylesheet" href="styles.css?v=20261115-82">
 </head>
 <body>
   <header class="hero">
@@ -196,7 +196,7 @@
                 <label>Hauptüberschrift optional<input id="homeNewsTitle" maxlength="80" placeholder="Leer = automatisch"></label>
               </div>
               <label>Text optional<textarea id="homeNewsText" rows="3" maxlength="240" placeholder="Leer = automatisch"></textarea></label>
-              <label>Bildausrichtung<select id="homeNewsImagePosition"><option value="center">Mittig</option><option value="top">Oben</option><option value="bottom">Unten</option></select></label>
+              <div class="grid"><label>Bildplatzierung<select id="homeNewsImageLayout"><option value="right">Motiv rechts</option><option value="full">Vollflächig</option></select></label><label>Vertikaler Ausschnitt<select id="homeNewsImagePosition"><option value="center">Mittig</option><option value="top">Oben</option><option value="bottom">Unten</option></select></label></div>
               <div id="homeNewsImagePreview" class="home-news-image-preview"><span>Noch kein Hintergrundbild</span></div>
               <div class="home-image-actions"><label class="secondary">Hintergrundbild auswählen<input id="homeNewsImageInput" type="file" accept="image/jpeg,image/png,image/webp,.heic,.heif"></label><button id="removeHomeNewsImageBtn" class="danger hidden" type="button">Bild entfernen</button></div>
               <small>Das Bild wird automatisch auf ein webtaugliches Format verkleinert.</small>
@@ -309,7 +309,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="double-ko.js?v=20261005-52"></script>
-  <script src="app.js?v=20261115-81"></script>
+  <script src="app.js?v=20261115-82"></script>
   <script src="pwa.js?v=20261005-52"></script>
 </body>
 </html>
