@@ -200,7 +200,7 @@ function applyTriple20Data(data){
   const incomingState=safeJsonParse(localStorage.getItem('dartTournament')||'null')||{players:[],started:false,matches:[],settings:{}};
   Object.keys(state).forEach(k=>delete state[k]);Object.assign(state,incomingState);applyStoredTvSettings();ensureTournamentDayState();loadActiveCompetition();
   const seasons=loadSeasons();Object.keys(seasonStore).forEach(key=>delete seasonStore[key]);Object.assign(seasonStore,seasons);
-  repairScheduledTournamentAssignments();
+  repairScheduledTournamentAssignments();repairDoubleKoTournamentPlacements();
   const closedImported=closeImportedTournamentStates();
   selectedSeasonId=localStorage.getItem('tripleTwentySelectedSeason')||'';
   appSettings=loadSettings();
@@ -1283,6 +1283,28 @@ function tournamentWins(name,matches){return matches.filter(m=>m.sa!==null&&m.b!
 function tournamentLosses(name,matches){return matches.filter(m=>m.sa!==null&&m.b!=='Freilos'&&(m.a===name||m.b===name)&&((m.a===name&&m.sa<m.sb)||(m.b===name&&m.sb<m.sa))).length}
 function tournamentByes(name,matches){return matches.filter(m=>m.a===name&&m.b==='Freilos').length}
 function pointsForWins(wins,pointSystem=defaultPointSystem()){return pointSystem[Math.min(5,wins)]??0}
+function doubleKoPlacementNames(plan,matches=[]){
+  if(!plan||!globalThis.T20DoubleKO)return[];
+  const evaluated=T20DoubleKO.evaluate(plan,matches),champion=evaluated.champion;if(!champion)return[];
+  const completed=(matches||[]).filter(match=>match.sa!==null&&match.sb!==null),final=completed.filter(match=>match.bracket==='grand').sort((a,b)=>(a.stage||a.round||0)-(b.stage||b.round||0)).at(-1),runnerUp=final?(final.sa>final.sb?final.b:final.a):'',lowerFinal=completed.filter(match=>match.bracket==='lower').sort((a,b)=>(a.stage||a.round||0)-(b.stage||b.round||0)).at(-1),third=lowerFinal?(lowerFinal.sa>lowerFinal.sb?lowerFinal.b:lowerFinal.a):'';
+  return[champion,runnerUp,third].filter((name,index,list)=>name&&list.indexOf(name)===index);
+}
+function tournamentRecordPlacements(record={}){
+  const plan=record.settings?.doubleKoPlan||record.doubleKoPlan;if(!plan)return[];
+  return doubleKoPlacementNames(plan,record.matches||[]);
+}
+function tournamentRecordChampion(record={}){return tournamentRecordPlacements(record)[0]||tournamentPlayerName(record,record.winner||[...(record.results||[])].sort((a,b)=>(a.rank||999)-(b.rank||999))[0]?.name||'')}
+function repairDoubleKoRecordPlacements(record={}){
+  const placements=tournamentRecordPlacements(record);if(!placements.length)return false;
+  const previous=[record.winner,...(record.top3||[])].filter(Boolean),rest=[...(record.results||[])].sort((a,b)=>(a.rank||999)-(b.rank||999)).map(row=>row.name),ordered=[...placements,...previous,...rest].filter((name,index,list)=>name&&list.indexOf(name)===index),winner=placements[0],top3=ordered.slice(0,3);let changed=record.winner!==winner||JSON.stringify(record.top3||[])!==JSON.stringify(top3);
+  record.winner=winner;record.top3=top3;
+  if(Array.isArray(record.results)){const rank=new Map(ordered.map((name,index)=>[normalizedPlayerName(name),index+1]));for(const row of record.results){const next=rank.get(normalizedPlayerName(row.name));if(next&&row.rank!==next){row.rank=next;changed=true}}record.results.sort((a,b)=>(a.rank||999)-(b.rank||999))}
+  if(changed)record.placementCorrectedAt=new Date().toISOString();return changed;
+}
+function repairDoubleKoTournamentPlacements(){
+  let historyChanged=false,seasonChanged=false;const history=loadTournamentHistory();for(const record of history)if(repairDoubleKoRecordPlacements(record))historyChanged=true;for(const season of seasonStore.seasons||[])for(const record of season.tournaments||[])if(!record.planned&&repairDoubleKoRecordPlacements(record)){season.updatedAt=new Date().toISOString();seasonChanged=true}
+  if(historyChanged)localStorage.setItem(TOURNAMENT_HISTORY_KEY,JSON.stringify(history));if(seasonChanged)persistSeasons();return historyChanged||seasonChanged;
+}
 function aggregateAutodartsStats(name,matches=state.matches){
   const rows=[];for(const match of matches||[]){const side=match.a===name?'a':match.b===name?'b':'';if(side&&match.autodartsStats?.[side])rows.push(match.autodartsStats[side])}
   const valid=key=>rows.filter(row=>Number.isFinite(Number(row[key]))),mean=key=>{const values=valid(key);return values.length?Number((values.reduce((sum,row)=>sum+Number(row[key]),0)/values.length).toFixed(1)):null},averageRows=valid('average'),weightedDarts=averageRows.reduce((sum,row)=>sum+(Number(row.darts)||0),0),average=averageRows.length?(weightedDarts?averageRows.reduce((sum,row)=>sum+Number(row.average)*(Number(row.darts)||0),0)/weightedDarts:mean('average')):null;
@@ -1300,12 +1322,12 @@ function orderedTournamentResults(players,matches,pointSystem=defaultPointSystem
   return players.map(name=>{const wins=tournamentWins(name,matches),losses=tournamentLosses(name,matches),byes=tournamentByes(name,matches),row=rowMap.get(name)||{};return{name,wins,losses,byes,points:pointsForWins(wins,pointSystem)+byes,row}}).sort((a,b)=>b.points-a.points||b.wins-a.wins||a.losses-b.losses||((b.row.lf||0)-(b.row.la||0))-((a.row.lf||0)-(a.row.la||0))||(b.row.lf||0)-(a.row.lf||0)||a.name.localeCompare(b.name,'de'));
 }
 function buildCurrentTournamentRecord(){
-  const rows=standings(),pointSystem=defaultPointSystem(),date=tournamentRecordDate(state),stats={},ordered=orderedTournamentResults(state.players,state.matches,pointSystem),rankByName=new Map(ordered.map((result,index)=>[result.name,index+1]));
+  const rows=standings(),pointSystem=defaultPointSystem(),date=tournamentRecordDate(state),stats={},performanceOrder=orderedTournamentResults(state.players,state.matches,pointSystem),placements=state.settings.doubleKoPlan?doubleKoPlacementNames(state.settings.doubleKoPlan,state.matches):[],orderedNames=[...placements,...performanceOrder.map(result=>result.name)].filter((name,index,list)=>list.indexOf(name)===index),ordered=orderedNames.map(name=>performanceOrder.find(result=>result.name===name)).filter(Boolean),rankByName=new Map(ordered.map((result,index)=>[result.name,index+1]));
   document.querySelectorAll('[data-stat-player]').forEach(row=>{const p=row.dataset.statPlayer;stats[p]={max180:+(row.querySelector('[data-stat-180]')?.value||0),checkout:+(row.querySelector('[data-stat-checkout]')?.value||0)}});
   const playerProfileIds=Object.fromEntries(state.players.map(name=>[name,state.playerProfileIds?.[name]||memberIdForName(name)]).filter(([,id])=>id));
   const results=state.players.map(name=>{const wins=tournamentWins(name,state.matches),losses=tournamentLosses(name,state.matches),byes=tournamentByes(name,state.matches),row=rows.find(r=>r.name===name)||{},profileId=playerProfileIds[name]||'',auto=aggregateAutodartsStats(name);return{name,profileId,wins,losses,byes,rank:rankByName.get(name)||0,legsFor:row.lf||0,legsAgainst:row.la||0,points:pointsForWins(wins,pointSystem)+byes,max180:stats[name]?.max180??auto.max180,checkout:stats[name]?.checkout??auto.highestFinish,average:auto.average,first9:auto.first9,checkoutRate:auto.checkoutRate,until170:auto.until170,darts:auto.darts,statMatches:auto.matches}});
   const eventName=competitionEventName(),storedCompetition=state.scheduledCompetition||state.activeCompetition,storedLabel=storedCompetition==='women'?'Damen':storedCompetition==='open'?'Offen':'Herren',recordName=state.scheduledStandalone?eventName:competitionTitle();
-  return{id:`tournament-${Date.now()}`,scheduledEventId:state.scheduledEventId||'',scheduledSeasonId:state.scheduledSeasonId||assignedSeasonForTournament(state)?.id||'',standalone:!!state.scheduledStandalone,name:recordName,eventName,competition:storedCompetition,competitionLabel:storedLabel,date,mode:state.settings.mode,players:[...state.players],participantCount:state.players.length,winner:ordered[0]?.name||'',top3:ordered.slice(0,3).map(r=>r.name),playerProfileIds,settings:{...state.settings,name:recordName,eventName,competition:storedCompetition},matches:state.matches.map(m=>({...m})),results,createdAt:new Date().toISOString()};
+  return{id:`tournament-${Date.now()}`,scheduledEventId:state.scheduledEventId||'',scheduledSeasonId:state.scheduledSeasonId||assignedSeasonForTournament(state)?.id||'',standalone:!!state.scheduledStandalone,name:recordName,eventName,competition:storedCompetition,competitionLabel:storedLabel,date,mode:state.settings.mode,players:[...state.players],participantCount:state.players.length,winner:placements[0]||ordered[0]?.name||'',top3:ordered.slice(0,3).map(r=>r.name),playerProfileIds,settings:{...state.settings,name:recordName,eventName,competition:storedCompetition},matches:state.matches.map(m=>({...m})),results,createdAt:new Date().toISOString()};
 }
 function loadTournamentHistory(){try{const data=JSON.parse(localStorage.getItem(TOURNAMENT_HISTORY_KEY)||'[]'),deleted=seasonStore?.deletedTournamentIds||{};return Array.isArray(data)?data.filter(item=>!deleted[item?.id]):[]}catch{return[]}}
 function saveTournamentToHistory(){
@@ -1747,16 +1769,37 @@ function liveCompetitionCards(){
     return `<article class="public-live-card"><div><span class="live-dot">LIVE</span><small>${esc(item.label)}</small></div><h3>${esc(competitionEventName(tournament)||tournament.settings?.name||'Vereinsturnier')}</h3><p>${done} von ${total} Spielen beendet · ${tournament.players?.length||0} Teilnehmende</p><div class="public-live-matches">${next.map(match=>`<div><span>${esc(match.a)}</span><b>vs.</b><span>${esc(match.b)}</span></div>`).join('')||'<p>Alle Spiele dieses Bewerbs sind beendet.</p>'}</div><button class="secondary public-live-open" type="button" data-open-live="${item.key}">Vollständigen Spielplan öffnen</button></article>`;
   });
 }
+function publicHomeWinner(record={}){
+  const winner=tournamentRecordChampion(record);
+  if(!winner)return null;
+  const result=(record.results||[]).find(row=>normalizedPlayerName(row.name)===normalizedPlayerName(record.winner||winner)),profileId=record.playerProfileIds?.[record.winner]||record.playerProfileIds?.[winner]||result?.profileId||memberIdForName(winner)||'',reference=profileId||winner,profile=findPublicPlayer(reference),photo=profileId?memberAvatarUrl(profileId):'';
+  return{name:winner,profileId,reference:profile?.reference||'',photo,label:record.competitionLabel||(/^women$/.test(record.competition)?'Damen':/^men$/.test(record.competition)?'Herren':'Vereinsmeisterschaft')};
+}
+function publicHomeFeatureHtml(past=[]){
+  const championships=past.filter(record=>/vereinsmeister/i.test(`${record.name||''} ${record.eventName||''}`)),source=championships[0]||past[0];
+  if(!source)return `<div class="public-feature-copy"><span>DCA NEWS</span><h1 id="publicHomeTitle">Willkommen beim Dartclub Achensee</h1><p>Turniere, Ergebnisse und Vereinsleben an einem Ort.</p><button class="primary" type="button" data-public-nav="ergebnisse">ERGEBNISSE ENTDECKEN <b>→</b></button></div><div class="public-feature-mark" aria-hidden="true"><i></i><strong>DCA</strong><small>ACHENSEE</small></div>`;
+  const sameEvent=championships.filter(record=>record.date===source.date).slice(0,2),featureRecords=sameEvent.length?sameEvent:[source],winners=featureRecords.map(publicHomeWinner).filter(Boolean),year=(source.date||'').slice(0,4)||new Date().getFullYear(),isChampionship=championships.includes(source),title=isChampionship?`Unsere Vereinsmeister ${year}`:(source.name||source.eventName||'Aktuelles aus dem DCA'),summary=isChampionship?'Die Titel sind entschieden.':`${publicDate(source.date)}${source.winner?` · Sieger: ${tournamentPlayerName(source,source.winner)}`:''}`;
+  const winnerHtml=winners.length?`<div class="public-feature-winners">${winners.map(winner=>{const avatar=winner.photo?`<img src="${esc(winner.photo)}" alt="Profilfoto von ${esc(winner.name)}">`:`<span>${esc(winner.name.charAt(0).toUpperCase())}</span>`,content=`${avatar}<small>${esc(winner.label)}</small><b>${esc(winner.name)}</b>`;return winner.reference?`<button type="button" data-public-player="${esc(winner.reference)}" aria-label="Profil von ${esc(winner.name)} öffnen">${content}</button>`:`<div>${content}</div>`}).join('')}</div>`:`<div class="public-feature-mark" aria-hidden="true"><i></i><strong>DCA</strong><small>ACHENSEE</small></div>`;
+  return `<div class="public-feature-copy"><span>${isChampionship?'DCA NEWS':'AKTUELL'}</span><h1 id="publicHomeTitle">${esc(title)}</h1><p>${esc(summary)}</p><button class="primary" type="button" data-public-nav="ergebnisse">ERGEBNISSE ANSEHEN <b>→</b></button></div>${winnerHtml}`;
+}
+function publicHomeNextEventsHtml(upcoming=[]){
+  if(!upcoming.length)return '<p class="public-next-empty">Derzeit ist kein weiterer Vereinstermin eingetragen.</p>';
+  return upcoming.slice(0,2).map(item=>`<article><time datetime="${esc(item.date||'')}"><b>${publicDate(item.date)}</b>${publicStartTime(item)?`<small>${esc(publicStartTime(item))}</small>`:''}</time><div><strong>${esc(item.name||item.eventName||'Spieltag')}</strong><span>${esc([item.competitionLabel,item.seasonName].filter(Boolean).join(' · ')||'DCA Termin')}</span></div><i aria-hidden="true">→</i></article>`).join('');
+}
 function renderPublicHome({refreshRegistrations=true}={}){
   const status=$('#publicHomeStatus');if(!status)return;
   const records=publicTournamentRecords(),today=todayIso(),upcoming=records.filter(item=>item.planned&&item.date>=today),past=records.filter(item=>!item.planned).sort((a,b)=>(b.date||'').localeCompare(a.date||'')),live=liveCompetitionCards();
   status.innerHTML=T20Cloud.authResolved?'':'<span class="public-loading">Aktuelle Vereinsdaten werden geladen …</span>';
-  const liveGames=$('#publicLiveGames'),liveBlock=liveGames?.closest('.public-home-block');liveBlock?.classList.toggle('is-empty-live',!live.length);liveGames.innerHTML=live.join('')||'<div class="public-empty"><p>Derzeit läuft kein Spiel. Sobald ein Turnier startet, erscheint es hier automatisch.</p></div>';
-  $('#publicUpcomingGames').innerHTML=upcoming.map(item=>publicEventRow(item,'future')).join('')||'<div class="public-empty"><p>Derzeit sind keine zukünftigen Spieltage eingetragen.</p></div>';
+  $('#publicFeatureStory').innerHTML=publicHomeFeatureHtml(past);
+  $('#publicNextEvents').innerHTML=publicHomeNextEventsHtml(upcoming);
+  const liveGames=$('#publicLiveGames'),liveDetails=$('#publicLiveDetails'),liveTournamentData=liveTvCompetitions();liveDetails?.classList.toggle('is-empty-live',!live.length);liveDetails?.classList.toggle('hidden',!live.length);liveGames.innerHTML=live.join('');
+  $('#publicLivePulse')?.classList.toggle('is-live',!!live.length);$('#publicLiveTitle').textContent=live.length?`${live.length===1?'Ein Turnier':'Zwei Turniere'} läuft live`:'Heute kein Turnier';
+  const openMatches=liveTournamentData.reduce((sum,item)=>sum+(item.tournament.matches||[]).filter(match=>match.sa===null&&match.b!=='Freilos').length,0),next=upcoming[0];$('#publicLiveSummary').textContent=live.length?`${openMatches} offene ${openMatches===1?'Paarung':'Paarungen'} · aktuelle Spielstände werden automatisch angezeigt`:next?`Nächster Termin: ${next.name||next.eventName||'Spieltag'} · ${publicDate(next.date)}${publicStartTime(next)?` · ${publicStartTime(next)}`:''}`:'Sobald ein Turnier startet, erscheint es hier automatisch.';
+  const visibleUpcoming=upcoming.slice(0,3),upcomingMore=upcoming.length>3?`<p class="public-list-more">+ ${upcoming.length-3} weitere ${upcoming.length-3===1?'Termin':'Termine'} in der Turnierleitung</p>`:'';$('#publicUpcomingGames').innerHTML=visibleUpcoming.map(item=>publicEventRow(item,'future')).join('')+upcomingMore||'<div class="public-empty"><p>Derzeit sind keine zukünftigen Spieltage eingetragen.</p></div>';
   $('#tyrolDartsAd')?.classList.toggle('hidden',appSettings.tyrolDartsAdEnabled===false);
-  const visiblePast=publicPastExpanded?past:past.slice(0,2),pastToggle=past.length>2?`<button class="secondary public-past-toggle" type="button" data-public-past-toggle aria-expanded="${publicPastExpanded}">${publicPastExpanded?'Weniger anzeigen':`Mehr anzeigen (${past.length-2})`} <span>${publicPastExpanded?'↑':'↓'}</span></button>`:'';
+  const visiblePast=publicPastExpanded?past:past.slice(0,3),pastToggle=past.length>3?`<button class="secondary public-past-toggle" type="button" data-public-past-toggle aria-expanded="${publicPastExpanded}">${publicPastExpanded?'Weniger anzeigen':`Mehr anzeigen (${past.length-3})`} <span>${publicPastExpanded?'↑':'↓'}</span></button>`:'';
   $('#publicPastGames').innerHTML=visiblePast.map(item=>publicEventRow(item,'past')).join('')+pastToggle||'<div class="public-empty"><p>Noch keine vergangenen Spiele vorhanden.</p></div>';
-  $('#publicSeasonRankings').innerHTML=(seasonStore.seasons||[]).map(season=>{const rows=visibleSeasonStandings(season),locked=!canViewSeasonStandings(season);return `<article class="public-ranking-card${locked?' is-locked':''}"><div><span>${locked?'ENDSTAND GESPERRT':season.archived?'ARCHIV':'SAISON'}</span><h3>${esc(season.name)}</h3><small>${publicDate(season.startDate)} – ${publicDate(season.endDate)}</small></div>${locked?`<p>${esc(SEASON_STANDINGS_LOCK_MESSAGE)}</p>`:rows.length?`<ol>${rows.slice(0,5).map(row=>`<li><button class="public-player-link" type="button" data-public-player="${esc(playerProfileReference(row))}">${esc(row.name)}</button><b>${row.cleanPoints} Pkt.</b></li>`).join('')}</ol>`:'<p>Noch keine Wertung vorhanden.</p>'}<button class="link-btn" type="button" data-season-open="${esc(season.id)}">${locked?'Hinweis öffnen':'Vollständige Rangliste öffnen'}</button></article>`}).join('')||'<div class="public-empty"><p>Noch keine Saisonranglisten vorhanden.</p></div>';
+  const homeSeasons=[...(seasonStore.seasons||[])].sort((a,b)=>Number(!!a.archived)-Number(!!b.archived)||String(b.endDate||'').localeCompare(String(a.endDate||''))).slice(0,2);$('#publicSeasonRankings').innerHTML=homeSeasons.map(season=>{const rows=visibleSeasonStandings(season),locked=!canViewSeasonStandings(season);return `<article class="public-ranking-card${locked?' is-locked':''}"><div><span>${locked?'ENDSTAND GESPERRT':season.archived?'ARCHIV':'SAISON'}</span><h3>${esc(season.name)}</h3><small>${publicDate(season.startDate)} – ${publicDate(season.endDate)}</small></div>${locked?`<p>${esc(SEASON_STANDINGS_LOCK_MESSAGE)}</p>`:rows.length?`<ol>${rows.slice(0,3).map(row=>`<li><button class="public-player-link" type="button" data-public-player="${esc(playerProfileReference(row))}">${esc(row.name)}</button><b>${row.cleanPoints} Pkt.</b></li>`).join('')}</ol>`:'<p>Noch keine Wertung vorhanden.</p>'}<button class="link-btn" type="button" data-season-open="${esc(season.id)}">${locked?'Hinweis öffnen':'Rangliste öffnen'}</button></article>`}).join('')||'<div class="public-empty"><p>Noch keine Saisonranglisten vorhanden.</p></div>';
   if(refreshRegistrations)loadTournamentRegistrations();
 }
 
@@ -2541,4 +2584,4 @@ $('#statsStationFile').addEventListener('change',event=>analyzeStatsStationImage
 $('#statsStationMatch').addEventListener('change',()=>{$('#statsStationPreview').classList.add('hidden');$('#statsStationStatus').textContent='Jetzt den Autodarts-Screenshot dieses Spiels auswählen.';renderStatsStationStored()});
 $('#statsStationPreview').addEventListener('submit',event=>{if(event.target.id!=='statsStationConfirmForm')return;event.preventDefault();saveStatsStationResult(event.target)});
 $('#statsStationStored').addEventListener('click',event=>{if(event.target.id==='deleteStatsStationBtn')deleteStatsStationResult()});
-registerAccess();applyTheme();applyTournamentDefaults();fillSeasonForm();renderPlayers();renderSettingsForm();renderNavigation();repairScheduledTournamentAssignments();renderSeasonView();applyAppRoute();T20Cloud.init().finally(applyAppRoute);
+registerAccess();applyTheme();applyTournamentDefaults();fillSeasonForm();renderPlayers();renderSettingsForm();renderNavigation();repairScheduledTournamentAssignments();repairDoubleKoTournamentPlacements();renderSeasonView();applyAppRoute();T20Cloud.init().finally(applyAppRoute);
