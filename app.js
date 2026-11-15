@@ -1600,6 +1600,8 @@ function exportStandingsCsv(){const season=selectedSeason();if(!season)return;co
 function publicDate(value){if(!value)return'Datum offen';const date=new Date(`${value}T12:00:00`);return Number.isNaN(date.getTime())?esc(value):date.toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'})}
 function publicStartTime(record={}){const value=record.startTime||record.settings?.startTime||record.settings?.start||'';return /^\d{2}:\d{2}$/.test(value)?`${value} Uhr`:''}
 function publicTournamentKey(record={}){
+  const id=String(record.id||'').trim();
+  if(id)return `${record.planned?'planned':'completed'}|${id}`;
   const baseName=(record.eventName||record.name||'').trim().replace(/\s+[–-]\s+(Herren|Damen)$/i,'').replace(/\s+/g,' ').toLowerCase();
   const competition=record.competition||(/damen/i.test(record.competitionLabel||record.name||'')?'women':/herren/i.test(record.competitionLabel||record.name||'')?'men':'open');
   return `${record.date||''}|${baseName}|${competition}`;
