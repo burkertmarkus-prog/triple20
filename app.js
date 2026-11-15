@@ -1139,10 +1139,13 @@ function persistSeasons(){localStorage.setItem(SEASON_KEY,JSON.stringify(seasonS
 function seasonItemTime(item={},fallback=0){const value=Date.parse(item.updatedAt||item.deletedAt||item.completedAt||item.createdAt||'');return Number.isFinite(value)?value:fallback}
 function mergeSeasonStores(localStore,remoteStore){
   const local=localStore&&Array.isArray(localStore.seasons)?localStore:{seasons:[]},remote=remoteStore&&Array.isArray(remoteStore.seasons)?remoteStore:{seasons:[]};
+  const deletedSeasonIds={...(remote.deletedSeasonIds||{}),...(local.deletedSeasonIds||{})};
+  for(const [id,at] of Object.entries(remote.deletedSeasonIds||{})){if(Date.parse(at)>Date.parse(deletedSeasonIds[id]||''))deletedSeasonIds[id]=at}
   const deletedTournamentIds={...(remote.deletedTournamentIds||{}),...(local.deletedTournamentIds||{})};
   for(const [id,at] of Object.entries(remote.deletedTournamentIds||{})){if(Date.parse(at)>Date.parse(deletedTournamentIds[id]||''))deletedTournamentIds[id]=at}
   const seasonIds=new Set([...local.seasons,...remote.seasons].map(season=>season?.id).filter(Boolean)),seasons=[];
   for(const id of seasonIds){
+    if(deletedSeasonIds[id])continue;
     const left=local.seasons.find(season=>season.id===id),right=remote.seasons.find(season=>season.id===id);
     if(!left||!right){const only=structuredClone(left||right);only.tournaments=(only.tournaments||[]).filter(tournament=>!deletedTournamentIds[tournament.id]);seasons.push(only);continue}
     const leftTime=seasonItemTime(left),rightTime=seasonItemTime(right),newer=leftTime>=rightTime?left:right,older=newer===left?right:left;
@@ -1155,7 +1158,7 @@ function mergeSeasonStores(localStore,remoteStore){
     const completedScheduleIds=new Set(tournaments.filter(item=>!item.planned).map(item=>String(item.scheduledEventId||'')).filter(Boolean));
     seasons.push({...structuredClone(older),...structuredClone(newer),tournaments:tournaments.filter(item=>!item.planned||!completedScheduleIds.has(String(item.id))).sort((a,b)=>(a.date||'').localeCompare(b.date||''))});
   }
-  return{...structuredClone(remote),...structuredClone(local),seasons,deletedTournamentIds};
+  return{...structuredClone(remote),...structuredClone(local),seasons,deletedSeasonIds,deletedTournamentIds};
 }
 async function mergeGuenterSeasonEntries(){
   const migrationKey='triple20_migration_guenter_v2';if(localStorage.getItem(migrationKey)==='done')return false;
@@ -1255,12 +1258,12 @@ function repairScheduledTournamentAssignments(){
   if(changed){for(const season of affected){season.tournaments.sort((a,b)=>(a.date||'').localeCompare(b.date||''));season.stats=calculateSeasonStatisticsSummary(season)}persistSeasons()}
   return changed;
 }
-function deleteSeason(seasonId){
+async function deleteSeason(seasonId){
   if(!isClubMode()||!canManageClubData())return null;
   const i=seasonStore.seasons.findIndex(s=>s.id===seasonId);if(i<0)return null;
-  const deleted=seasonStore.seasons.splice(i,1)[0],next=seasonStore.seasons.find(s=>!s.archived)||seasonStore.seasons[0];
+  const deleted=seasonStore.seasons.splice(i,1)[0];seasonStore.deletedSeasonIds=seasonStore.deletedSeasonIds||{};seasonStore.deletedSeasonIds[seasonId]=new Date().toISOString();const next=seasonStore.seasons.find(s=>!s.archived)||seasonStore.seasons[0];
   selectedSeasonId=next?.id||'';if(selectedSeasonId)localStorage.setItem('tripleTwentySelectedSeason',selectedSeasonId);else localStorage.removeItem('tripleTwentySelectedSeason');
-  localStorage.setItem(SEASON_KEY,JSON.stringify(seasonStore));renderSeasonView();return deleted;
+  persistSeasons();renderSeasonView();renderPublicHome({refreshRegistrations:false});await T20Cloud.syncAll({force:true,keys:[SEASON_KEY]});if(T20Cloud.pendingKeys?.has(SEASON_KEY))alert(`„${deleted.name||'Die Wertung'}“ wurde auf diesem Gerät gelöscht, aber die Online-Löschung ist noch nicht bestätigt. Bitte die App geöffnet lassen und nicht abmelden.`);return deleted;
 }
 function updateSeasonFromForm(){
   if(!canManageClubData())return null;
