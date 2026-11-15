@@ -34,7 +34,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20261115-80">
+  <link rel="stylesheet" href="styles.css?v=20261115-81">
 </head>
 <body>
   <header class="hero">
@@ -49,7 +49,7 @@
       <div class="public-home-lead">
         <article id="publicFeatureStory" class="public-feature-story" aria-labelledby="publicHomeTitle"></article>
         <aside class="public-next-panel" aria-labelledby="publicNextTitle">
-          <div class="public-portal-heading"><span>TERMINE</span><h2 id="publicNextTitle">Als Nächstes</h2></div>
+          <div class="public-portal-heading public-editable-heading"><div><span id="publicInfoEyebrow">TERMINE</span><h2 id="publicNextTitle">Als Nächstes</h2></div><button class="secondary public-home-edit hidden" type="button" data-home-editor="info">Bearbeiten</button></div>
           <div id="publicNextEvents" class="public-next-events"></div>
         </aside>
       </div>
@@ -186,6 +186,32 @@
           <label>Farbmodus<select id="themeMode"><option value="light">Hell & freundlich</option><option value="classic">Triple20 Blau</option><option value="midnight">Mitternacht</option><option value="steel">Stahlgrau</option><option value="warm">Warmup</option></select></label>
           <div id="themePreview" class="theme-preview"></div>
         </div>
+        <section id="homePageSettings" class="home-page-settings">
+          <div class="home-editor-heading"><span class="eyebrow">ÖFFENTLICHE STARTSEITE</span><h3>News &amp; Infokachel</h3><p>Die DCA-News können ein eigenes Hintergrundfoto erhalten. Die rechte Kachel zeigt entweder automatisch kommende Turniere oder frei eingetragene Hinweise wie Öffnungszeiten.</p></div>
+          <div class="home-editor-grid">
+            <article id="homeNewsEditor" class="home-editor-card">
+              <h4>DCA-News</h4>
+              <div class="grid">
+                <label>Kleine Überschrift<input id="homeNewsEyebrow" maxlength="30" placeholder="DCA NEWS"></label>
+                <label>Hauptüberschrift optional<input id="homeNewsTitle" maxlength="80" placeholder="Leer = automatisch"></label>
+              </div>
+              <label>Text optional<textarea id="homeNewsText" rows="3" maxlength="240" placeholder="Leer = automatisch"></textarea></label>
+              <label>Bildausrichtung<select id="homeNewsImagePosition"><option value="center">Mittig</option><option value="top">Oben</option><option value="bottom">Unten</option></select></label>
+              <div id="homeNewsImagePreview" class="home-news-image-preview"><span>Noch kein Hintergrundbild</span></div>
+              <div class="home-image-actions"><label class="secondary">Hintergrundbild auswählen<input id="homeNewsImageInput" type="file" accept="image/jpeg,image/png,image/webp,.heic,.heif"></label><button id="removeHomeNewsImageBtn" class="danger hidden" type="button">Bild entfernen</button></div>
+              <small>Das Bild wird automatisch auf ein webtaugliches Format verkleinert.</small>
+            </article>
+            <article id="homeInfoEditor" class="home-editor-card">
+              <h4>Rechte Infokachel</h4>
+              <div class="grid">
+                <label>Kleine Überschrift<input id="homeInfoEyebrow" maxlength="30" placeholder="AUF EINEN BLICK"></label>
+                <label>Titel<input id="homeInfoTitle" maxlength="60" placeholder="Nächste Termine"></label>
+              </div>
+              <label>Inhalt<select id="homeInfoMode"><option value="auto">Kommende Turniere automatisch</option><option value="custom">Eigene Hinweise anzeigen</option></select></label>
+              <label>Eigene Hinweise<textarea id="homeInfoItems" rows="5" maxlength="600" placeholder="Dienstag | ab 18:00 Uhr&#10;Freitag | Vereinsabend&#10;Dartlokal Buchau | Gäste willkommen"></textarea><small>Eine Zeile pro Eintrag. Titel und Zusatz mit | trennen.</small></label>
+            </article>
+          </div>
+        </section>
         <button class="primary" type="submit">EINSTELLUNGEN SPEICHERN <span>→</span></button>
       </form>
     </section>
@@ -283,7 +309,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="double-ko.js?v=20261005-52"></script>
-  <script src="app.js?v=20261115-80"></script>
+  <script src="app.js?v=20261115-81"></script>
   <script src="pwa.js?v=20261005-52"></script>
 </body>
 </html>
