@@ -34,7 +34,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20261115-83">
+  <link rel="stylesheet" href="styles.css?v=20261116-85">
 </head>
 <body>
   <header class="hero">
@@ -221,6 +221,10 @@
                 <label>Vereinslokal<input id="clubInfoVenue" maxlength="100" placeholder="z. B. Dartlokal Buchau"></label>
               </div>
               <label>Kurzbeschreibung<textarea id="clubInfoDescription" rows="4" maxlength="600" placeholder="Wer wir sind und was unseren Verein ausmacht"></textarea></label>
+              <div class="grid"><label>Bildplatzierung<select id="clubInfoImageLayout"><option value="right">Motiv rechts</option><option value="full">Vollflächig</option></select></label><label>Vertikaler Ausschnitt<select id="clubInfoImagePosition"><option value="center">Mittig</option><option value="top">Oben</option><option value="bottom">Unten</option></select></label></div>
+              <div id="clubInfoImagePreview" class="home-news-image-preview"><span>Noch kein Hintergrundbild</span></div>
+              <div class="home-image-actions"><label class="secondary">Hintergrundbild auswählen<input id="clubInfoImageInput" type="file" accept="image/jpeg,image/png,image/webp,.heic,.heif"></label><button id="removeClubInfoImageBtn" class="danger hidden" type="button">Bild entfernen</button></div>
+              <small>Das Bild wird unabhängig vom DCA-News-Bild gespeichert und automatisch verkleinert.</small>
               <div class="grid">
                 <label>Adresse<textarea id="clubInfoAddress" rows="3" maxlength="240" placeholder="Straße, PLZ Ort"></textarea></label>
                 <label>Öffnungszeiten<textarea id="clubInfoHours" rows="3" maxlength="300" placeholder="Dienstag | ab 18:00 Uhr&#10;Freitag | ab 18:00 Uhr"></textarea></label>
@@ -330,7 +334,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="double-ko.js?v=20261005-52"></script>
-  <script src="app.js?v=20261115-83"></script>
+  <script src="app.js?v=20261116-85"></script>
   <script src="pwa.js?v=20261005-52"></script>
 </body>
 </html>
