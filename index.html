@@ -44,7 +44,7 @@
     "sport": "Darts"
   }
   </script>
-  <link rel="stylesheet" href="styles.css?v=20261116-96">
+  <link rel="stylesheet" href="styles.css?v=20261116-97">
 </head>
 <body>
   <header id="siteHeader" class="hero public-site-header">
@@ -120,7 +120,7 @@
     <section id="dashboardSection" class="internal-dashboard hidden" aria-labelledby="dashboardTitle">
       <div class="internal-dashboard-heading">
         <div><span>TRIPLE20 · VEREINSVERWALTUNG</span><h1 id="dashboardTitle">Guten Morgen, Turnierleitung</h1><p>Turniere, Mitglieder und die öffentliche DCA-Seite an einem Ort verwalten.</p></div>
-        <button id="dashboardPublicHomeBtn" class="secondary" type="button">← Zur öffentlichen DCA-Seite</button>
+        <div class="internal-dashboard-heading-actions"><button id="dashboardMemberViewBtn" class="secondary" type="button">Mitgliederansicht</button><button id="dashboardPublicHomeBtn" class="secondary" type="button">← Zur öffentlichen DCA-Seite</button></div>
       </div>
       <div id="dashboardCards" class="internal-summary-grid"></div>
       <div class="internal-dashboard-main">
@@ -133,6 +133,11 @@
         </aside>
       </div>
       <div id="dashboardPanel" class="internal-dashboard-panel"></div>
+    </section>
+
+    <section id="memberPreviewSection" class="member-preview-section hidden" aria-labelledby="memberPreviewTitle">
+      <div class="member-preview-toolbar"><div><span>VORSCHAU · NUR ANSICHT</span><h1 id="memberPreviewTitle">So sehen Mitglieder ihr Konto</h1><p>Diese Vorschau zeigt Aufbau und Inhalte, ohne die Rolle oder Daten eines Mitglieds zu verändern.</p></div><button id="memberPreviewBackBtn" class="secondary" type="button">← Zur Verwaltung</button></div>
+      <div id="memberPreviewPanel" class="cloud-panel card slim-card"></div>
     </section>
 
     <section id="clubInfoSection" class="public-club-page hidden" aria-labelledby="clubInfoTitle">
@@ -385,7 +390,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="double-ko.js?v=20261005-52"></script>
-  <script src="app.js?v=20261116-96"></script>
-  <script src="pwa.js?v=20261116-96"></script>
+  <script src="app.js?v=20261116-97"></script>
+  <script src="pwa.js?v=20261116-97"></script>
 </body>
 </html>

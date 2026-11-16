@@ -2317,6 +2317,7 @@ async function applyAppRoute(){
     if(area==='vereinsduell-tv'){showClubDuelTv(duel,false);return}
     if(area==='statistikstation'){showStatsStation(false);return}
     if(area==='verwaltung'){isAdmin()?showDashboard(false):showLogin(false);return}
+    if(area==='mitgliedervorschau'){isAdmin()?showMemberPreview(false):showLogin(false);return}
     if(area==='empfehlungen'||product){showHome(false);return}
     if(area==='spieler'&&player){showPlayerProfile(player,false);return}
     if(area==='verein'){showClubInfo(false);return}
@@ -2330,7 +2331,7 @@ async function applyAppRoute(){
     showHome(false);
   }finally{applyingRoute=false;updatePageMetadata(area)}
 }
-function hideMainSections(){stopTvRefresh();stopHomeNewsSlider();document.body.classList.remove('tv-mode','tv-tree-mode','club-duel-tv-mode');['tvSection','clubDuelTvSection','publicHomeSection','clubInfoSection','playerProfileSection','dashboardSection','authSection','settingsSection','seasonSection','clubDuelsSection','shopSection','statsStationSection','dartVisionLabSection','tournamentManagementPanel','tournamentSubnav','competitionNav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
+function hideMainSections(){stopTvRefresh();stopHomeNewsSlider();document.body.classList.remove('tv-mode','tv-tree-mode','club-duel-tv-mode');['tvSection','clubDuelTvSection','publicHomeSection','clubInfoSection','playerProfileSection','dashboardSection','memberPreviewSection','authSection','settingsSection','seasonSection','clubDuelsSection','shopSection','statsStationSection','dartVisionLabSection','tournamentManagementPanel','tournamentSubnav','competitionNav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
 function renderNavigation(){
   const admin=isAdmin(),internal=currentShellMode==='internal'&&admin;
   $('.club-settings-block')?.classList.remove('hidden');
@@ -2356,6 +2357,21 @@ function renderDashboard(){
 }
 function showHome(updateUrl=true){setShellMode('public');hideMainSections();$('#publicHomeSection')?.classList.remove('hidden');renderPublicHome();renderNavigation();if(updateUrl)updateAppUrl('start')}
 function showDashboard(updateUrl=true){if(!isAdmin()){showLogin(updateUrl);return}setShellMode('internal');hideMainSections();$('#dashboardSection')?.classList.remove('hidden');renderDashboard();renderNavigation();if(updateUrl)updateAppUrl('verwaltung')}
+function memberPreviewModel(){
+  const profile=T20Cloud.profile||{},nickname=(profile.nickname||'').trim(),userId=T20Cloud.user?.id||'',seasons=[...(seasonStore.seasons||[])].sort((a,b)=>Number(!!a.archived)-Number(!!b.archived)||(b.startDate||'').localeCompare(a.startDate||''));
+  let selected=null;
+  for(const season of seasons){const rows=calculateSeasonStandings(season),row=rows.find(item=>(userId&&item.profileId===userId)||(nickname&&normalizedPlayerName(item.name)===normalizedPlayerName(nickname)));if(row){selected={season,row,rank:rows.indexOf(row)+1,sample:false};break}}
+  if(!selected)for(const season of seasons){const rows=calculateSeasonStandings(season);if(rows.length){selected={season,row:rows[0],rank:1,sample:true};break}}
+  const shownName=selected?.row?.name||nickname||'Beispielmitglied',displayName=selected?.sample?'Beispielansicht mit öffentlichen Ranglistendaten':(profile.display_name||'Persönliches Mitgliedskonto');
+  return{...selected,shownName,displayName};
+}
+function renderMemberPreview(){
+  const panel=$('#memberPreviewPanel');if(!panel)return;const model=memberPreviewModel(),next=publicTournamentRecords().filter(item=>item.planned&&item.date>=todayIso()).sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.startTime||'').localeCompare(b.startTime||''))[0],initial=esc(model.shownName.charAt(0).toUpperCase()||'M');
+  let overview='';
+  if(model.row&&model.season){const recent=model.row.entries.filter(entry=>entry.present).sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,3),balance=model.row.wins+model.row.losses?`${model.row.wins} : ${model.row.losses}`:'0 : 0';overview=`<section class="personal-overview"><div class="personal-overview-head"><div><span class="eyebrow">MEINE ÜBERSICHT</span><h3>${esc(model.season.name)}</h3><p>${esc(model.shownName)} · Persönliche Saisonwerte${model.sample?' · Beispieldaten':''}</p></div><div class="personal-overview-actions"><button class="secondary" type="button" disabled>Mein öffentliches Profil</button><button class="secondary" type="button" disabled>Rangliste öffnen</button></div></div><div class="personal-stat-grid"><article><small>Rang</small><b>${model.rank}</b></article><article><small>Punkte</small><b>${model.row.cleanPoints}</b></article><article><small>Turniere</small><b>${model.row.played}</b></article><article><small>Siege : Niederlagen</small><b>${balance}</b></article></div><div class="personal-overview-detail"><section><h4>Letzte Ergebnisse</h4>${recent.length?`<div class="personal-results">${recent.map(entry=>`<div><span><b>${publicDate(entry.date)}</b>${esc(entry.name||'Spieltag')}</span><strong>${entry.rank?`${entry.rank}. Platz · `:''}${entry.points} Pkt.</strong></div>`).join('')}</div>`:'<p class="view-note">Noch kein gespielter Termin vorhanden.</p>'}</section><section class="personal-next-event"><h4>Nächster Spieltag</h4>${next?`<b>${esc(next.name||next.eventName||'Spieltag')}</b><p>${publicDate(next.date)}${publicStartTime(next)?` · ${esc(publicStartTime(next))}`:''}</p><small>${esc([next.competitionLabel,next.seasonName].filter(Boolean).join(' · ')||'Weitere Informationen folgen')}</small>`:'<p class="view-note">Derzeit ist kein zukünftiger Spieltag eingetragen.</p>'}</section></div></section>`}else overview=`<section class="personal-overview personal-overview-empty"><div><span class="eyebrow">MEINE ÜBERSICHT</span><h3>Noch keine Saisonzuordnung</h3><p>So erscheint das Konto, bevor ein Mitgliederprofil einer Saison zugeordnet wurde.</p></div></section>`;
+  panel.innerHTML=`<section class="member-profile member-view-preview"><div class="member-preview-note"><b>Nur Vorschau</b><span>Es wird kein Mitgliedskonto geöffnet oder verändert.</span></div><div class="profile-heading"><div><span class="profile-avatar">${initial}</span><div><h3>${esc(model.shownName)}</h3><p class="view-note">${esc(model.displayName)}</p></div></div></div>${overview}<details class="member-account-settings" open><summary><span><b>Profil &amp; Benachrichtigungen</b><small>Push, Profilfoto und persönliche Daten verwalten</small></span><i>⌄</i></summary><div class="member-account-settings-body"><section class="push-card"><div><span class="eyebrow">BENACHRICHTIGUNGEN</span><h3>Nichts mehr verpassen</h3><p>Mitglieder können Hinweise zu Spieltagen und Vereinsmeldungen aktivieren.</p></div><button class="primary" type="button" disabled>PUSH AKTIVIEREN</button></section><section class="member-profile-settings"><div class="member-settings-heading"><span class="eyebrow">PROFIL</span><h3>Persönliche Angaben</h3></div><div class="profile-form"><label>Spitzname<input value="${esc(model.shownName)}" disabled></label><label>Vor- und Zuname<input value="${esc(model.displayName)}" disabled></label><button class="primary" type="button" disabled>PROFIL SPEICHERN</button></div><p class="view-note">In der echten Mitgliederansicht kann ausschließlich das angemeldete Mitglied seine eigenen Daten bearbeiten.</p></section></div></details></section>`;
+}
+function showMemberPreview(updateUrl=true){if(!isAdmin()){showLogin(updateUrl);return}setShellMode('internal');hideMainSections();$('#memberPreviewSection')?.classList.remove('hidden');renderMemberPreview();renderNavigation();if(updateUrl)updateAppUrl('mitgliedervorschau')}
 function safeClubLink(value=''){try{const url=new URL(value);return url.protocol==='https:'?url.href:''}catch{return''}}
 function clubInfoLines(value=''){return String(value).split('\n').map(line=>line.trim()).filter(Boolean)}
 function membershipStatusLabel(status='new'){return({new:'Neu',contacted:'Kontaktiert',completed:'Aufgenommen',rejected:'Abgelehnt'})[status]||'Neu'}
@@ -2655,6 +2671,8 @@ $('#showDashboardBtn')?.addEventListener('click',()=>showDashboard());
 $('#showInternalSeasonBtn')?.addEventListener('click',showInternalSeason);
 $('#dashboardPublicHomeBtn')?.addEventListener('click',()=>showHome());
 $('#dashboardPreviewBtn')?.addEventListener('click',()=>showHome());
+$('#dashboardMemberViewBtn')?.addEventListener('click',()=>showMemberPreview());
+$('#memberPreviewBackBtn')?.addEventListener('click',()=>showDashboard());
 $('#dashboardSection')?.addEventListener('click',event=>{const start=event.target.closest('[data-dashboard-tournament]');if(start){setActiveCompetition(start.dataset.dashboardTournament);showTournament()}});
 $('#showTournamentBtn').addEventListener('click',()=>{if(canManageTournament())showTournament()});
 $('#showClubDuelsBtn')?.addEventListener('click',()=>showClubDuels());
