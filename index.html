@@ -34,7 +34,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20261116-85">
+  <link rel="stylesheet" href="styles.css?v=20261116-86">
 </head>
 <body>
   <header class="hero">
@@ -194,7 +194,8 @@
           <div class="home-editor-heading"><span class="eyebrow">ÖFFENTLICHE STARTSEITE</span><h3>News &amp; Infokachel</h3><p>Die DCA-News können ein eigenes Hintergrundfoto erhalten. Die rechte Kachel zeigt entweder automatisch kommende Turniere oder frei eingetragene Hinweise wie Öffnungszeiten.</p></div>
           <div class="home-editor-grid">
             <article id="homeNewsEditor" class="home-editor-card">
-              <h4>DCA-News</h4>
+              <div class="home-news-editor-head"><h4>DCA-News-Slider</h4><button id="addHomeNewsItemBtn" class="secondary" type="button">+ Neue News</button></div>
+              <div id="homeNewsItemTabs" class="home-news-item-tabs" aria-label="News auswählen"></div>
               <div class="grid">
                 <label>Kleine Überschrift<input id="homeNewsEyebrow" maxlength="30" placeholder="DCA NEWS"></label>
                 <label>Hauptüberschrift optional<input id="homeNewsTitle" maxlength="80" placeholder="Leer = automatisch"></label>
@@ -202,8 +203,8 @@
               <label>Text optional<textarea id="homeNewsText" rows="3" maxlength="240" placeholder="Leer = automatisch"></textarea></label>
               <div class="grid"><label>Bildplatzierung<select id="homeNewsImageLayout"><option value="right">Motiv rechts</option><option value="full">Vollflächig</option></select></label><label>Vertikaler Ausschnitt<select id="homeNewsImagePosition"><option value="center">Mittig</option><option value="top">Oben</option><option value="bottom">Unten</option></select></label></div>
               <div id="homeNewsImagePreview" class="home-news-image-preview"><span>Noch kein Hintergrundbild</span></div>
-              <div class="home-image-actions"><label class="secondary">Hintergrundbild auswählen<input id="homeNewsImageInput" type="file" accept="image/jpeg,image/png,image/webp,.heic,.heif"></label><button id="removeHomeNewsImageBtn" class="danger hidden" type="button">Bild entfernen</button></div>
-              <small>Das Bild wird automatisch auf ein webtaugliches Format verkleinert.</small>
+              <div class="home-image-actions"><label class="secondary">Hintergrundbild auswählen<input id="homeNewsImageInput" type="file" accept="image/jpeg,image/png,image/webp,.heic,.heif"></label><button id="removeHomeNewsImageBtn" class="danger hidden" type="button">Bild entfernen</button><button id="deleteHomeNewsItemBtn" class="danger hidden" type="button">News löschen</button></div>
+              <small>Ab zwei Beiträgen wechselt die Startseite automatisch alle 9 Sekunden. Das Bild wird automatisch verkleinert.</small>
             </article>
             <article id="homeInfoEditor" class="home-editor-card">
               <h4>Rechte Infokachel</h4>
@@ -334,7 +335,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="double-ko.js?v=20261005-52"></script>
-  <script src="app.js?v=20261116-85"></script>
+  <script src="app.js?v=20261116-86"></script>
   <script src="pwa.js?v=20261005-52"></script>
 </body>
 </html>
