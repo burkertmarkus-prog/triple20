@@ -25,6 +25,10 @@ const SUPABASE_URL='https://hidjvylnxmtlvtiomktu.supabase.co';
 const TRIPLE20_PUBLIC_URL='https://triple20.at/';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_IzH5CLw7baFsaU005Bqh7w_lRMlrMLo';
 const PUSH_FUNCTION_NAME='triple20-push';
+// Lokale Entwicklungsadressen bleiben vollständig von der produktiven Cloud
+// getrennt. So können Oberfläche und lokal gespeicherte Testdaten gefahrlos
+// verändert werden, ohne Vereinsdaten, Konten oder Push-Nachrichten anzutasten.
+const T20_LOCAL_PREVIEW=['localhost','127.0.0.1','::1'].includes(location.hostname);
 // Die geöffnete Saison ist eine persönliche Browser-Auswahl und darf nicht
 // durch den regelmäßigen Cloud-Abgleich anderer Geräte überschrieben werden.
 const CLOUD_DATA_KEYS=['dartTournament','tripleTwentySeasons','triple20_settings','triple20_tournaments',CLUB_DUELS_KEY,TV_SETTINGS_KEY];
@@ -70,6 +74,7 @@ let editingHomeNewsId='main';
 let publicHomeNewsIndex=0;
 let publicHomeNewsTimer=null;
 let publicHomeNewsPast=[];
+let currentShellMode='public';
 let resultsViewMode='leagues';
 const expandedStandaloneTournamentIds=new Set();
 let clubDuelSetupOpen=false;
@@ -150,7 +155,7 @@ const themeModes={
   warm:{label:'Warmup',theme:{background:'#FFF4E8',card:'#FFFFFF',primary:'#F97316',accent:'#FDBA74',text:'#23170F'}}
 };
 function themeModeForTheme(theme=appSettings.theme){return Object.entries(themeModes).find(([,m])=>Object.keys(m.theme).every(k=>String(m.theme[k]).toLowerCase()===String(theme?.[k]).toLowerCase()))?.[0]||appSettings.themeMode||'light'}
-function applyTheme(){const t=appSettings.theme||defaultSettings.theme,r=document.documentElement;r.style.setProperty('--cream',t.background);r.style.setProperty('--paper',`${t.card}f2`);r.style.setProperty('--blue',t.primary);r.style.setProperty('--blue-2',t.primary);r.style.setProperty('--green',t.primary);r.style.setProperty('--orange',t.primary);r.style.setProperty('--accent',t.accent);r.style.setProperty('--ink',t.text);r.style.setProperty('--line','#CAD8EA');if(document.body)document.body.style.background=`radial-gradient(circle at 15% 0%, ${t.primary}22, transparent 34%), linear-gradient(180deg, #F8FBFF 0%, ${t.background} 48%, #FFFFFF 100%)`;document.title=`${appSettings.appName||'Triple20'} – Dartturniere`;const brand=$('.brand strong');if(brand)brand.innerHTML=esc(appSettings.appName||'Triple20').replace(/20/g,'<span>20</span>');const sub=$('#brandSubtitle');if(sub)sub.textContent=isClubMode()&&appSettings.club.name?appSettings.club.name:'Turnierleitung';const footer=$('#footerAppName');if(footer)footer.textContent=appSettings.appName||'Triple20'}
+function applyTheme(){const t=appSettings.theme||defaultSettings.theme,r=document.documentElement;r.style.setProperty('--cream',t.background);r.style.setProperty('--paper',`${t.card}f2`);r.style.setProperty('--blue',t.primary);r.style.setProperty('--blue-2',t.primary);r.style.setProperty('--green',t.primary);r.style.setProperty('--orange',t.primary);r.style.setProperty('--accent',t.accent);r.style.setProperty('--ink',t.text);r.style.setProperty('--line','#CAD8EA');if(document.body)document.body.style.background=`radial-gradient(circle at 15% 0%, ${t.primary}22, transparent 34%), linear-gradient(180deg, #F8FBFF 0%, ${t.background} 48%, #FFFFFF 100%)`;const clubBrand=$('.public-brand-copy strong');if(clubBrand)clubBrand.textContent=appSettings.club.name||'Dartclub Achensee';const footer=$('#footerAppName');if(footer)footer.textContent=appSettings.appName||'Triple20';updatePageMetadata(new URLSearchParams(location.search).get('bereich')||'start')}
 function shuffle(values){const a=[...values];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function todayIso(){return new Date().toISOString().slice(0,10)}
 function currentHalfYear(date=new Date()){const y=date.getFullYear(),h=date.getMonth()<6?'H1':'H2';return{year:y,half:h,name:`${y} ${h}`,start:`${y}-${h==='H1'?'01-01':'07-01'}`,end:`${y}-${h==='H1'?'06-30':'12-31'}`}}
@@ -403,6 +408,7 @@ function renderStaffMemberIdentity(){
 function renderCloudPanel(){
   const panel=$('#cloudAdminPanel');if(!panel||!window.T20Cloud)return;
   const c=T20Cloud,summary=backupPreview();
+  if(T20_LOCAL_PREVIEW&&!c.session){replaceCloudPanelHtml(panel,`<div class="account-grid unified-login"><section><span class="eyebrow">SICHERER TESTBETRIEB</span><h3>Lokaler Testmodus</h3><p class="view-note">Anmeldung und Cloud-Speicherung sind in dieser Vorschau ausgeschaltet. Änderungen bleiben ausschließlich in diesem Browser auf diesem Mac.</p><p class="login-success">Die produktiven Vereinsdaten und Mitgliederkonten werden nicht verändert.</p><button id="enterLocalAdminPreviewBtn" class="primary" type="button">VERWALTUNG LOKAL TESTEN</button></section></div>`);return}
   if(c.authHandoffActive){panel.innerHTML=`<section class="auth-handoff"><span>✓</span><h3>Anmeldung erfolgreich</h3><p>Triple20 ist bereits in einem anderen Tab geöffnet. Dieser Tab wird geschlossen.</p><div><button id="closeAuthTabBtn" class="primary" type="button">DIESES FENSTER SCHLIESSEN</button><button id="continueAuthTabBtn" class="secondary" type="button">HIER WEITER</button></div></section>`;return}
   if(!c.session){const memberLogin=c.otpEmail?`<form id="memberCodeForm" class="member-code-form"><label>Anmeldecode für <b>${esc(c.otpEmail)}</b><input id="memberOtpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="6-stelliger Code" required></label><button class="primary" type="submit">${c.otpVerifyBusy?'Wird geprüft …':'CODE BESTÄTIGEN'}</button><button id="changeMemberEmailBtn" class="secondary" type="button">Andere E-Mail</button><button id="resendMemberCodeBtn" class="link-btn" type="button" ${c.magicLinkBusy?'disabled':''}>${c.magicLinkBusy?'Code wird gesendet …':'Neuen Code senden'}</button></form>`:`<form id="memberLoginForm" class="member-login"><input id="memberEmail" type="email" placeholder="E-Mail-Adresse" autocomplete="email" required><button class="primary" type="submit">${c.magicLinkBusy?'Code wird gesendet …':'ANMELDECODE ANFORDERN'}</button></form>`;replaceCloudPanelHtml(panel,`<div class="account-grid unified-login"><section><h3>Anmeldung</h3><p class="view-note">Mitglieder, Turnierleitungen und Vereinsadministrator melden sich hier gleich an. Die hinterlegte Berechtigung wird danach automatisch geladen.</p><p id="loginError" class="login-error">${esc(c.authError||'')}</p><p class="login-success ${c.authMessage?'':'hidden'}">${esc(c.authMessage||'')}</p>${memberLogin}</section></div>`);return}
   if(!c.isAdmin){
@@ -487,10 +493,17 @@ window.T20Cloud={
   authResolved:false,analyticsStats:null,
   liveTournamentState:null,tournamentViewMode:'local',
   client:null,ready:false,initPromise:null,authListenerStarted:false,session:null,user:null,isAdmin:false,role:'guest',memberRoles:{},profile:null,avatarSignedUrl:'',homeNewsImageSignedUrl:'',homeNewsImageSignedUrls:{},clubInfoImageSignedUrl:'',homeImageBusy:false,clubInfoImageBusy:false,membershipApplications:[],membershipApplicationsBusy:false,membershipApplicationSubmitting:false,online:false,syncing:false,authBusy:false,sessionProcessingPromise:null,authRedirectSessionPromise:null,authRedirectSessionResolve:null,loginBusy:false,magicLinkBusy:false,otpVerifyBusy:false,otpEmail:'',profileBusy:false,avatarBusy:false,authHandoffActive:false,authHandoffCloseTimer:null,adminProfilesBusy:false,adminProfiles:[],adminProfileAvatars:{},publicMembers:[],publicMemberAvatars:{},presenceChannel:null,onlineUserIds:new Set(),lastSeenTimer:null,lastSeenVisibilityBound:false,authMessage:'',authError:'',loadBusy:false,stationSuggestionBusy:false,liveTournamentUpdatedAt:'',tvSettingsUpdatedAt:'',pendingSync:localStorage.getItem('triple20_pending_sync')==='1',pendingKeys:new Set(safeJsonParse(localStorage.getItem('triple20_pending_keys')||'[]',[])),lastSyncAt:localStorage.getItem('triple20_last_sync')||'',cloudUpdated:{},loadedCloudData:null,pollTimer:null,memberPollTimer:null,stationPollTimer:null,authRedirectPending:/[?#&](code|token_hash|access_token|refresh_token|error|error_code|error_description)=/.test(location.href),
+  startLocalAdminPreview(){
+    if(!T20_LOCAL_PREVIEW)return;
+    const user={id:'local-preview-admin',email:'lokale-vorschau@triple20.test'};
+    this.session={localPreview:true,user};this.user=user;this.authResolved=true;this.ready=false;this.online=false;this.role='admin';this.isAdmin=true;this.profile={id:user.id,nickname:'Lokale Vorschau',display_name:'DCA Testbetrieb'};this.adminProfiles=[this.profile];this.memberRoles={[user.id]:'admin'};
+    setSyncStatus('Lokaler Testmodus · keine Cloud','offline');renderReadonlyMode();renderCloudPanel();showDashboard();
+  },
   async finishAuthRedirect(){cleanAuthRedirectUrl();this.authHandoffActive=false;this.authMessage='Anmeldung erfolgreich. Du kannst diesen Tab weiterverwenden.';showLogin();renderCloudPanel()},
   async init(){
     if(this.initPromise)return this.initPromise;
     this.initPromise=(async()=>{
+      if(T20_LOCAL_PREVIEW){this.authResolved=true;this.ready=false;this.online=false;this.session=null;this.user=null;this.isAdmin=false;this.role='guest';setSyncStatus('Lokaler Testmodus','offline');renderReadonlyMode();renderCloudPanel();return}
       try{
         await ensureSupabaseLibrary();
         if(!SUPABASE_PUBLISHABLE_KEY||SUPABASE_PUBLISHABLE_KEY.includes('HIER_'))throw new Error('Supabase Publishable Key fehlt.');
@@ -2251,7 +2264,7 @@ function renderClubDuels(){
   const status=$('#clubDuelStatus');if(status)status.innerHTML=selected?'':live.length?`<div class="club-duel-live-list"><div><span class="eyebrow">LAUFEND</span><h2>${live.length===1?'Ein Vereinsduell ist':'Mehrere Vereinsduelle sind'} noch offen</h2></div>${live.map(duel=>{const score=clubDuelScore(duel);return `<button type="button" data-duel-open="${esc(duel.id)}"><span>${esc(duel.homeClub)} <b>${score.home}:${score.guest}</b> ${esc(duel.guestClub)}</span><small>${score.played}/${duel.matches.length} Begegnungen · öffnen →</small></button>`}).join('')}</div>`:'<div class="club-duel-empty"><span>🤝</span><div><h2>Noch kein laufendes Vereinsduell</h2><p>Neue Begegnungen werden unabhängig von Saison und Vereinsturnieren gespeichert.</p></div></div>';
   renderClubDuelSetup();renderClubDuelLive(selected);const archive=$('#clubDuelHistory');if(archive)archive.innerHTML=history.length?history.map(clubDuelHistoryCard).join(''):'<p class="view-note">Noch keine abgeschlossenen Vereinsduelle gespeichert.</p>';
 }
-function showClubDuels(updateUrl=true){hideMainSections();$('#clubDuelsSection')?.classList.remove('hidden');renderClubDuels();renderNavigation();if(updateUrl)updateAppUrl('vereinsduelle')}
+function showClubDuels(updateUrl=true,shell=isAdmin()?'internal':'public'){setShellMode(shell);hideMainSections();$('#clubDuelsSection')?.classList.remove('hidden');renderClubDuels();renderNavigation();if(updateUrl)updateAppUrl('vereinsduelle')}
 function clubDuelTvUrl(id){const url=new URL(TRIPLE20_PUBLIC_URL);url.searchParams.set('bereich','vereinsduell-tv');url.searchParams.set('duell',id);return url.href}
 function showClubDuelTv(id='',updateUrl=true){selectedClubDuelId=id||selectedClubDuelId;hideMainSections();document.body.classList.add('club-duel-tv-mode');$('#clubDuelTvSection')?.classList.remove('hidden');renderClubDuelTv();if(updateUrl)updateAppUrl('vereinsduell-tv',{duell:selectedClubDuelId})}
 function renderClubDuelTv(){
@@ -2267,7 +2280,35 @@ function updateAppUrl(area,extras={},replace=false){
   ['produkt','kategorie','bewerb','spieler','duell'].forEach(key=>{const value=extras[key];if(value)url.searchParams.set(key,value);else url.searchParams.delete(key)});
   const next=url.pathname+(url.searchParams.size?`?${url.searchParams}`:'')+url.hash;
   history[replace?'replaceState':'pushState']({},document.title,next);
+  updatePageMetadata(area);
 }
+function updatePageMetadata(area='start'){
+  const pages={
+    start:['Dartclub Achensee – News, Turniere und Live-Ergebnisse','Die offizielle Vereinsseite des Dartclub Achensee mit News, Terminen, Live-Spielen, Ergebnissen und Ranglisten.'],
+    verein:['Dartclub Achensee – Verein, Kontakt und Mitgliedschaft','Informationen zum Dartclub Achensee, Vereinslokal, Spielzeiten, Kontakt und Mitgliedschaft.'],
+    ergebnisse:['Dartclub Achensee – Ergebnisse und Ranglisten','Ergebnisse, Saisonwertungen und Ranglisten des Dartclub Achensee.'],
+    saison:['Dartclub Achensee – Ergebnisse und Ranglisten','Ergebnisse, Saisonwertungen und Ranglisten des Dartclub Achensee.'],
+    live:['Dartclub Achensee – Live-Spielplan','Laufende Spiele und aktuelle Ergebnisse des Dartclub Achensee live verfolgen.'],
+    vereinsduelle:['Dartclub Achensee – Vereinsduelle','Laufende und abgeschlossene Vereinsduelle des Dartclub Achensee.'],
+    konto:['Triple20 – Konto','Anmeldung und persönliches Konto für Triple20.'],
+    verwaltung:['Triple20 – Vereinsverwaltung','Interner Verwaltungsbereich des Dartclub Achensee.'],
+    turnier:['Triple20 – Turnierleitung','Interne Turnierleitung des Dartclub Achensee.'],
+    einstellungen:['Triple20 – Einstellungen','Interne Einstellungen für Triple20.']
+  },[title,description]=pages[area]||pages.start,canonical=new URL(location.href);
+  canonical.hash='';if(area==='start')canonical.search='';
+  document.title=title;
+  document.querySelector('meta[name="description"]')?.setAttribute('content',description);
+  document.querySelector('meta[property="og:title"]')?.setAttribute('content',title);
+  document.querySelector('meta[property="og:description"]')?.setAttribute('content',description);
+  document.querySelector('meta[property="og:url"]')?.setAttribute('content',canonical.href);
+  document.querySelector('link[rel="canonical"]')?.setAttribute('href',canonical.href);
+}
+function setShellMode(mode='public'){
+  currentShellMode=mode==='internal'&&isAdmin()?'internal':'public';
+  document.body.classList.toggle('internal-shell',currentShellMode==='internal');
+  document.body.classList.toggle('public-shell',currentShellMode==='public');
+}
+function scrollPublicSection(selector){showHome();requestAnimationFrame(()=>document.querySelector(selector)?.scrollIntoView({behavior:'smooth',block:'start'}))}
 async function applyAppRoute(){
   const params=new URLSearchParams(location.search),area=params.get('bereich')||'start',product=params.get('produkt')||'',category=params.get('kategorie')||'',competition=params.get('bewerb')||'men',player=params.get('spieler')||'',duel=params.get('duell')||'';
   applyingRoute=true;
@@ -2275,6 +2316,7 @@ async function applyAppRoute(){
     if(area==='tv'){showTv(false);return}
     if(area==='vereinsduell-tv'){showClubDuelTv(duel,false);return}
     if(area==='statistikstation'){showStatsStation(false);return}
+    if(area==='verwaltung'){isAdmin()?showDashboard(false):showLogin(false);return}
     if(area==='empfehlungen'||product){showHome(false);return}
     if(area==='spieler'&&player){showPlayerProfile(player,false);return}
     if(area==='verein'){showClubInfo(false);return}
@@ -2286,41 +2328,34 @@ async function applyAppRoute(){
     if(area==='live'){showLive(competition,false);return}
     if(area==='turnier'){canManageTournament()?showTournament(false):showHome(false);return}
     showHome(false);
-  }finally{applyingRoute=false}
+  }finally{applyingRoute=false;updatePageMetadata(area)}
 }
 function hideMainSections(){stopTvRefresh();stopHomeNewsSlider();document.body.classList.remove('tv-mode','tv-tree-mode','club-duel-tv-mode');['tvSection','clubDuelTvSection','publicHomeSection','clubInfoSection','playerProfileSection','dashboardSection','authSection','settingsSection','seasonSection','clubDuelsSection','shopSection','statsStationSection','dartVisionLabSection','tournamentManagementPanel','tournamentSubnav','competitionNav','memberLiveEmpty','setupSection','tournamentSection'].forEach(id=>$('#'+id)?.classList.add('hidden'))}
 function renderNavigation(){
-  const admin=isAdmin(),member=isMember(),guest=!admin&&!member;
+  const admin=isAdmin(),internal=currentShellMode==='internal'&&admin;
   $('.club-settings-block')?.classList.remove('hidden');
-  $('#showSettingsBtn')?.classList.toggle('hidden',!isFullAdmin());
-  $('#showTournamentBtn')?.classList.toggle('hidden',!canManageTournament());
+  $('#showDashboardBtn')?.classList.toggle('hidden',!internal);
+  $('#showSettingsBtn')?.classList.toggle('hidden',!internal||!isFullAdmin());
+  $('#showTournamentBtn')?.classList.toggle('hidden',!internal||!canManageTournament());
+  $('#showClubDuelsBtn')?.classList.toggle('hidden',!internal);
+  $('#showInternalSeasonBtn')?.classList.toggle('hidden',!internal);
   $('#showSeasonBtn')?.classList.remove('hidden');
-  const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=accountMenuLabel();
+  const loginBtn=$('#showLoginBtn');if(loginBtn)loginBtn.textContent=internal?'Konto':admin?'Verwaltung':accountMenuLabel();
 }
 function renderDashboard(){
   if(!$('#dashboardCards')||!$('#dashboardPanel'))return;
-  const season=selectedSeason(),rows=isClubMode()&&canViewSeasonStandings(season)?calculateSeasonStandings(season).slice(0,3):[],history=loadTournamentHistory().slice(-5).reverse(),clubName=appSettings.club.name;
-  const cards=isClubMode()?[
-    ['🎯','Neues Turnier','Schweizer System oder anderer Modus','showTournamentBtn'],
-    ['🏆','Aktuelle Saison',season?`${season.name} · ${season.tournaments?.length||0} Spieltage`:'Saison anlegen','showSeasonBtn'],
-    ['📊','Statistiken','Rangliste und Ehrungen','showSeasonBtn'],
-    ['👥','Mitglieder','Spieler im aktuellen Turnier verwalten','showTournamentBtn'],
-    ['🕘','Turnierhistorie',`${history.length} gespeicherte Turniere`,'showDashboardBtn'],
-    ['⚙','Einstellungen',clubName||'Verein konfigurieren','showSettingsBtn']
-  ]:[
-    ['🎯','Neues Turnier','Einzelturnier starten','showTournamentBtn'],
-    ['🕘','Letzte Turniere',`${history.length} gespeicherte Turniere`,'showDashboardBtn'],
-    ['👥','Spieler','Spieler fürs aktuelle Turnier','showTournamentBtn'],
-    ['⬇','Export','Turniere als JSON sichern','showDashboardBtn'],
-    ['⚙','Einstellungen','Modus und Design','showSettingsBtn']
+  const season=selectedSeason(),upcoming=upcomingAdminEvents(),next=upcoming[0],profiles=T20Cloud.adminProfiles||[],openRequests=(T20Cloud.membershipApplications||[]).filter(item=>item.status==='new').length,history=loadTournamentHistory().filter(item=>!item.planned).slice(-4).reverse();
+  const cards=[
+    ['📅','Nächstes Turnier',next?`${next.name||next.eventName||'Spieltag'} · ${publicDate(next.date)}`:'Noch kein Termin'],
+    ['📊','Aktive Saison',season?.name||'Keine Saison ausgewählt'],
+    ['👥','Mitglieder',`${profiles.length||seasonMembers(season).length||0}`],
+    ['☑','Offene Aufgaben',`${openRequests+upcoming.length}`]
   ];
-  $('#dashboardCards').innerHTML=cards.map(c=>`<button class="dash-card" data-nav-click="${c[3]}"><span>${c[0]}</span><b>${esc(c[1])}</b><small>${esc(c[2])}</small></button>`).join('');
-  const top=isClubMode()?`<section class="card slim-card"><h3>${esc(clubName||'Vereinsmodus')}</h3><p>${season?`Aktuelle/geladene Saison: ${esc(season.name)}`:'Noch keine Saison angelegt.'}</p>${rows.length?`<div class="table-wrap"><table><thead><tr><th>Platz</th><th>Spieler</th><th>Punkte</th><th>Teilnahmen</th><th>Siege</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td><b>${esc(r.name)}</b></td><td>${r.cleanPoints}</td><td>${r.played}</td><td>${r.wins}</td></tr>`).join('')}</tbody></table></div>`:'<p>Noch keine Rangliste vorhanden.</p>'}</section>`:
-    `<section class="card slim-card"><h3>Letzte Turniere</h3>${history.length?`<div class="table-wrap"><table><thead><tr><th>Datum</th><th>Turnier</th><th>Modus</th><th>Sieger</th><th>Teilnehmer</th></tr></thead><tbody>${history.map(t=>`<tr><td>${esc(t.date||'')}</td><td><b>${esc(t.name)}</b></td><td>${esc(t.mode)}</td><td>${esc(t.winner||'–')}</td><td>${t.participantCount||0}</td></tr>`).join('')}</tbody></table></div>`:'<p>Noch keine abgeschlossenen Turniere gespeichert.</p>'}</section>`;
-  $('#dashboardPanel').innerHTML=top;
+  $('#dashboardCards').innerHTML=cards.map(c=>`<article><span>${c[0]}</span><div><small>${esc(c[1])}</small><b>${esc(c[2])}</b></div></article>`).join('');
+  $('#dashboardPanel').innerHTML=`<section><div><span>AKTUELLE AKTIVITÄTEN</span><h2>Zuletzt im Verein</h2></div>${history.length?`<div class="internal-activity-list">${history.map(item=>`<article><span>🏆</span><div><b>${esc(item.name||item.eventName||'Turnier')} abgeschlossen</b><small>${esc(publicDate(item.date))}${item.winner?` · Sieger: ${esc(tournamentPlayerName(item,item.winner))}`:''}</small></div></article>`).join('')}</div>`:'<p class="view-note">Noch keine abgeschlossenen Turniere vorhanden.</p>'}</section>`;
 }
-function showHome(updateUrl=true){hideMainSections();$('#publicHomeSection')?.classList.remove('hidden');renderPublicHome();renderNavigation();if(updateUrl)updateAppUrl('start')}
-function showDashboard(){showHome()}
+function showHome(updateUrl=true){setShellMode('public');hideMainSections();$('#publicHomeSection')?.classList.remove('hidden');renderPublicHome();renderNavigation();if(updateUrl)updateAppUrl('start')}
+function showDashboard(updateUrl=true){if(!isAdmin()){showLogin(updateUrl);return}setShellMode('internal');hideMainSections();$('#dashboardSection')?.classList.remove('hidden');renderDashboard();renderNavigation();if(updateUrl)updateAppUrl('verwaltung')}
 function safeClubLink(value=''){try{const url=new URL(value);return url.protocol==='https:'?url.href:''}catch{return''}}
 function clubInfoLines(value=''){return String(value).split('\n').map(line=>line.trim()).filter(Boolean)}
 function membershipStatusLabel(status='new'){return({new:'Neu',contacted:'Kontaktiert',completed:'Aufgenommen',rejected:'Abgelehnt'})[status]||'Neu'}
@@ -2337,12 +2372,12 @@ function renderClubInfo(){
   box.innerHTML=`<div class="public-player-back"><button class="secondary" type="button" data-club-info-back>← Zur Startseite</button>${isFullAdmin()?'<button class="secondary" type="button" data-club-info-edit>Vereinsseite bearbeiten</button>':''}</div><header id="clubInfoHero" class="club-info-hero"><span class="eyebrow">ÜBER DEN VEREIN</span><h1 id="clubInfoTitle">${esc(name)}</h1><h2>${esc(tagline)}</h2>${info.description?`<p>${esc(info.description)}</p>`:'<p>Die wichtigsten Informationen über unseren Verein, das Dartlokal und die Möglichkeiten, mit uns in Kontakt zu treten.</p>'}</header>${cards.length?`<div class="club-info-grid">${cards.join('')}</div>`:'<div class="club-info-empty"><h2>Vereinsdaten folgen</h2><p>Adresse, Öffnungszeiten und Kontakt werden derzeit ergänzt.</p></div>'}${membershipSectionHtml()}${membershipApplicationsHtml()}`;renderClubInfoImage();
 }
 function renderClubInfoImage(){const hero=$('#clubInfoHero');if(!hero)return;const image=T20Cloud.clubInfoImageSignedUrl||'',info=appSettings.clubInfo||defaultSettings.clubInfo,position=['top','bottom'].includes(info.imagePosition)?info.imagePosition:'center',layout=info.imageLayout==='full'?'full':'right';hero.classList.toggle('has-background-image',!!image);hero.classList.toggle('image-layout-right',!!image&&layout==='right');hero.style.backgroundPosition=`center ${position}`;hero.style.setProperty('--club-info-image-position',position);hero.style.setProperty('--club-info-image',image?`url(${JSON.stringify(image)})`:'none')}
-function showClubInfo(updateUrl=true){hideMainSections();$('#clubInfoSection')?.classList.remove('hidden');renderClubInfo();renderNavigation();if(updateUrl)updateAppUrl('verein');if(isFullAdmin()&&!T20Cloud.membershipApplicationsBusy)T20Cloud.loadMembershipApplications().catch(error=>console.warn('Mitgliedsanfragen konnten nicht geladen werden:',error))}
+function showClubInfo(updateUrl=true){setShellMode('public');hideMainSections();$('#clubInfoSection')?.classList.remove('hidden');renderClubInfo();renderNavigation();if(updateUrl)updateAppUrl('verein');if(isFullAdmin()&&!T20Cloud.membershipApplicationsBusy)T20Cloud.loadMembershipApplications().catch(error=>console.warn('Mitgliedsanfragen konnten nicht geladen werden:',error))}
 function selectLiveCompetition(key){
   if(!['men','women'].includes(key)||key===state.activeCompetition)return;
   syncActiveCompetition();state.activeCompetition=key;loadActiveCompetition();
 }
-function showLive(key='men',updateUrl=true){const competition=['men','women'].includes(key)?key:'men';if(updateUrl)updateAppUrl('live',{bewerb:competition});selectLiveCompetition(competition);clearImportedCompetitionForNewSetup();hideMainSections();$('#competitionNav')?.classList.remove('hidden');renderTournament();renderNavigation()}
+function showLive(key='men',updateUrl=true){setShellMode('public');const competition=['men','women'].includes(key)?key:'men';if(updateUrl)updateAppUrl('live',{bewerb:competition});selectLiveCompetition(competition);clearImportedCompetitionForNewSetup();hideMainSections();$('#competitionNav')?.classList.remove('hidden');renderTournament();renderNavigation()}
 function livePublicUrl(key=state.activeCompetition){const url=new URL(TRIPLE20_PUBLIC_URL);url.searchParams.set('bereich','live');url.searchParams.set('bewerb',['men','women'].includes(key)?key:'men');return url.href}
 function renderLiveQrCode(key=state.activeCompetition){
   const box=$('#liveQrCode'),link=$('#liveQrLink'),url=livePublicUrl(key);if(link){link.href=url;link.textContent=url}if(!box)return;box.innerHTML='';
@@ -2353,8 +2388,8 @@ function openLiveQr(){
   if(!isAdmin())return;$('#liveQrOverlay')?.remove();
   document.body.insertAdjacentHTML('beforeend',`<div id="liveQrOverlay" class="live-qr-overlay" role="dialog" aria-modal="true" aria-labelledby="liveQrTitle"><section class="live-qr-dialog"><button id="closeLiveQrBtn" class="live-qr-close" type="button" aria-label="QR-Code schließen">×</button><span class="eyebrow">ZUSCHAUER-LINK</span><h2 id="liveQrTitle">Live-Spielplan öffnen</h2><p>QR-Code scannen und den Spielplan ohne Anmeldung ansehen.</p><div class="live-qr-switch"><button class="secondary" type="button" data-live-qr-competition="men">Herren</button><button class="secondary" type="button" data-live-qr-competition="women">Damen</button></div><div id="liveQrCode" class="live-qr-code"></div><a id="liveQrLink" class="live-qr-link" href="#" target="_blank" rel="noopener"></a><button id="copyLiveQrLinkBtn" class="primary" type="button">LINK KOPIEREN <span>⧉</span></button></section></div>`);renderLiveQrCode(state.activeCompetition||'men');
 }
-function showLogin(updateUrl=true){hideMainSections();$('#authSection')?.classList.remove('hidden');renderCloudPanel();renderNavigation();if(updateUrl)updateAppUrl('konto')}
-function showSettings(updateUrl=true){if(!isFullAdmin()){showLogin(updateUrl);return}hideMainSections();$('#settingsSection').classList.remove('hidden');renderSettingsForm();renderNavigation();if(updateUrl)updateAppUrl('einstellungen')}
+function showLogin(updateUrl=true){setShellMode(isAdmin()?'internal':'public');hideMainSections();$('#authSection')?.classList.remove('hidden');renderCloudPanel();renderNavigation();if(updateUrl)updateAppUrl('konto')}
+function showSettings(updateUrl=true){if(!isFullAdmin()){showLogin(updateUrl);return}setShellMode('internal');hideMainSections();$('#settingsSection').classList.remove('hidden');renderSettingsForm();renderNavigation();if(updateUrl)updateAppUrl('einstellungen')}
 function emptyDartVisionBoard(){return{started:false,playerA:'Spieler 1',playerB:'Spieler 2',startScore:501,bestOf:3,scores:[501,501],legs:[0,0],activePlayer:0,winner:'',history:[],updatedAt:''}}
 function loadDartVisionLab(){
   const parsed=safeJsonParse(localStorage.getItem(DARTVISION_LAB_KEY),{}),stored=parsed&&typeof parsed==='object'?parsed:{},boards={};
@@ -2547,8 +2582,9 @@ function renderBracket(){
 }
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#matchesView').classList.toggle('hidden',b.dataset.tab!=='matches');$('#bracketView').classList.toggle('hidden',b.dataset.tab!=='bracket');$('#tableView').classList.toggle('hidden',b.dataset.tab!=='table')}));
 function clearImportedCompetitionForNewSetup(){if(state.started||!state.seasonImportedTo)return false;for(const key of COMPETITION_KEYS)delete state[key];Object.assign(state,emptyCompetition());syncActiveCompetition();save();return true}
-function showTournament(updateUrl=true){if(!canManageTournament()){showHome(updateUrl);return}clearImportedCompetitionForNewSetup();hideMainSections();$('#tournamentManagementPanel')?.classList.remove('hidden');$('#competitionNav')?.classList.remove('hidden');renderTournamentManagement();renderTournament();renderNavigation();T20Cloud.loadStationSuggestions().catch(error=>console.warn('Ergebnisvorschläge konnten nicht geladen werden:',error));if(updateUrl)updateAppUrl('turnier')}
-function showSeason(updateUrl=true){if(!isClubMode()){showHome(updateUrl);return}hideMainSections();$('#seasonSection').classList.remove('hidden');renderSeasonView();renderNavigation();if(updateUrl)updateAppUrl('ergebnisse')}
+function showTournament(updateUrl=true){if(!canManageTournament()){showHome(updateUrl);return}setShellMode('internal');clearImportedCompetitionForNewSetup();hideMainSections();$('#tournamentManagementPanel')?.classList.remove('hidden');$('#competitionNav')?.classList.remove('hidden');renderTournamentManagement();renderTournament();renderNavigation();T20Cloud.loadStationSuggestions().catch(error=>console.warn('Ergebnisvorschläge konnten nicht geladen werden:',error));if(updateUrl)updateAppUrl('turnier')}
+function showSeason(updateUrl=true,shell='public'){if(!isClubMode()){showHome(updateUrl);return}setShellMode(shell);hideMainSections();$('#seasonSection').classList.remove('hidden');renderSeasonView();renderNavigation();if(updateUrl)updateAppUrl('ergebnisse')}
+function showInternalSeason(){showSeason(true,'internal')}
 function fillSeasonForm(){const h=currentHalfYear();$('#seasonName').value=h.name;$('#seasonStart').value=h.start;$('#seasonEnd').value=h.end;$('#seasonDrops').value='0'}
 function closeMenu(){const hero=$('.hero'),btn=$('#menuToggle');hero?.classList.remove('nav-open');if(btn)btn.setAttribute('aria-expanded','false')}
 document.addEventListener('submit',e=>{if(!canManageClubData()&&e.target.closest('#settingsForm,#seasonForm,#memberForm,#manualTournamentForm,[data-correction-form]')){e.preventDefault();alert('Diese Vereinsverwaltung ist nur für den Vereinsadministrator verfügbar.')}},true);
@@ -2568,6 +2604,7 @@ $('#cloudAdminPanel').addEventListener('submit',e=>{
   if(e.target.id==='adminPushForm')PushNotifications.send($('#pushTitle').value,$('#pushBody').value,$('#pushUrl').value);
 });
 $('#cloudAdminPanel').addEventListener('click',e=>{
+  if(e.target.id==='enterLocalAdminPreviewBtn'){T20Cloud.startLocalAdminPreview();return}
   const memberProfile=e.target.closest('[data-member-profile]');if(memberProfile){showPlayerProfile(memberProfile.dataset.memberProfile);return}
   const memberSeason=e.target.closest('[data-member-season]');if(memberSeason){selectedSeasonId=memberSeason.dataset.memberSeason;persistSelectedSeason();showSeason();return}
   if(e.target.closest('[data-member-home]')){showHome();return}
@@ -2608,6 +2645,17 @@ $('#cloudAdminPanel').addEventListener('change',event=>{
 });
 $('#cloudAdminPanel').addEventListener('change',e=>{if(e.target.id==='backupImportInput')handleBackupImport(e.target.files?.[0]);if(e.target.id==='profileAvatarInput'&&e.target.files?.[0])openAvatarCrop(e.target.files[0]).catch(error=>{T20Cloud.authError=`Bild konnte nicht geöffnet werden: ${error?.message||'Unbekannter Fehler'}`;renderCloudPanel()})});
 document.addEventListener('click',e=>{if(e.target.id==='cancelAvatarCropBtn'||e.target.id==='avatarCropOverlay')closeAvatarCrop();if(e.target.id==='saveAvatarCropBtn')saveAvatarCrop()});
+$('#brandHomeBtn')?.addEventListener('click',()=>showHome());
+$('#showNewsBtn')?.addEventListener('click',()=>scrollPublicSection('#publicFeatureStory'));
+$('#showEventsBtn')?.addEventListener('click',()=>scrollPublicSection('.public-next-panel'));
+$('#showPublicLiveBtn')?.addEventListener('click',()=>scrollPublicSection('.public-live-band'));
+$('#showRankingsBtn')?.addEventListener('click',()=>scrollPublicSection('.public-home-rankings'));
+$('#showClubInfoBtn')?.addEventListener('click',()=>showClubInfo());
+$('#showDashboardBtn')?.addEventListener('click',()=>showDashboard());
+$('#showInternalSeasonBtn')?.addEventListener('click',showInternalSeason);
+$('#dashboardPublicHomeBtn')?.addEventListener('click',()=>showHome());
+$('#dashboardPreviewBtn')?.addEventListener('click',()=>showHome());
+$('#dashboardSection')?.addEventListener('click',event=>{const start=event.target.closest('[data-dashboard-tournament]');if(start){setActiveCompetition(start.dataset.dashboardTournament);showTournament()}});
 $('#showTournamentBtn').addEventListener('click',()=>{if(canManageTournament())showTournament()});
 $('#showClubDuelsBtn')?.addEventListener('click',()=>showClubDuels());
 $('#newClubDuelBtn')?.addEventListener('click',()=>{if(!assertAdminAction())return;selectedClubDuelId='';clubDuelSetupOpen=true;renderClubDuels()});
@@ -2643,7 +2691,7 @@ $('#tvFullscreenBtn')?.addEventListener('click',toggleTvFullscreen);
 $('#tvRefreshBtn')?.addEventListener('click',()=>T20Cloud.loadLiveTournament().then(renderTvView).catch(error=>console.warn('TV-Aktualisierung fehlgeschlagen:',error)));
 window.addEventListener('storage',event=>{if(event.key!=='dartTournament'||$('#tvSection')?.classList.contains('hidden')||!event.newValue)return;const next=safeJsonParse(event.newValue);if(!next)return;Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,next);ensureTournamentDayState();loadActiveCompetition();renderTvView()});
 document.addEventListener('click',async event=>{if(event.target.id==='closeLiveQrBtn'||event.target.id==='liveQrOverlay'){$('#liveQrOverlay')?.remove();return}const switchButton=event.target.closest('[data-live-qr-competition]');if(switchButton){renderLiveQrCode(switchButton.dataset.liveQrCompetition);return}const copyButton=event.target.closest('#copyLiveQrLinkBtn');if(copyButton){const value=$('#liveQrLink')?.href||'';try{await navigator.clipboard.writeText(value);copyButton.firstChild.textContent='LINK KOPIERT '}catch{prompt('Live-Link kopieren:',value)}}});
-$('#showSeasonBtn').addEventListener('click',()=>showSeason());
+$('#showSeasonBtn').addEventListener('click',()=>showSeason(true,'public'));
 $('#showSettingsBtn').addEventListener('click',()=>showSettings());
 $('#shopCategoryFilters')?.addEventListener('click',e=>{const button=e.target.closest('[data-shop-category]');if(!button)return;shopProductTarget='';shopCategory=button.dataset.shopCategory;renderShop();updateAppUrl('empfehlungen',{kategorie:shopCategory==='all'?'':shopCategory})});
 $('#shopProductGrid')?.addEventListener('click',event=>{const link=event.target.closest('[data-shop-click]');if(link)trackRecommendationClick(link.dataset.shopClick)});
@@ -2657,7 +2705,7 @@ $('#shopAdminPanel')?.addEventListener('click',event=>{
   if(move)moveShopAdminProduct(move.dataset.shopId,move.dataset.shopMove)
 });
 $('#shopAdminImageInput')?.addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file)return;const input=event.target;input.disabled=true;try{shopAdminImage=await prepareShopImage(file);$('#shopAdminImagePreview').innerHTML=`<img src="${esc(shopAdminImage)}" alt="Produktbild-Vorschau">`}catch(error){alert(`Bild konnte nicht verarbeitet werden: ${error?.message||'Unbekannter Fehler'}`)}finally{input.disabled=false;input.value=''}});
-$('#showLoginBtn').addEventListener('click',()=>showLogin());
+$('#showLoginBtn').addEventListener('click',()=>{if(isAdmin()&&currentShellMode==='public')showDashboard();else showLogin()});
 $('#closeDartVisionLabBtn')?.addEventListener('click',()=>showLogin());
 $('#dartVisionLabSection')?.addEventListener('submit',event=>{event.preventDefault();if(event.target.id==='dartVisionSetupForm'){startDartVisionTest();return}if(event.target.id==='dartVisionThrowForm'){const input=$('#dartVisionThrowScore'),score=Number(input?.value);if(!enterDartVisionThrow(score))alert('Bitte eine ganze Zahl zwischen 0 und 180 eingeben.')}});
 $('#dartVisionLabSection')?.addEventListener('click',event=>{const board=event.target.closest('[data-dartvision-board]');if(board){dartVisionLab.activeBoard=+board.dataset.dartvisionBoard;saveDartVisionLab();renderDartVisionLab();return}if(event.target.closest('[data-dartvision-undo]')){undoDartVisionThrow();return}if(event.target.closest('[data-dartvision-reset]')){resetDartVisionBoard();return}if(event.target.closest('[data-dartvision-new]'))resetDartVisionBoard()});

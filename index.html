@@ -3,29 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Triple20 – Turniere, Live-Spiele und Saisonwertungen</title>
-  <meta name="description" content="Triple20 zeigt aktuelle und kommende Dartturniere, Live-Spiele, Ergebnisse und Saisonwertungen des DCA Achensee.">
+  <title>Dartclub Achensee – News, Turniere und Live-Ergebnisse</title>
+  <meta name="description" content="Die offizielle Vereinsseite des Dartclub Achensee mit News, Terminen, Live-Spielen, Ergebnissen und Ranglisten – powered by Triple20.">
   <link rel="canonical" href="https://triple20.at/">
 
   <!-- Vorschau beim Teilen auf WhatsApp, Pinterest und anderen Plattformen -->
   <meta property="og:type" content="website">
   <meta property="og:locale" content="de_AT">
-  <meta property="og:site_name" content="Triple20">
+  <meta property="og:site_name" content="Dartclub Achensee">
   <meta property="og:url" content="https://triple20.at/">
-  <meta property="og:title" content="Triple20 – Darts live verfolgen">
-  <meta property="og:description" content="Aktuelle Spiele, kommende Turniere, Ergebnisse und Saisonwertungen des DCA Achensee auf einen Blick.">
-  <meta property="og:image" content="https://triple20.at/icons/triple20-icon-512.png">
-  <meta property="og:image:secure_url" content="https://triple20.at/icons/triple20-icon-512.png">
+  <meta property="og:title" content="Dartclub Achensee – News, Turniere und Live-Ergebnisse">
+  <meta property="og:description" content="Aktuelle Spiele, kommende Turniere, Ergebnisse und Vereinsleben des Dartclub Achensee auf einen Blick.">
+  <meta property="og:image" content="https://triple20.at/brand-assets/dca-social-share.png">
+  <meta property="og:image:secure_url" content="https://triple20.at/brand-assets/dca-social-share.png">
   <meta property="og:image:type" content="image/png">
-  <meta property="og:image:width" content="512">
-  <meta property="og:image:height" content="512">
-  <meta property="og:image:alt" content="Triple20 App-Symbol mit Dartscheibe und Dartpfeil">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Dartclub Achensee – offizielle Vereinsseite für News, Turniere und Ergebnisse">
 
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Triple20 – Darts live verfolgen">
+  <meta name="twitter:title" content="Dartclub Achensee – News, Turniere und Live-Ergebnisse">
   <meta name="twitter:description" content="Aktuelle Spiele, kommende Turniere, Ergebnisse und Saisonwertungen des DCA Achensee auf einen Blick.">
-  <meta name="twitter:image" content="https://triple20.at/icons/triple20-icon-512.png">
-  <meta name="twitter:image:alt" content="Triple20 App-Symbol mit Dartscheibe und Dartpfeil">
+  <meta name="twitter:image" content="https://triple20.at/brand-assets/dca-social-share.png">
+  <meta name="twitter:image:alt" content="Dartclub Achensee – offizielle Vereinsseite für News, Turniere und Ergebnisse">
   <meta name="pinterest-rich-pin" content="true">
   <meta name="theme-color" content="#0E6BFF">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -34,12 +34,43 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/triple20-icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20261116-93">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SportsOrganization",
+    "name": "Dartclub Achensee",
+    "alternateName": "DCA Achensee",
+    "url": "https://triple20.at/",
+    "sport": "Darts"
+  }
+  </script>
+  <link rel="stylesheet" href="styles.css?v=20261116-96">
 </head>
 <body>
-  <header class="hero">
-    <div class="brand"><button id="menuToggle" class="menu-toggle" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><div><strong>Triple<span>20</span></strong><small id="brandSubtitle">Turnierleitung</small></div></div>
-    <div class="main-actions"><button id="showHomeBtn" class="ghost">Start</button><button id="showTournamentBtn" class="ghost hidden">Turnierleitung</button><button id="showClubDuelsBtn" class="ghost">Vereinsduelle</button><button id="showSeasonBtn" class="ghost">Ergebnisse</button><button id="showSettingsBtn" class="ghost">Einstellungen</button><button id="showLoginBtn" class="ghost">Anmelden</button></div>
+  <header id="siteHeader" class="hero public-site-header">
+    <div class="brand">
+      <button id="menuToggle" class="menu-toggle" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button>
+      <button id="brandHomeBtn" class="brand-home" type="button" aria-label="Zur Startseite des Dartclub Achensee">
+        <span class="public-brand-copy"><strong>Dartclub Achensee</strong><small>Offizielle Vereinsseite</small></span>
+        <span class="internal-brand-copy"><img src="icons/triple20-icon-192.png" alt=""><strong>Triple<span>20</span></strong><small>Vereinsverwaltung · Dartclub Achensee</small></span>
+      </button>
+      <span class="powered-by">powered by <img src="icons/triple20-icon-192.png" alt="Triple20"></span>
+    </div>
+    <div class="main-actions" aria-label="Hauptnavigation">
+      <button id="showHomeBtn" class="ghost public-nav-action">Start</button>
+      <button id="showNewsBtn" class="ghost public-nav-action">News</button>
+      <button id="showEventsBtn" class="ghost public-nav-action">Termine</button>
+      <button id="showPublicLiveBtn" class="ghost public-nav-action">Live</button>
+      <button id="showSeasonBtn" class="ghost public-nav-action">Ergebnisse</button>
+      <button id="showRankingsBtn" class="ghost public-nav-action">Ranglisten</button>
+      <button id="showClubInfoBtn" class="ghost public-nav-action">Verein</button>
+      <button id="showDashboardBtn" class="ghost internal-nav-action hidden">Übersicht</button>
+      <button id="showTournamentBtn" class="ghost internal-nav-action hidden">Turnierleitung</button>
+      <button id="showClubDuelsBtn" class="ghost internal-nav-action hidden">Vereinsduelle</button>
+      <button id="showInternalSeasonBtn" class="ghost internal-nav-action hidden">Saison &amp; Ergebnisse</button>
+      <button id="showSettingsBtn" class="ghost internal-nav-action hidden">Einstellungen</button>
+      <button id="showLoginBtn" class="ghost account-action">Anmelden</button>
+    </div>
   </header>
   <div id="syncStatusBar" class="sync-status view-only"><span id="syncStatusText">Nur Ansicht</span><small id="syncLastSaved">Noch nicht synchronisiert</small></div>
 
@@ -84,6 +115,24 @@
         <div><span class="eyebrow">DARTCLUB ACHENSEE</span><h2>Sport. Gemeinschaft. Good Darts.</h2><p>Turniere, Ergebnisse und Vereinsleben des DCA an einem Ort.</p></div>
         <button class="secondary" type="button" data-public-nav="verein">Verein kennenlernen</button>
       </section>
+    </section>
+
+    <section id="dashboardSection" class="internal-dashboard hidden" aria-labelledby="dashboardTitle">
+      <div class="internal-dashboard-heading">
+        <div><span>TRIPLE20 · VEREINSVERWALTUNG</span><h1 id="dashboardTitle">Guten Morgen, Turnierleitung</h1><p>Turniere, Mitglieder und die öffentliche DCA-Seite an einem Ort verwalten.</p></div>
+        <button id="dashboardPublicHomeBtn" class="secondary" type="button">← Zur öffentlichen DCA-Seite</button>
+      </div>
+      <div id="dashboardCards" class="internal-summary-grid"></div>
+      <div class="internal-dashboard-main">
+        <section class="internal-start-card">
+          <span>TURNIERLEITUNG</span><h2>Turnier starten</h2><p>Neuen Spieltag vorbereiten oder ein laufendes Turnier fortsetzen.</p>
+          <div><button type="button" class="primary" data-dashboard-tournament="men">HERREN STARTEN <b>→</b></button><button type="button" class="primary" data-dashboard-tournament="women">DAMEN STARTEN <b>→</b></button></div>
+        </section>
+        <aside class="internal-public-status">
+          <span>ÖFFENTLICHE STARTSEITE</span><h2>Online und aktuell</h2><p>News, Termine und Ergebnisse aus Sicht der Besucher prüfen.</p><button id="dashboardPreviewBtn" class="primary" type="button">STARTSEITE ANSEHEN <b>↗</b></button>
+        </aside>
+      </div>
+      <div id="dashboardPanel" class="internal-dashboard-panel"></div>
     </section>
 
     <section id="clubInfoSection" class="public-club-page hidden" aria-labelledby="clubInfoTitle">
@@ -336,7 +385,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="double-ko.js?v=20261005-52"></script>
-  <script src="app.js?v=20261116-93"></script>
-  <script src="pwa.js?v=20261005-52"></script>
+  <script src="app.js?v=20261116-96"></script>
+  <script src="pwa.js?v=20261116-96"></script>
 </body>
 </html>

@@ -1,0 +1,130 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
+const {chromium}=require('/Users/markusburkert/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const root=path.resolve(__dirname,'..');
+(async()=>{
+	  const server=http.createServer((req,res)=>{const pathname=new URL(req.url,'http://localhost').pathname,file=path.join(root,pathname==='/'?'index.html':pathname);try{res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.html')?'text/html':'application/octet-stream');res.end(fs.readFileSync(file))}catch{res.statusCode=404;res.end()}});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let browser;
+  try{
+    browser=await chromium.launch({headless:true,channel:'chrome'});const context=await browser.newContext({serviceWorkers:'block'});await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'&&new URL(route.request().url()).pathname!=='/pwa.js'?route.continue():route.abort());const page=await context.newPage();await page.goto(`http://127.0.0.1:${server.address().port}/`);
+	    await page.evaluate(()=>showLogin(false));
+	    assert((await page.getByText('Lokaler Testmodus',{exact:true}).count())>=1,'Local preview blocks live login and cloud writes');
+	    assert.equal(await page.locator('#memberLoginForm').count(),0,'Live login form is absent in local preview');
+	    await page.locator('#enterLocalAdminPreviewBtn').click();
+	    assert.equal(await page.locator('#dashboardSection').isVisible(),true,'Safe local admin preview opens the dashboard');
+	    assert.deepEqual(await page.evaluate(()=>({admin:T20Cloud.isAdmin,client:T20Cloud.client,local:T20Cloud.session?.localPreview})),{admin:true,client:null,local:true},'Local admin preview has no cloud client');
+	    await page.evaluate(async()=>{await T20Cloud.signOut();showLogin(false)});
+	    for(const viewport of [{width:768,height:1024},{width:1024,height:768},{width:1194,height:834}]){
+      await page.setViewportSize(viewport);await page.evaluate(()=>{T20Cloud.authResolved=true;T20Cloud.user=null;T20Cloud.session=null;T20Cloud.isAdmin=false;T20Cloud.otpEmail='';showLogin(false)});
+      assert.equal(await page.locator('.account-grid').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),1,`Login is one column at ${viewport.width}px`);
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`No page overflow at ${viewport.width}px`);
+      await page.locator('#menuToggle').click();
+      assert.equal(await page.locator('.main-actions').evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth}),true,`Tablet menu stays in viewport at ${viewport.width}px`);
+      await page.locator('#menuToggle').click();
+    }
+    await page.setViewportSize({width:1280,height:900});
+    await page.evaluate(()=>{T20Cloud.authResolved=true;T20Cloud.user={id:'burki',email:'burki@example.test'};T20Cloud.session={user:T20Cloud.user};T20Cloud.role='admin';T20Cloud.isAdmin=true;T20Cloud.profile={id:'burki',nickname:'Burki',display_name:'Markus Burkert'};T20Cloud.adminProfiles=[T20Cloud.profile,{id:'vetti',nickname:'Vetti',display_name:'Stefan Vetter'}];T20Cloud.memberRoles={burki:'admin',vetti:'tournament_manager'};T20Cloud.loadCloud=async()=>{};renderCloudPanel()});
+	    await page.evaluate(()=>showDashboard(false));
+	    assert.equal(await page.locator('#dashboardSection').isVisible(),true,'Admin dashboard is visible');
+	    assert.equal(await page.evaluate(()=>document.body.classList.contains('internal-shell')),true,'Admin dashboard uses the internal shell');
+	    assert.equal(await page.locator('.internal-summary-grid article').count(),4,'Admin dashboard shows four operational summaries');
+	    assert.equal(await page.locator('#showDashboardBtn').isVisible(),true,'Internal navigation is visible');
+	    assert.equal(await page.locator('#showNewsBtn').isVisible(),false,'Public navigation is hidden in the internal shell');
+	    await page.screenshot({path:'/tmp/triple20-admin-dashboard.png',fullPage:true});
+	    await page.setViewportSize({width:390,height:844});
+	    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Admin dashboard has no mobile overflow');
+	    await page.screenshot({path:'/tmp/triple20-admin-dashboard-mobile.png',fullPage:true});
+	    await page.locator('#dashboardPublicHomeBtn').click();
+	    assert.equal(await page.locator('#publicHomeSection').isVisible(),true,'Dashboard can return to the public DCA site');
+	    assert.equal(await page.evaluate(()=>document.body.classList.contains('public-shell')),true,'Public DCA site restores the public shell');
+	    await page.setViewportSize({width:1280,height:900});
+	    await page.evaluate(()=>showLogin(false));
+    assert.equal(await page.getByText('MITGLIED & VEREINSADMINISTRATOR',{exact:true}).count(),1);
+    assert.equal(await page.locator('.staff-member-identity .push-card').count(),1);
+    assert.equal(await page.locator('[data-member-role="burki"]').isDisabled(),true);
+    assert.equal(await page.locator('[data-member-role="vetti"]').inputValue(),'tournament_manager');
+    assert.equal(await page.locator('#adminPushDetails').count(),1);
+    assert.equal(await page.locator('#globalPushToggle').isChecked(),true,'Global push switch starts enabled');
+    assert.equal(await page.locator('#adminPushDetails').evaluate(el=>el.open),false,'Admin push starts collapsed');
+    await page.locator('#adminPushDetails').evaluate(el=>el.open=true);
+    await page.locator('#pushBody').evaluate(el=>el.value='Turnier startet bald');
+    await page.evaluate(()=>renderCloudPanel());
+    assert.equal(await page.locator('#adminPushDetails').evaluate(el=>el.open),true,'Open push section survives rerender');
+    assert.equal(await page.locator('#pushBody').inputValue(),'Turnier startet bald','Push draft survives rerender');
+    await page.evaluate(()=>{T20Cloud.analyticsStats={today_sessions:7,week_sessions:18,month_sessions:42,total_sessions:99,today_devices:5,today_members:3};renderCloudPanel()});
+    assert((await page.locator('.access-stats').textContent()).includes('Heute 5 unterschiedliche Geräte · 3 angemeldete Mitglieder'));
+    await page.evaluate(()=>{seasonStore.seasons=[{id:'s1',name:'Test',tournaments:[{id:'e2',name:'Später',date:'2099-09-10',planned:true},{id:'done',name:'Schon gespielt',date:'2099-09-07',planned:false},{id:'e1',name:'Als Nächstes',date:'2099-09-08',planned:true}]}];renderPublicHome({refreshRegistrations:false});showLogin(false)});
+    assert.equal(await page.locator('#publicLiveGames').evaluate(el=>el.closest('.public-home-block').classList.contains('is-empty-live')),true);
+    assert.equal(await page.locator('[data-event-registration]').count(),2,'Admin member can still register');
+    await page.evaluate(()=>showTournament(false));
+    assert.equal(await page.locator('#tournamentManagementPanel .admin-event-card').count(),2);
+    assert.deepEqual(await page.locator('.admin-event-card>span>b').allTextContents(),['Als Nächstes','Später']);
+    await page.locator('.admin-event-card').first().click();
+    assert.equal(await page.locator('.admin-checkin h3').textContent(),'Als Nächstes');
+    const parsed=await page.evaluate(()=>parseAutodartsStats('140.5 3 Dart Average 150.5 0% (0/0) Checkout % 100% (1/1) 140.5 First 9 Average 150.5 156.0 Average until 170 144.0 - Highest Finish 157 6 Darts thrown 6 0 180 1'));
+    assert.deepEqual(parsed.average,['140.5','150.5']);
+    assert.deepEqual(parsed.checkout,['0','100']);
+    assert.deepEqual(parsed.highestFinish,['-','157']);
+    assert.deepEqual(parsed.max180,['0','1']);
+    assert.deepEqual(await page.evaluate(()=>parseAutodartsStats('1204 3 Dart Average 985').average),['120.4','98.5']);
+    assert.deepEqual(await page.evaluate(()=>parseAutodartsStats('7041 First 9 Average 771').first9),['70.4','77.1']);
+    const detectedScore=await page.evaluate(()=>parseAutodartsScore(['level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext','5\t1\t1\t1\t1\t1\t310\t420\t60\t110\t99\t2','5\t1\t1\t1\t1\t2\t920\t422\t58\t108\t99\t1','5\t1\t2\t1\t1\t1\t1200\t20\t20\t25\t99\t8'].join('\n'),2));
+    assert.deepEqual(detectedScore,['2','1'],'Largest same-row score pair is detected');
+    const aggregated=await page.evaluate(()=>aggregateAutodartsStats('Burki',[{a:'Burki',b:'Vetti',autodartsStats:{a:{average:60,darts:30,highestFinish:80,max180:1}}},{a:'Eli',b:'Burki',autodartsStats:{b:{average:90,darts:10,highestFinish:120,max180:2}}}]));
+    assert.equal(aggregated.average,67.5,'Average is weighted by darts');assert.equal(aggregated.highestFinish,120);assert.equal(aggregated.max180,3);assert.equal(aggregated.darts,40);
+    const savedStats=await page.evaluate(async()=>{state.activeCompetition='men';state.started=true;state.matches=[{a:'Burki',b:'Vetti',round:1,sa:null,sb:null}];statsStationPending={key:'men',index:0,nodeId:'',a:'Burki',b:'Vetti',round:1};publishLiveTournament=async()=>true;const form=document.createElement('form');form.innerHTML='<input data-station-stat="average" data-station-side="0" value="61.2"><input data-station-stat="average" data-station-side="1" value="58.4"><input data-station-stat="darts" data-station-side="0" value="45"><input data-station-stat="darts" data-station-side="1" value="48"><input data-station-stat="max180" data-station-side="0" value="1"><input data-station-stat="max180" data-station-side="1" value="0"><button class="stats-station-save"></button>';document.body.append(form);await saveStatsStationResult(form);form.remove();return state.matches[0].autodartsStats});
+    assert.equal(savedStats.a.average,61.2);assert.equal(savedStats.a.darts,45);assert.equal(savedStats.a.max180,1);assert.equal(savedStats.source,'autodarts-screenshot-ocr');
+    const stationSaved=await page.evaluate(async()=>{localStorage.setItem(STATS_STATION_TOKEN_KEY,'device-token');T20Cloud.isAdmin=false;T20Cloud.role='guest';T20Cloud.user=null;let payload=null;T20Cloud.client={rpc:async(name,args)=>{payload={name,args};return{data:true,error:null}}};state.activeCompetition='men';state.started=true;state.matches=[{a:'Burki',b:'Vetti',round:1,sa:null,sb:null}];statsStationPending={key:'men',index:0,nodeId:'',a:'Burki',b:'Vetti',round:1};const form=document.createElement('form');form.innerHTML='<input data-station-stat="average" data-station-side="0" value="61,2"><input data-station-stat="average" data-station-side="1" value="58,4"><button class="stats-station-save"></button>';document.body.append(form);await saveStatsStationResult(form);form.remove();return{payload,saved:state.matches[0].autodartsStats}});
+    assert.equal(stationSaved.payload.name,'triple20_save_station_stats');assert.equal(stationSaved.payload.args.station_token,'device-token');assert.equal(stationSaved.saved.a.average,61.2,'Authorized logged-out station can save comma decimals');
+    const scoreSuggestion=await page.evaluate(async()=>{T20Cloud.isAdmin=true;T20Cloud.role='admin';state.activeCompetition='men';state.started=true;state.settings={legs:2};state.matches=[{a:'Burki',b:'Vetti',round:1,sa:null,sb:null}];statsStationPending={key:'men',index:0,nodeId:'',a:'Burki',b:'Vetti',round:1};publishLiveTournament=async()=>true;const form=document.createElement('form');form.innerHTML='<input data-station-stat="score" data-station-side="0" data-station-max="2" value="2"><input data-station-stat="score" data-station-side="1" data-station-max="2" value="1"><button class="stats-station-save"></button>';document.body.append(form);await saveStatsStationResult(form);form.remove();renderTournament();return{suggestion:state.matches[0].suggestedScore,a:document.querySelector("[data-sa=\"0\"]")?.value,b:document.querySelector("[data-sb=\"0\"]")?.value,label:document.querySelector('.score-suggestion-label')?.textContent}});
+    assert.deepEqual([scoreSuggestion.suggestion.a,scoreSuggestion.suggestion.b],[2,1]);assert.deepEqual([scoreSuggestion.a,scoreSuggestion.b],['2','1']);assert(scoreSuggestion.label.includes('bitte bestätigen'));
+    const seasonRules=await page.evaluate(()=>{
+      const originalSeasons=structuredClone(seasonStore.seasons),originalSelected=selectedSeasonId,originalHistory=localStorage.getItem(TOURNAMENT_HISTORY_KEY),originalAdmin=T20Cloud.isAdmin;
+      T20Cloud.isAdmin=false;
+      const ranked={id:'ranked',name:'Rangtest',startDate:'2026-01-01',endDate:'2026-12-31',dropCount:1,members:['A','B'],players:['A','B'],tournaments:[
+        {id:'r1',date:'2026-01-01',results:[{name:'A',points:5,wins:10,losses:0},{name:'B',points:5,wins:0,losses:1}]},
+        {id:'r2',date:'2026-01-08',results:[{name:'A',points:15,wins:1,losses:1},{name:'B',points:15,wins:2,losses:0}]}
+      ]};
+      seasonStore.seasons=[ranked];selectedSeasonId='ranked';const order=calculateSeasonStandings(ranked).map(row=>row.name);
+      const men={id:'men',name:'Herrenliga',members:[],players:[],tournaments:[{id:'done-women',date:'2026-09-08',competition:'women',name:'Falscher Name – Damen',players:['Hannah'],playerProfileIds:{Hannah:'h1'},results:[{name:'Hannah',points:15,wins:3}]}]},women={id:'women',name:'Damenliga',members:[],players:[],tournaments:[{id:'planned-women',date:'2026-09-08',planned:true,competition:'women',name:'Damenliga - Damen'}]};
+      seasonStore.seasons=[men,women];localStorage.setItem(TOURNAMENT_HISTORY_KEY,JSON.stringify([{id:'done-women',name:'Falscher Name – Damen'}]));repairScheduledTournamentAssignments();
+      const repaired={men:men.tournaments.length,women:women.tournaments.map(t=>({id:t.id,scheduledEventId:t.scheduledEventId,name:t.name})),members:women.members,history:loadTournamentHistory()[0]};
+      seasonStore.seasons=originalSeasons;selectedSeasonId=originalSelected;if(originalHistory===null)localStorage.removeItem(TOURNAMENT_HISTORY_KEY);else localStorage.setItem(TOURNAMENT_HISTORY_KEY,originalHistory);T20Cloud.isAdmin=originalAdmin;
+      return{order,repaired};
+    });
+    assert.deepEqual(seasonRules.order,['B','A'],'Tie-break uses wins from counted tournaments only');
+    assert.equal(seasonRules.repaired.men,0);assert.equal(seasonRules.repaired.women.length,1);assert.equal(seasonRules.repaired.women[0].scheduledEventId,'planned-women');assert.deepEqual(seasonRules.repaired.members,['Hannah']);assert.equal(seasonRules.repaired.history.scheduledSeasonId,'women');
+    await page.evaluate(()=>{const preview=document.querySelector('#statsStationPreview');preview.innerHTML='<b>Kontrollvorschau</b>';preview.classList.remove('hidden');document.querySelector('#statsStationStatus').textContent='Auswertung abgeschlossen.';renderStatsStation(true)});
+    assert.equal(await page.locator('#statsStationPreview').evaluate(el=>el.classList.contains('hidden')),false,'OCR preview survives cloud rerender');
+    assert.equal(await page.locator('#statsStationStatus').textContent(),'Auswertung abgeschlossen.');
+    await page.evaluate(()=>{T20Cloud.user={id:'vetti',email:'vetti@example.test'};T20Cloud.role='tournament_manager';T20Cloud.isAdmin=true;T20Cloud.profile={id:'vetti',nickname:'Vetti',display_name:'Stefan Vetter'};T20Cloud.memberRoles={vetti:'tournament_manager'};renderReadonlyMode();renderCloudPanel()});
+    assert.equal(await page.getByText('MITGLIED & TURNIERLEITUNG',{exact:true}).count(),1);
+    assert.equal(await page.locator('#showLoginBtn').textContent(),'Konto','Internal shell uses the compact account label');
+    assert.equal(await page.locator('.staff-member-identity .push-card').count(),1);
+    assert.equal(await page.locator('#adminPushDetails').count(),1,'Tournament manager sees push controls');
+    assert.equal(await page.locator('#globalPushToggle').count(),1,'Tournament manager sees global push switch');
+    await page.evaluate(()=>{T20Cloud.syncAll=async()=>{};document.querySelector('#adminPushDetails').open=true});
+    await page.locator('#globalPushToggle').evaluate(el=>{el.checked=false;el.dispatchEvent(new Event('change',{bubbles:true}))});
+    assert.equal(await page.evaluate(()=>appSettings.pushNotificationsEnabled),false,'Tournament manager can pause all push notifications');
+    assert((await page.locator('#adminPushDetails>summary').textContent()).includes('Vollständig ausgeschaltet'));
+    assert.equal(await page.locator('#adminPushForm').count(),0,'Tournament manager must not see mass push');
+    assert.equal(await page.locator('[data-member-role]').count(),0,'Tournament manager must not manage roles');
+    await page.evaluate(()=>renderTournamentManagement());assert.equal(await page.locator('#adminMemberSeasonSelect').count(),0,'Tournament manager must not see member assignment');
+    assert.equal(await page.locator('#showSettingsBtn').evaluate(el=>el.classList.contains('hidden')),true);
+    for(const width of [320,375,390,430]){
+      await page.setViewportSize({width,height:844});await page.evaluate(()=>{showClubDuels(false);clubDuelSetupOpen=true;renderClubDuels()});
+      const layout=await page.locator('#clubDuelSetup').evaluate(el=>{const date=el.querySelector('#clubDuelDate').getBoundingClientRect(),controls=[...el.querySelectorAll('input,select,textarea,button')].map(item=>item.getBoundingClientRect());return{pageFits:document.documentElement.scrollWidth<=innerWidth,dateFits:date.left>=0&&date.right<=innerWidth,controlsFit:controls.every(rect=>rect.left>=0&&rect.right<=innerWidth)}});
+      assert.equal(layout.pageFits,true,`Club duel page has no horizontal overflow at ${width}px`);assert.equal(layout.dateFits,true,`Club duel date stays in viewport at ${width}px`);assert.equal(layout.controlsFit,true,`Club duel controls stay in viewport at ${width}px`);
+    }
+    const standalone=await page.evaluate(async()=>{
+      T20Cloud.user={id:'vetti'};T20Cloud.isAdmin=true;T20Cloud.role='tournament_manager';window.alert=()=>{};let syncedKeys=[];T20Cloud.syncAll=async({keys=[]}={})=>{syncedKeys=keys};scheduledTournamentExistsOnline=async()=>true;
+      seasonStore.seasons=[{id:'league',name:'Liga',tournaments:[]}];selectedSeasonId='league';localStorage.setItem(TOURNAMENT_HISTORY_KEY,'[]');renderTournamentManagement();
+      document.querySelector('#publicScheduleSeason').value='';document.querySelector('#publicScheduleDate').value='2099-11-06';document.querySelector('#publicScheduleTime').value='18:00';document.querySelector('#publicScheduleName').value='Vereinsmeisterschaft';document.querySelector('#publicScheduleCompetition').value='open';await createPublicSchedule();
+      const planned=loadTournamentHistory()[0],option=[...document.querySelector('#publicScheduleSeason').options].find(item=>item.value==='')?.textContent||'';
+      Object.assign(state,{activeCompetition:'men',players:['A','B'],playerProfileIds:{},started:true,matches:[{a:'A',b:'B',sa:2,sb:0,round:1}],settings:{mode:'knockout',eventName:'Vereinsmeisterschaft',competition:'men'},scheduledEventId:planned.id,scheduledSeasonId:'',scheduledStandalone:true,scheduledCompetition:'open',savedToHistory:''});saveTournamentToHistory();renderSeasonImport('A');
+      const completed=loadTournamentHistory();return{plannedStandalone:planned.standalone,option,syncedKeys,seasonCount:seasonStore.seasons[0].tournaments.length,historyCount:completed.length,completed:completed[0],finishVisible:!!document.querySelector('#finishStandaloneTournamentBtn'),seasonImportVisible:!!document.querySelector('#seasonImportSelect')};
+    });
+    assert.equal(standalone.plannedStandalone,true);assert.equal(standalone.option,'Keine Wertung – eigenständiges Turnier');assert.deepEqual(standalone.syncedKeys,['triple20_tournaments']);assert.equal(standalone.seasonCount,0);assert.equal(standalone.historyCount,1);assert.equal(standalone.completed.planned,undefined);assert.equal(standalone.completed.standalone,true);assert.equal(standalone.completed.competition,'open');assert.equal(standalone.completed.name,'Vereinsmeisterschaft');assert.equal(standalone.finishVisible,true);assert.equal(standalone.seasonImportVisible,true);
+    await page.evaluate(async()=>{document.querySelector('#finishStandaloneTournamentBtn').click();await new Promise(resolve=>setTimeout(resolve,20))});assert.equal(await page.evaluate(()=>state.started),false,'Standalone tournament closes without season import');assert.equal(await page.evaluate(()=>seasonStore.seasons[0].tournaments.length),0,'Standalone tournament never enters season standings');
+    console.log('OK: personal member profile, admin role controls and tournament registration coexist.');
+  }finally{await browser?.close();server.close()}
+})().catch(error=>{console.error(error);process.exitCode=1});

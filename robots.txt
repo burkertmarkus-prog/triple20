@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://triple20.at/sitemap.xml
