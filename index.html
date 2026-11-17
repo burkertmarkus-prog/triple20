@@ -44,7 +44,7 @@
     "sport": "Darts"
   }
   </script>
-  <link rel="stylesheet" href="styles.css?v=20261116-97">
+  <link rel="stylesheet" href="styles.css?v=20261117-98">
 </head>
 <body>
   <header id="siteHeader" class="hero public-site-header">
@@ -217,7 +217,7 @@
         <input id="settingsMode" type="hidden" value="club">
         <h3>Turniere</h3>
         <div class="grid">
-          <label>Standard-Spielmodus<select id="settingsDefaultMode"><option value="swiss">Schweizer System</option><option value="roundrobin">Jeder gegen jeden</option><option value="knockout">K.-o.-Turnier</option><option value="double">Doppel-K.-o.-Turnier</option></select></label>
+          <label>Standard-Spielmodus<select id="settingsDefaultMode"><option value="swiss">Schweizer System</option><option value="roundrobin">Jeder gegen jeden</option><option value="doublesmix">Doppel-Mix · Einzelwertung</option><option value="knockout">K.-o.-Turnier</option><option value="double">Doppel-K.-o.-Turnier</option></select></label>
           <label>Standard-Turnierformat<select id="settingsDefaultFormat"><option value="single">Einzel</option><option value="group-finals">Gruppen + Finalrunde</option></select></label>
           <label>Standard-Legmodus<select id="settingsDefaultLegs"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select></label>
         </div>
@@ -347,12 +347,13 @@
       <div class="tournament-actions"><button id="resetBtn" class="secondary" type="button">Neues Turnier</button><p>Offline spielbar: Einzelturniere bleiben lokal auf diesem Gerät und werden nicht automatisch in eine Saison übernommen.</p></div>
       <div class="grid">
         <label>Turniername<input id="tournamentName" value="Freitag-Abend-Cup" maxlength="50"></label>
-        <label>Spielmodus<select id="mode"><option value="roundrobin">Jeder gegen jeden</option><option value="swiss">Schweizer System</option><option value="knockout">K.-o.-Turnier</option><option value="double">Doppel-K.-o.-Turnier</option></select></label>
+        <label>Spielmodus<select id="mode"><option value="roundrobin">Jeder gegen jeden</option><option value="swiss">Schweizer System</option><option value="doublesmix">Doppel-Mix · Einzelwertung</option><option value="knockout">K.-o.-Turnier</option><option value="double">Doppel-K.-o.-Turnier</option></select></label>
         <label>Legs zum Sieg<select id="legs"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select></label>
         <label>Startpunktzahl<select id="startScore"><option selected>501</option><option>301</option></select></label>
       </div>
       <div id="groupOptions" class="group-options"><label>Anzahl Gruppen<select id="groupCount"><option selected>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label><label>Weiter pro Gruppe<select id="qualifiers"><option selected>1</option><option>2</option><option>3</option><option>4</option></select></label></div>
       <div id="swissOptions" class="group-options hidden"><label>Anzahl Runden<select id="swissRounds"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label><p class="option-help">Nach jeder abgeschlossenen Runde wird anhand der Tabelle neu gepaart. Gleiche Paarungen werden möglichst vermieden.</p></div>
+      <div id="doublesMixOptions" class="group-options hidden"><label>Anzahl Runden<select id="doublesMixRounds"><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select></label><p class="option-help">Jede Runde werden neue Zweierteams ausgelost. Partnerwiederholungen werden zuerst, Gegnerwiederholungen danach vermieden. Die Rangliste zählt jeden Spieler einzeln.</p></div>
       <details id="seedingOptions" class="seeding-options hidden">
         <summary><span><b>Setzliste</b><small>Gesetzte Spieler möglichst weit auseinander platzieren</small></span></summary>
         <div class="seeding-body">
@@ -390,7 +391,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="double-ko.js?v=20261005-52"></script>
-  <script src="app.js?v=20261116-97"></script>
+  <script src="app.js?v=20261117-98"></script>
   <script src="pwa.js?v=20261116-97"></script>
 </body>
 </html>
