@@ -55,7 +55,7 @@ if(!Array.isArray(appSettings.recommendations?.products)&&Array.isArray(legacySh
 const state=JSON.parse(localStorage.getItem('dartTournament')||'null')||{players:[],started:false,matches:[],settings:{}};
 const TV_SETTING_FIELDS=['tvDisplayMode','tvDisplayCompetition','tvDisplayChangedAt','tvBracketPages','tvPausedCompetitions','tvBoardAssignments'];
 function applyStoredTvSettings(){const stored=safeJsonParse(localStorage.getItem(TV_SETTINGS_KEY)||'{}',{});for(const field of TV_SETTING_FIELDS)if(stored[field]!==undefined)state[field]=structuredClone(stored[field])}
-function persistTvSettings(){localStorage.setItem(TV_SETTINGS_KEY,JSON.stringify(Object.fromEntries(TV_SETTING_FIELDS.filter(field=>state[field]!==undefined).map(field=>[field,state[field]]))))}
+function persistTvSettings({queueCloud=true}={}){const value=JSON.stringify(Object.fromEntries(TV_SETTING_FIELDS.filter(field=>state[field]!==undefined).map(field=>[field,state[field]])));if(queueCloud)localStorage.setItem(TV_SETTINGS_KEY,value);else nativeSetItem(TV_SETTINGS_KEY,value)}
 const liveRecovery=safeJsonParse(localStorage.getItem(LIVE_RECOVERY_KEY)||'null');
 const stateHasLive=!!(state.started||Object.values(state.competitions||{}).some(competition=>competition?.started)),recoveryHasLive=!!(liveRecovery?.started||Object.values(liveRecovery?.competitions||{}).some(competition=>competition?.started));
 if(!stateHasLive&&recoveryHasLive){Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,liveRecovery)}
@@ -119,12 +119,17 @@ function replaceTournamentState(next){Object.keys(state).forEach(key=>delete sta
 ensureTournamentDayState();loadActiveCompetition();
 function emptyMemberTournament(){return{players:[],playerProfileIds:{},started:false,matches:[],settings:{},memberLocal:true}}
 function loadMemberTournament(){return safeJsonParse(localStorage.getItem(MEMBER_TOURNAMENT_KEY)||'null')||emptyMemberTournament()}
-function save(){
+function save({queueCloud=true}={}){
   if(isMember()&&T20Cloud.tournamentViewMode==='live')return;
   syncActiveCompetition();
   if(isMember()){state.memberLocal=true;localStorage.setItem(MEMBER_TOURNAMENT_KEY,JSON.stringify(state));return}
   if(isAdmin()){delete state.memberLocal;delete state.guestLocal}
-  localStorage.setItem('dartTournament',JSON.stringify(state));
+  // Eine noch nicht gestartete Turniervorbereitung ist ein lokaler Entwurf.
+  // Teilnehmer hinzufügen oder entfernen darf deshalb weder den veröffentlichten
+  // Live-Stand verändern noch einen Cloud-Konflikt mit einem anderen Gerät auslösen.
+  const hasLiveCompetition=Object.values(state.competitions||{}).some(competitionIsLive);
+  if(isAdmin()&&(!hasLiveCompetition||!queueCloud))nativeSetItem('dartTournament',JSON.stringify(state));
+  else localStorage.setItem('dartTournament',JSON.stringify(state));
   if(isAdmin()){const live=Object.values(state.competitions||{}).some(competitionIsLive);if(live)localStorage.setItem(LIVE_RECOVERY_KEY,JSON.stringify(state));else localStorage.removeItem(LIVE_RECOVERY_KEY)}
 }
 async function publishLiveTournament({notifyOnError=false}={}){
@@ -133,7 +138,8 @@ async function publishLiveTournament({notifyOnError=false}={}){
   // Die Boardbelegung wird gemeinsam mit jedem Ergebnis aktualisiert, aber in
   // einem getrennten Cloud-Bereich gespeichert. So kann eine TV-Umschaltung
   // niemals einen älteren Turnierstand zurückschreiben.
-  tvBoardAssignments(liveTvCompetitions());persistTvSettings();
+  syncActiveCompetition();nativeSetItem('dartTournament',JSON.stringify(state));
+  tvBoardAssignments(liveTvCompetitions());persistTvSettings({queueCloud:false});
   await T20Cloud.syncAll({force:true,keys:['dartTournament',TV_SETTINGS_KEY]});
   const published=!T20Cloud.pendingKeys.has('dartTournament')&&!T20Cloud.pendingKeys.has(TV_SETTINGS_KEY);
   if(!published&&notifyOnError)alert('Das Turnier wurde auf diesem PC gestartet, konnte aber nicht in die Cloud veröffentlicht werden. Bitte prüfe die Internetverbindung und den Statusbalken.');
@@ -852,10 +858,13 @@ window.T20Cloud={
     if(!this.isAdmin||!this.client)return;
     const targetKeys=[...new Set(keys?.filter(key=>CLOUD_DATA_KEYS.includes(key))||(all?CLOUD_DATA_KEYS:[...this.pendingKeys]))];
     if(!targetKeys.length){this.pendingSync=false;nativeRemoveItem('triple20_pending_sync');nativeRemoveItem('triple20_pending_keys');return}
-    clearTimeout(this.syncTimer);
-    this.pendingSync=true;localStorage.setItem('triple20_pending_sync','1');
-    setSyncStatus('Wird gespeichert …','saving');
+    if(this.syncing){try{await this.syncing}catch{}return this.syncAll({force,keys:targetKeys,all:false})}
+    let finishSync;this.syncing=new Promise(resolve=>{finishSync=resolve});
     try{
+      clearTimeout(this.syncTimer);
+      this.pendingSync=true;nativeSetItem('triple20_pending_sync','1');
+      setSyncStatus('Wird gespeichert …','saving');
+      try{
       const rows=await this.fetchCloud();
       if(targetKeys.includes(CLUB_DUELS_KEY)){
         const remote=rows.find(row=>row.data_key===CLUB_DUELS_KEY)?.data;
@@ -884,7 +893,8 @@ window.T20Cloud={
       const {data,error}=await client.from('triple20_data').upsert(payload,{onConflict:'data_key'}).select('data_key,updated_at');
       if(error)throw error;(data||[]).forEach(r=>this.cloudUpdated[r.data_key]=r.updated_at);
       targetKeys.forEach(key=>this.pendingKeys.delete(key));this.pendingSync=this.pendingKeys.size>0;if(this.pendingSync){nativeSetItem('triple20_pending_sync','1');nativeSetItem('triple20_pending_keys',JSON.stringify([...this.pendingKeys]));clearTimeout(this.syncTimer);this.syncTimer=setTimeout(()=>this.syncAll(),700)}else{nativeRemoveItem('triple20_pending_sync');nativeRemoveItem('triple20_pending_keys')}this.lastSyncAt=new Date().toISOString();nativeSetItem('triple20_last_sync',this.lastSyncAt);setSyncStatus(this.pendingSync?'Weitere Änderungen werden gespeichert …':'Online gespeichert',this.pendingSync?'saving':'saved');renderCloudPanel();
-    }catch(e){console.warn('Cloud speichern fehlgeschlagen',e);targetKeys.forEach(key=>this.pendingKeys.add(key));this.pendingSync=true;nativeSetItem('triple20_pending_sync','1');nativeSetItem('triple20_pending_keys',JSON.stringify([...this.pendingKeys]));setSyncStatus('Offline – lokale Kopie','offline')}
+      }catch(e){console.warn('Cloud speichern fehlgeschlagen',e);targetKeys.forEach(key=>this.pendingKeys.add(key));this.pendingSync=true;nativeSetItem('triple20_pending_sync','1');nativeSetItem('triple20_pending_keys',JSON.stringify([...this.pendingKeys]));setSyncStatus('Offline – lokale Kopie','offline')}
+    }finally{finishSync();this.syncing=false}
   },
   async uploadLocalWithBackup(){if(!isAdmin())return;const summary=backupPreview();backupTriple20Data('triple20_vor_cloud_upload');if(!confirm(`Lokale Triple20-Daten in die Cloud übernehmen?\n\n${summary}\n\nEin JSON-Backup wurde heruntergeladen.`))return;await this.syncAll({force:true,all:true})},
   async loadCloudConfirmed(){if(!this.loadedCloudData)await this.loadCloud();if(!this.loadedCloudData)return;backupTriple20Data('triple20_vor_cloud_laden');if(!confirm('Cloud-Daten laden? Die aktuelle lokale Version wurde vorher als Backup gesichert.'))return;applyTriple20Data(this.loadedCloudData);setSyncStatus('Online – aktuell','online')},
@@ -1038,9 +1048,9 @@ function doublesMixHistory(matches=[]){
   return{partners,opponents}
 }
 function doublesMixRound(round,history=[]){
-  const players=[...state.players],pauseCount=players.length%4,pauseHistory=state.settings.doublesMixPauses||{},pauseTotals=Object.fromEntries(players.map(name=>[name,0]));
+  const players=activeTournamentPlayers(),pauseCount=players.length%4,pauseHistory=state.settings.doublesMixPauses||{},pauseTotals=Object.fromEntries(players.map(name=>[name,0])),joinRounds=state.settings.doublesMixJoinRounds||{};
   Object.entries(pauseHistory).forEach(([savedRound,names])=>{if(+savedRound<round)for(const name of names||[])if(name in pauseTotals)pauseTotals[name]++});
-  const pauseOrder=shuffle(players).sort((a,b)=>pauseTotals[a]-pauseTotals[b]),pauses=pauseOrder.slice(0,pauseCount),active=players.filter(name=>!pauses.includes(name)),counts=doublesMixHistory(history);let best=null,bestScore=Infinity;
+  const pauseOrder=shuffle(players).sort((a,b)=>Number(joinRounds[a]===round)-Number(joinRounds[b]===round)||pauseTotals[a]-pauseTotals[b]),pauses=pauseOrder.slice(0,pauseCount),active=players.filter(name=>!pauses.includes(name)),counts=doublesMixHistory(history);let best=null,bestScore=Infinity;
   const attempts=Math.max(400,Math.min(2400,active.length*80));
   for(let attempt=0;attempt<attempts;attempt++){
     const order=shuffle(active),games=[];let score=0;
@@ -1052,7 +1062,8 @@ function doublesMixRound(round,history=[]){
 }
 function hasPlayed(matches,a,b){return matches.some(m=>(m.a===a&&m.b===b)||(m.a===b&&m.b===a))}
 function withdrawnPlayers(){return state.withdrawn||[]}
-function activeSwissPlayers(){return state.players.filter(p=>!withdrawnPlayers().includes(p))}
+function activeTournamentPlayers(){return state.players.filter(p=>!withdrawnPlayers().includes(p))}
+function activeSwissPlayers(){return activeTournamentPlayers()}
 function seasonSeededPlayers(players){return sortBySeasonWins(players)}
 function swissPairings(players,history,scores={}){
   const gap=(a,b)=>Math.abs((scores[a]||0)-(scores[b]||0));
@@ -1089,7 +1100,7 @@ function makeMatches(){
   return arr;
 }
 $('#startBtn').addEventListener('click',event=>{if($('#mode').value==='doublesmix'&&state.players.length<4){event.stopImmediatePropagation();alert('Für das Doppel-Mixturnier werden mindestens vier Spieler benötigt.')}},{capture:true});
-$('#startBtn').addEventListener('click',async()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];state.scoreAudit=[];state.scoreUndoStack=[];delete state.endedEarly;delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;state.liveSessionId=crypto.randomUUID?.()||`${Date.now()}-${Math.random().toString(16).slice(2)}`;state.liveStartedAt=new Date().toISOString();const doubleMode=$('#mode').value==='double',draw=doubleMode?[...ensureSeedingDraw()]:[],seeds=doubleMode?[...activeSeededPlayers()]:[],seedingRankingMode=state.seedingDraft?.rankingMode==='total'?'total':'clean';state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value,doublesMixRounds:+$('#doublesMixRounds').value,doubleKoDrawOrder:draw,doubleKoSeededPlayers:seeds,doubleKoSeedingRankingMode:seedingRankingMode};state.matches=makeMatches();state.started=true;state.tvPausedCompetitions={...(state.tvPausedCompetitions||{}),[state.activeCompetition||'men']:false};delete state.seedingDraft;const other=state.competitions?.[state.activeCompetition==='men'?'women':'men'],otherHasPlayed=(other?.matches||[]).some(match=>match.b!=='Freilos'&&match.sa!==null);if(!otherHasPlayed)state.tvBoardAssignments=[];save();renderTournament();const published=await publishLiveTournament({notifyOnError:true});if(published)await PushNotifications.sendLiveTournament()});
+$('#startBtn').addEventListener('click',async()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];state.scoreAudit=[];state.scoreUndoStack=[];delete state.endedEarly;delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;state.liveSessionId=crypto.randomUUID?.()||`${Date.now()}-${Math.random().toString(16).slice(2)}`;state.liveStartedAt=new Date().toISOString();const doubleMode=$('#mode').value==='double',draw=doubleMode?[...ensureSeedingDraw()]:[],seeds=doubleMode?[...activeSeededPlayers()]:[],seedingRankingMode=state.seedingDraft?.rankingMode==='total'?'total':'clean';state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,start:+$('#startScore').value,groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value,doublesMixRounds:+$('#doublesMixRounds').value,doubleKoDrawOrder:draw,doubleKoSeededPlayers:seeds,doubleKoSeedingRankingMode:seedingRankingMode};state.matches=makeMatches();state.started=true;state.tvPausedCompetitions={...(state.tvPausedCompetitions||{}),[state.activeCompetition||'men']:false};delete state.seedingDraft;const other=state.competitions?.[state.activeCompetition==='men'?'women':'men'],otherHasPlayed=(other?.matches||[]).some(match=>match.b!=='Freilos'&&match.sa!==null);if(!otherHasPlayed)state.tvBoardAssignments=[];save({queueCloud:false});renderTournament();const published=await publishLiveTournament({notifyOnError:true});if(published)await PushNotifications.sendLiveTournament()});
 
 function playerLosses(){const losses=Object.fromEntries(state.players.map(p=>[p,0]));state.matches.filter(m=>m.sa!==null&&m.b!=='Freilos').forEach(m=>{losses[m.sa>m.sb?m.b:m.a]++});return losses}
 function standingsFor(players,matches=state.matches){return players.map(name=>{const played=matches.filter(m=>m.sa!==null&&matchPlayerSide(m,name));let w=0,lf=0,la=0;played.forEach(m=>{const side=matchPlayerSide(m,name),own=side==='a'?m.sa:m.sb,other=side==='a'?m.sb:m.sa;lf+=own;la+=other;if(own>other)w++});return{name,p:played.length,w,l:played.length-w,lf,la,pts:w*2}}).sort((a,b)=>b.pts-a.pts||b.w-a.w||(b.lf-b.la)-(a.lf-a.la)||b.lf-a.lf||a.name.localeCompare(b.name,'de'))}
@@ -1139,13 +1150,13 @@ function renderTournament(){
 function options(current){let s='<option value="">–</option>';for(let i=0;i<=state.settings.legs;i++)s+=`<option ${current===i?'selected':''}>${i}</option>`;return s}
 function renderWithdrawCard(){
   const card=$('#withdrawCard');if(!card)return;
-  const visible=state.started&&state.settings.mode==='swiss'&&!champion()&&canEditCurrentTournament();
+  const mode=state.settings.mode,changeable=['swiss','doublesmix'].includes(mode),visible=state.started&&changeable&&!champion()&&canEditCurrentTournament();
   card.classList.toggle('hidden',!visible);if(!visible)return;
-  const active=activeSwissPlayers(),withdrawn=withdrawnPlayers();
+  const active=activeTournamentPlayers(),withdrawn=withdrawnPlayers(),isMix=mode==='doublesmix';
   const entered=new Set(state.players.map(p=>p.toLowerCase())),suggestions=seasonMembers(setupSeason()).filter(p=>!entered.has(p.toLowerCase()));
-  card.innerHTML=`<div><h3>Ein-/Ausstieg im Schweizer System</h3><p>Nach einer abgeschlossenen Runde kannst du Spieler aus dem weiteren Turnier nehmen oder neue Spieler ab der nächsten ungespielten Runde hinzufügen. Danach wird diese Runde neu gepaart.</p>${withdrawn.length?`<div class="withdrawn-list">Ausgestiegen: ${withdrawn.map(p=>`<span>${esc(p)}</span>`).join('')}</div>`:''}</div><div class="swiss-change-actions"><div class="withdraw-actions"><select id="withdrawPlayerSelect" aria-label="Spieler zum Aussteigen auswählen">${active.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select><button id="withdrawPlayerBtn" class="danger" ${active.length<1?'disabled':''}>Spieler steigt aus</button></div><div class="late-join-fields"><select id="joinMemberSelect" aria-label="Gespeichertes Mitglied hinzufügen"><option value="">Mitglied auswählen …</option>${suggestions.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select><input id="joinPlayerName" placeholder="Oder neuen Spieler eingeben" autocomplete="off"></div><button id="joinPlayerBtn" class="secondary">Spieler steigt ein</button></div>`;
+  card.innerHTML=`<div><h3>Ein-/Ausstieg ${isMix?'im Doppel-Mix':'im Schweizer System'}</h3><p>Nach einer abgeschlossenen Runde kannst du Spieler aus dem weiteren Turnier nehmen oder neue Spieler in die nächste ungespielte Runde aufnehmen. Die Paarungen dieser Runde werden danach neu ausgelost.${isMix?' Bereits erzielte Einzelpunkte bleiben erhalten.':''}</p>${withdrawn.length?`<div class="withdrawn-list">Ausgestiegen: ${withdrawn.map(p=>`<span>${esc(p)}</span>`).join('')}</div>`:''}</div><div class="swiss-change-actions"><div class="withdraw-actions"><select id="withdrawPlayerSelect" aria-label="Spieler zum Aussteigen auswählen">${active.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select><button id="withdrawPlayerBtn" class="danger" ${active.length<(isMix?5:1)?'disabled':''}>Spieler steigt aus</button></div><div class="late-join-fields"><select id="joinMemberSelect" aria-label="Gespeichertes Mitglied hinzufügen"><option value="">Mitglied auswählen …</option>${suggestions.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select><input id="joinPlayerName" placeholder="Oder neuen Spieler eingeben" autocomplete="off"></div><button id="joinPlayerBtn" class="secondary">Spieler steigt ein</button></div>`;
 }
-function canRebuildSwissRound(){
+function canRebuildCurrentRound(){
   const round=Math.max(...state.matches.map(m=>m.round||1)),current=state.matches.filter(m=>(m.round||1)===round),roundStarted=current.some(m=>m.sa!==null&&m.b!=='Freilos'),roundOpen=current.some(m=>m.sa===null);
   if(roundStarted&&roundOpen){alert('Bitte die aktuelle Runde erst fertig spielen. Danach kann die nächste Runde neu gepaart werden.');return null}
   return{round,current,roundStarted,roundOpen};
@@ -1154,25 +1165,32 @@ function rebuildSwissRound(round){
   state.matches=state.matches.filter(m=>(m.round||1)!==round);
   if(round<=(state.settings.swissRounds||4)&&activeSwissPlayers().length>1)state.matches.push(...swissRound(round,state.matches));
 }
-function withdrawSwissPlayer(name){
-  if(!canEditCurrentTournament()||!state.started||state.settings.mode!=='swiss'||!name)return;
-  state.withdrawn=state.withdrawn||[];if(state.withdrawn.includes(name))return;
-  const status=canRebuildSwissRound();if(!status)return;
-  const {round,roundStarted,current}=status,hasOpenMatch=current.some(m=>(m.a===name||m.b===name));
-  state.withdrawn.push(name);
-  if(!roundStarted||hasOpenMatch)rebuildSwissRound(round);
-  save();renderTournament();
+function rebuildDoublesMixRound(round){
+  state.matches=state.matches.filter(m=>(m.round||1)!==round);if(state.settings.doublesMixPauses)delete state.settings.doublesMixPauses[round];
+  if(round<=(state.settings.doublesMixRounds||6)&&activeTournamentPlayers().length>=4)state.matches.push(...doublesMixRound(round,state.matches));
 }
-function joinSwissPlayer(name){
-  name=(name||'').trim();if(!canEditCurrentTournament()||!state.started||state.settings.mode!=='swiss'||!name)return;
+async function withdrawRoundPlayer(name){
+  const mode=state.settings.mode;if(!canEditCurrentTournament()||!state.started||!['swiss','doublesmix'].includes(mode)||!name)return;
+  if(mode==='doublesmix'&&activeTournamentPlayers().length<=4){alert('Für eine weitere Doppelrunde müssen mindestens vier Spieler aktiv bleiben.');return}
+  state.withdrawn=state.withdrawn||[];if(state.withdrawn.includes(name))return;
+  const status=canRebuildCurrentRound();if(!status)return;
+  const {round,roundStarted,current}=status,hasOpenMatch=current.some(m=>matchPlayerSide(m,name));
+  state.withdrawn.push(name);
+  if(!roundStarted||hasOpenMatch)(mode==='doublesmix'?rebuildDoublesMixRound:rebuildSwissRound)(round);
+  save({queueCloud:false});renderTournament();await publishLiveTournament({notifyOnError:true});
+}
+async function joinRoundPlayer(name){
+  name=(name||'').trim();const mode=state.settings.mode;if(!canEditCurrentTournament()||!state.started||!['swiss','doublesmix'].includes(mode)||!name)return;
   if(state.players.some(p=>p.toLowerCase()===name.toLowerCase())){alert('Dieser Spieler ist bereits im Turnier eingetragen.');return}
-  const status=canRebuildSwissRound();if(!status)return;
+  const status=canRebuildCurrentRound();if(!status)return;
   const {round,roundStarted}=status,targetRound=roundStarted?round+1:round;
-  if(targetRound>(state.settings.swissRounds||4)){alert('Es gibt keine weitere Schweizer Runde mehr, in die der Spieler einsteigen kann.');return}
+  const maxRounds=mode==='doublesmix'?(state.settings.doublesMixRounds||6):(state.settings.swissRounds||4);
+  if(targetRound>maxRounds){alert('Es gibt keine weitere Runde mehr, in die der Spieler einsteigen kann.');return}
   state.players.push(name);state.playerProfileIds=state.playerProfileIds||{};const profileId=memberIdForName(name);if(profileId)state.playerProfileIds[name]=profileId;state.players=sortBySeasonWins(state.players);
-  const season=setupSeason();if(season&&!seasonMembers(season).some(p=>p.toLowerCase()===name.toLowerCase()))saveSeasonMembers(season,[...seasonMembers(season),name]);
-  rebuildSwissRound(targetRound);
-  save();renderTournament();
+  if(mode==='doublesmix'){state.settings.doublesMixJoinRounds={...(state.settings.doublesMixJoinRounds||{}),[name]:targetRound}}
+  const season=setupSeason();if(mode==='swiss'&&season&&!seasonMembers(season).some(p=>p.toLowerCase()===name.toLowerCase()))saveSeasonMembers(season,[...seasonMembers(season),name]);
+  (mode==='doublesmix'?rebuildDoublesMixRound:rebuildSwissRound)(targetRound);
+  save({queueCloud:false});renderTournament();await publishLiveTournament({notifyOnError:true});
 }
 function advanceElimination(){
   if(state.settings.doubleKoPlan){state.matches=T20DoubleKO.evaluate(state.settings.doubleKoPlan,state.matches).matches;return}
@@ -1230,20 +1248,20 @@ async function saveMatchScore(index,sa,sb){
     if(!detachCompletedScoreRecord())return;
     const matchesBefore=structuredClone(state.matches),label=scoreMatchLabel(match,index);state.matches=next;const confirmed=state.matches.find(item=>item.nodeId===match.nodeId);if(confirmed)delete confirmed.suggestedScore;
     state.scoreUndoStack=[...(state.scoreUndoStack||[]),{at:new Date().toISOString(),label,matchesBefore}].slice(-20);
-    pushScoreAudit({action:before===null?'save':'correct',label,before,after});save();renderTournament();await publishLiveTournament();return;
+    pushScoreAudit({action:before===null?'save':'correct',label,before,after});save({queueCloud:false});renderTournament();await publishLiveTournament();return;
   }
   const match=state.matches[index];if(!match)return;const oldScore=match.sa===null?null:`${match.sa}:${match.sb}`,newScore=`${sa}:${sb}`;if(oldScore===newScore){alert('Dieses Ergebnis ist bereits gespeichert.');return}if(!detachCompletedScoreRecord())return;
   const laterMatches=state.settings.mode==='roundrobin'?[]:state.matches.filter(item=>(item.round||1)>(match.round||1));if(laterMatches.some(item=>item.sa!==null&&item.b!=='Freilos')){alert('In einer späteren Runde wurden bereits Ergebnisse gespeichert. Bitte mache zuerst die jeweils letzten Ergebnisse rückgängig.');return}
-  const matchesBefore=structuredClone(state.matches),label=scoreMatchLabel(match,index);if(laterMatches.length)state.matches=state.matches.filter(item=>(item.round||1)<=(match.round||1));const target=state.matches[index];if(!target)return;target.sa=sa;target.sb=sb;delete target.suggestedScore;advanceElimination();state.scoreUndoStack=state.scoreUndoStack||[];state.scoreUndoStack.push({at:new Date().toISOString(),label,matchesBefore});state.scoreUndoStack=state.scoreUndoStack.slice(-20);pushScoreAudit({action:oldScore===null?'save':'correct',label,before:oldScore,after:newScore});save();renderTournament();await publishLiveTournament()
+  const matchesBefore=structuredClone(state.matches),label=scoreMatchLabel(match,index);if(laterMatches.length)state.matches=state.matches.filter(item=>(item.round||1)<=(match.round||1));const target=state.matches[index];if(!target)return;target.sa=sa;target.sb=sb;delete target.suggestedScore;advanceElimination();state.scoreUndoStack=state.scoreUndoStack||[];state.scoreUndoStack.push({at:new Date().toISOString(),label,matchesBefore});state.scoreUndoStack=state.scoreUndoStack.slice(-20);pushScoreAudit({action:oldScore===null?'save':'correct',label,before:oldScore,after:newScore});save({queueCloud:false});renderTournament();await publishLiveTournament()
 }
 async function undoLastScore(){
-  if(!isAdmin()||!state.started)return;const stack=state.scoreUndoStack||[],last=stack.at(-1);if(!last)return;if(!confirm(`Letzte Ergebnisänderung rückgängig machen?\n\n${last.label}`))return;if(!detachCompletedScoreRecord())return;state.matches=structuredClone(last.matchesBefore||[]);stack.pop();pushScoreAudit({action:'undo',label:last.label});save();renderTournament();await publishLiveTournament({notifyOnError:true})
+  if(!isAdmin()||!state.started)return;const stack=state.scoreUndoStack||[],last=stack.at(-1);if(!last)return;if(!confirm(`Letzte Ergebnisänderung rückgängig machen?\n\n${last.label}`))return;if(!detachCompletedScoreRecord())return;state.matches=structuredClone(last.matchesBefore||[]);stack.pop();pushScoreAudit({action:'undo',label:last.label});save({queueCloud:false});renderTournament();await publishLiveTournament({notifyOnError:true})
 }
 $('#matchList').addEventListener('click',async e=>{const i=e.target.dataset.save;if(i===undefined)return;if(!assertTournamentAction())return;const a=$(`[data-sa="${i}"]`).value,b=$(`[data-sb="${i}"]`).value;if(a===''||b===''||a===b){alert('Bitte ein eindeutiges Ergebnis eintragen.');return}if(Math.max(+a,+b)!==state.settings.legs){alert(`Der Sieger benötigt ${state.settings.legs} Legs.`);return}await saveMatchScore(+i,+a,+b)});
-$('#withdrawCard').addEventListener('click',e=>{
+$('#withdrawCard').addEventListener('click',async e=>{
   if((e.target.id==='withdrawPlayerBtn'||e.target.id==='joinPlayerBtn')&&!assertTournamentAction())return;
-  if(e.target.id==='withdrawPlayerBtn'){const name=$('#withdrawPlayerSelect')?.value;if(!name)return;if(!confirm(`${name} aus dem weiteren Turnier nehmen?`))return;withdrawSwissPlayer(name)}
-  if(e.target.id==='joinPlayerBtn'){const name=$('#joinMemberSelect')?.value||$('#joinPlayerName')?.value;if(!name){alert('Bitte ein Mitglied auswählen oder einen Namen eingeben.');return}if(!confirm(`${name} ab der nächsten Runde ins Turnier aufnehmen?`))return;joinSwissPlayer(name)}
+  if(e.target.id==='withdrawPlayerBtn'){const name=$('#withdrawPlayerSelect')?.value;if(!name)return;if(!confirm(`${name} aus dem weiteren Turnier nehmen?`))return;await withdrawRoundPlayer(name)}
+  if(e.target.id==='joinPlayerBtn'){const name=$('#joinMemberSelect')?.value||$('#joinPlayerName')?.value;if(!name){alert('Bitte ein Mitglied auswählen oder einen Namen eingeben.');return}if(!confirm(`${name} ab der nächsten Runde ins Turnier aufnehmen?`))return;await joinRoundPlayer(name)}
 });
 
 function tableHtml(rows,title=''){return `<div class="group-table">${title?`<h3>${title}</h3>`:''}<div class="table-wrap"><table><thead><tr><th>#</th><th>Spieler</th><th>Sp.</th><th>S</th><th>N</th><th>Legs</th><th>Pkt.</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td><b>${esc(r.name)}</b></td><td>${r.p}</td><td>${r.w}</td><td>${r.l}</td><td>${r.lf}:${r.la}</td><td><b>${r.pts}</b></td></tr>`).join('')}</tbody></table></div></div>`}
@@ -2000,13 +2018,13 @@ function scheduleTvDisplayReturn(){
   tvDisplayReturnTimer=setTimeout(()=>{renderTvDisplayControls();renderTvView();scheduleTvDisplayReturn()},remaining+50);
 }
 async function setTvDisplayMode(mode){
-  if(!isAdmin())return;const live=liveTvCompetitions(),active=state.activeCompetition||'men';state.tvDisplayMode=normalizedTvDisplayMode(mode);state.tvDisplayCompetition=live.some(item=>item.key===active)?active:(live[0]?.key||active);state.tvDisplayChangedAt=Date.now();delete state.tvDisplayUntil;persistTvSettings();renderTvDisplayControls();renderTvView();scheduleTvDisplayReturn();await T20Cloud.syncAll({force:true,keys:[TV_SETTINGS_KEY]});
+  if(!isAdmin())return;const live=liveTvCompetitions(),active=state.activeCompetition||'men';state.tvDisplayMode=normalizedTvDisplayMode(mode);state.tvDisplayCompetition=live.some(item=>item.key===active)?active:(live[0]?.key||active);state.tvDisplayChangedAt=Date.now();delete state.tvDisplayUntil;persistTvSettings({queueCloud:false});renderTvDisplayControls();renderTvView();scheduleTvDisplayReturn();await T20Cloud.syncAll({force:true,keys:[TV_SETTINGS_KEY]});
 }
 async function setTvCompetitionPaused(key){
-  if(!isAdmin()||!['men','women'].includes(key))return;state.tvPausedCompetitions={...(state.tvPausedCompetitions||{}),[key]:!tvCompetitionPaused(key)};tvBoardAssignments(liveTvCompetitions());persistTvSettings();renderTvDisplayControls();renderTvView();await T20Cloud.syncAll({force:true,keys:[TV_SETTINGS_KEY]});
+  if(!isAdmin()||!['men','women'].includes(key))return;state.tvPausedCompetitions={...(state.tvPausedCompetitions||{}),[key]:!tvCompetitionPaused(key)};tvBoardAssignments(liveTvCompetitions());persistTvSettings({queueCloud:false});renderTvDisplayControls();renderTvView();await T20Cloud.syncAll({force:true,keys:[TV_SETTINGS_KEY]});
 }
 async function changeTvBracketPage(direction){
-  if(!isAdmin())return;const mode=effectiveTvDisplayMode(),info=tvBracketPageInfo(mode);if(!info.kind||info.pages<=1)return;state.tvBracketPages={...(state.tvBracketPages||{}),[info.kind]:(info.page+Number(direction)+info.pages)%info.pages};persistTvSettings();renderTvDisplayControls();renderTvView();await T20Cloud.syncAll({force:true,keys:[TV_SETTINGS_KEY]});
+  if(!isAdmin())return;const mode=effectiveTvDisplayMode(),info=tvBracketPageInfo(mode);if(!info.kind||info.pages<=1)return;state.tvBracketPages={...(state.tvBracketPages||{}),[info.kind]:(info.page+Number(direction)+info.pages)%info.pages};persistTvSettings({queueCloud:false});renderTvDisplayControls();renderTvView();await T20Cloud.syncAll({force:true,keys:[TV_SETTINGS_KEY]});
 }
 function tvStandingsHtml(tournament){
   const rows=standingsFor(tournament.players||[],tournament.matches||[]).slice(0,10);if(!rows.length)return'<div class="tv-empty"><div><b>Noch keine Tabelle</b><span>Sobald Spieler eingetragen sind, erscheint hier die Rangliste.</span></div></div>';
@@ -2197,7 +2215,7 @@ async function saveStatsStationResult(form){
   let read,score;try{read=side=>({average:stationNumber(form,'average',side),checkoutRate:stationNumber(form,'checkoutRate',side),first9:stationNumber(form,'first9',side),until170:stationNumber(form,'until170',side),highestFinish:stationNumber(form,'highestFinish',side),darts:stationNumber(form,'darts',side),max180:stationNumber(form,'max180',side)});read(0);read(1);score=[stationNumber(form,'score',0),stationNumber(form,'score',1)];if(score.some(value=>value!==null)){const legs=competition.settings?.legs||state.settings.legs;if(score.some(value=>value===null)||score[0]===score[1]||Math.max(...score)!==legs)throw new Error(`Der Ergebnisvorschlag muss eindeutig sein; der Sieger benötigt ${legs} Legs.`)}}catch(error){$('#statsStationStatus').textContent=error.message;if(saveButton){saveButton.disabled=false;saveButton.innerHTML='VORSCHLAG ZUM SPIEL SPEICHERN <span>→</span>'}return}
   const stationStats={a:read(0),b:read(1),capturedAt:new Date().toISOString(),source:'autodarts-screenshot-ocr',confirmedBy:T20Cloud.user?.id||'stats-station'};
   if(isAdmin()){
-    match.autodartsStats=stationStats;if(score[0]!==null)match.suggestedScore={a:score[0],b:score[1],capturedAt:new Date().toISOString(),source:'autodarts-screenshot-ocr'};save();if(!await publishLiveTournament({notifyOnError:true})){if(saveButton){saveButton.disabled=false;saveButton.innerHTML='ERNEUT VERSUCHEN <span>→</span>'}return}
+    match.autodartsStats=stationStats;if(score[0]!==null)match.suggestedScore={a:score[0],b:score[1],capturedAt:new Date().toISOString(),source:'autodarts-screenshot-ocr'};save({queueCloud:false});if(!await publishLiveTournament({notifyOnError:true})){if(saveButton){saveButton.disabled=false;saveButton.innerHTML='ERNEUT VERSUCHEN <span>→</span>'}return}
   }else{
     const client=requireSupabaseClient(),{data,error}=await client.rpc('triple20_save_station_stats',{station_token:statsStationToken(),competition_key:pending.key,match_index:pending.index,match_node_id:pending.nodeId||'',player_a:pending.a,player_b:pending.b,match_round:pending.round||1,station_stats:stationStats,station_score:score[0]===null?null:{a:score[0],b:score[1],capturedAt:new Date().toISOString(),source:'autodarts-screenshot-ocr'}});
     if(error||data!==true){if(/nicht.*freigegeben|invalid/i.test(error?.message||''))localStorage.removeItem(STATS_STATION_TOKEN_KEY);$('#statsStationStatus').textContent=`Speichern fehlgeschlagen: ${error?.message||'Keine Bestätigung aus der Cloud erhalten.'}`;renderStatsStationAuthorization();if(saveButton){saveButton.disabled=false;saveButton.innerHTML='ERNEUT VERSUCHEN <span>→</span>'}return}
@@ -2205,7 +2223,7 @@ async function saveStatsStationResult(form){
   }
   if(saveButton){saveButton.disabled=false;saveButton.innerHTML='VORSCHLAG ERNEUT SPEICHERN <span>↻</span>'}$('#statsStationStatus').textContent=`Cloud bestätigt: ${score[0]===null?'Statistik':'Ergebnisvorschlag und Statistik'} für ${match.a} gegen ${match.b} gespeichert.`;form.insertAdjacentHTML('beforeend','<p class="login-success stats-station-save-confirmed">✓ In der Cloud gespeichert · Ergebnis wartet auf Bestätigung der Turnierleitung</p>');renderStatsStationStored();
 }
-async function deleteStatsStationResult(){if(!isAdmin())return;const item=statsStationMatches[Number($('#statsStationMatch')?.value)],competition=item?.key===state.activeCompetition?state:state.competitions?.[item?.key],match=(item?.match?.nodeId?competition?.matches?.find(entry=>entry.nodeId===item.match.nodeId):null)||competition?.matches?.[item?.index];if(!match?.autodartsStats)return;if(!confirm(`Teststatistik für ${match.a} gegen ${match.b} wirklich löschen?`))return;delete match.autodartsStats;statsStationPending=null;save();await publishLiveTournament({notifyOnError:true});renderStatsStation(false);$('#statsStationStatus').textContent='Die gespeicherten Testwerte wurden gelöscht.'}
+async function deleteStatsStationResult(){if(!isAdmin())return;const item=statsStationMatches[Number($('#statsStationMatch')?.value)],competition=item?.key===state.activeCompetition?state:state.competitions?.[item?.key],match=(item?.match?.nodeId?competition?.matches?.find(entry=>entry.nodeId===item.match.nodeId):null)||competition?.matches?.[item?.index];if(!match?.autodartsStats)return;if(!confirm(`Teststatistik für ${match.a} gegen ${match.b} wirklich löschen?`))return;delete match.autodartsStats;statsStationPending=null;save({queueCloud:false});await publishLiveTournament({notifyOnError:true});renderStatsStation(false);$('#statsStationStatus').textContent='Die gespeicherten Testwerte wurden gelöscht.'}
 
 function loadClubDuels(){
   const data=safeJsonParse(localStorage.getItem(CLUB_DUELS_KEY)||'null');
@@ -2796,7 +2814,7 @@ $('#seasonTournaments').addEventListener('click',e=>{
   if(deleteId){const season=selectedSeason(),tournament=season?.tournaments?.find(t=>t.id===deleteId);if(!season||!tournament)return;if(!confirm(`Spieltag „${tournament.name}“ vom ${tournament.date} wirklich aus der Saison löschen?`))return;deleteTournamentFromSeason(season.id,deleteId)}
 });
 $('#seasonPlayerDetail').addEventListener('click',e=>{if(e.target.classList.contains('close-detail'))$('#seasonPlayerDetail').innerHTML=''});
-$('#winnerCard').addEventListener('click',async e=>{if(e.target.id==='exportCurrentTournamentBtn'){exportCurrentTournamentJson();return}if(e.target.id==='seasonFromWinnerBtn'){showSeason();return}if(e.target.id==='finishStandaloneTournamentBtn'){markCurrentTournamentStandalone();state.started=false;save();renderSeasonImport(champion());const finalKeys=['dartTournament',TOURNAMENT_HISTORY_KEY];await T20Cloud.syncAll({force:true,keys:finalKeys});renderPublicHome({refreshRegistrations:false});if(finalKeys.some(key=>T20Cloud.pendingKeys.has(key))){alert('Das eigenständige Turnier ist auf diesem Gerät gespeichert, aber noch nicht vollständig online. Bitte die App geöffnet lassen und die Internetverbindung prüfen.');return}alert('Das Turnier wurde unter „Ergebnisse → Einzelturniere“ gespeichert und aus der Live-Ansicht entfernt. Die Saisonwertungen bleiben unverändert.');return}if(e.target.id!=='addToSeasonBtn')return;const id=$('#seasonImportSelect')?.value;if(!id)return;const tournament=currentTournamentRecordForImport(),importedSeason=addTournamentToSeason(id,tournament);if(!importedSeason)return;updateTournamentHistoryRecord(tournament);state.seasonImportedTo=importedSeason.id;state.seasonTournamentId=tournament.id;state.started=false;save();renderSeasonImport(champion());const finalKeys=['dartTournament','tripleTwentySeasons','triple20_tournaments'];await T20Cloud.syncAll({force:true,keys:finalKeys});renderPublicHome({refreshRegistrations:false});if(finalKeys.some(key=>T20Cloud.pendingKeys.has(key))){alert(`Das Turnier ist auf diesem Gerät sicher gespeichert, konnte aber noch nicht vollständig online in „${importedSeason.name}“ übernommen werden. Bitte die App geöffnet lassen und die Internetverbindung prüfen.`);return}alert(`Turnier wurde in „${importedSeason.name}“ übernommen, online gespeichert und aus der Live-Ansicht entfernt.`)});
+$('#winnerCard').addEventListener('click',async e=>{if(e.target.id==='exportCurrentTournamentBtn'){exportCurrentTournamentJson();return}if(e.target.id==='seasonFromWinnerBtn'){showSeason();return}if(e.target.id==='finishStandaloneTournamentBtn'){markCurrentTournamentStandalone();state.started=false;save({queueCloud:false});renderSeasonImport(champion());const finalKeys=['dartTournament',TOURNAMENT_HISTORY_KEY];await T20Cloud.syncAll({force:true,keys:finalKeys});renderPublicHome({refreshRegistrations:false});if(finalKeys.some(key=>T20Cloud.pendingKeys.has(key))){alert('Das eigenständige Turnier ist auf diesem Gerät gespeichert, aber noch nicht vollständig online. Bitte die App geöffnet lassen und die Internetverbindung prüfen.');return}alert('Das Turnier wurde unter „Ergebnisse → Einzelturniere“ gespeichert und aus der Live-Ansicht entfernt. Die Saisonwertungen bleiben unverändert.');return}if(e.target.id!=='addToSeasonBtn')return;const id=$('#seasonImportSelect')?.value;if(!id)return;const tournament=currentTournamentRecordForImport(),importedSeason=addTournamentToSeason(id,tournament);if(!importedSeason)return;updateTournamentHistoryRecord(tournament);state.seasonImportedTo=importedSeason.id;state.seasonTournamentId=tournament.id;state.started=false;save({queueCloud:false});renderSeasonImport(champion());const finalKeys=['dartTournament','tripleTwentySeasons','triple20_tournaments'];await T20Cloud.syncAll({force:true,keys:finalKeys});renderPublicHome({refreshRegistrations:false});if(finalKeys.some(key=>T20Cloud.pendingKeys.has(key))){alert(`Das Turnier ist auf diesem Gerät sicher gespeichert, konnte aber noch nicht vollständig online in „${importedSeason.name}“ übernommen werden. Bitte die App geöffnet lassen und die Internetverbindung prüfen.`);return}alert(`Turnier wurde in „${importedSeason.name}“ übernommen, online gespeichert und aus der Live-Ansicht entfernt.`)});
 $('#exportSeasonJsonBtn').addEventListener('click',exportSeasonJson);
 $('#exportStandingsCsvBtn').addEventListener('click',exportStandingsCsv);
 function renameEvent(){
@@ -2817,9 +2835,9 @@ async function endTournamentEarly(){
   if(!played){alert('Das Turnier kann erst beendet werden, wenn mindestens ein reguläres Spiel abgeschlossen ist.');return}
   const leader=standings()[0]?.name||'der aktuelle Tabellenführer';
   if(!confirm(`Turnier vorzeitig beenden?\n\nAktueller Tabellenführer: ${leader}\nGespielte Partien: ${played} von ${state.matches.filter(match=>match.b!=='Freilos').length}\n\nDanach kann das Turnier wie gewohnt in die Saisonwertung übernommen werden.`))return;
-  state.endedEarly=true;save();renderTournament();await publishLiveTournament({notifyOnError:true});
+  state.endedEarly=true;save({queueCloud:false});renderTournament();await publishLiveTournament({notifyOnError:true});
 }
-async function reset(){if(state.started&&!confirm(`Den Bewerb „${competitionLabel()}“ wirklich löschen? Der andere Bewerb bleibt erhalten.`))return;for(const key of COMPETITION_KEYS)delete state[key];Object.assign(state,emptyCompetition());syncActiveCompetition();save();renderPlayers();renderTournament();showTournament();await publishLiveTournament({notifyOnError:true})}
+async function reset(){if(state.started&&!confirm(`Den Bewerb „${competitionLabel()}“ wirklich löschen? Der andere Bewerb bleibt erhalten.`))return;syncActiveCompetition();const hadPublishedTournament=Object.values(state.competitions||{}).some(competition=>competition?.started);for(const key of COMPETITION_KEYS)delete state[key];Object.assign(state,emptyCompetition());syncActiveCompetition();save({queueCloud:false});renderPlayers();renderTournament();showTournament();if(hadPublishedTournament)await publishLiveTournament({notifyOnError:true})}
 $('#resetBtn').onclick=reset;$('#undoLastScoreBtn').onclick=undoLastScore;$('#endTournamentBtn').onclick=endTournamentEarly;$('#finishReset').onclick=reset;$('#renameEventBtn').onclick=renameEvent;
 $('#openStatsStationBtn').onclick=()=>showStatsStation();
 $('#closeStatsStationBtn').onclick=showHome;
