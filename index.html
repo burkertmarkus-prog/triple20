@@ -44,7 +44,7 @@
     "sport": "Darts"
   }
   </script>
-  <link rel="stylesheet" href="styles.css?v=20261117-101">
+  <link rel="stylesheet" href="styles.css?v=20261117-102">
 </head>
 <body>
   <header id="siteHeader" class="hero public-site-header">
@@ -349,7 +349,7 @@
         <label>Turniername<input id="tournamentName" value="Freitag-Abend-Cup" maxlength="50"></label>
         <label>Spielmodus<select id="mode"><option value="roundrobin">Jeder gegen jeden</option><option value="swiss">Schweizer System</option><option value="doublesmix">Doppel-Mix · Einzelwertung</option><option value="knockout">K.-o.-Turnier</option><option value="double">Doppel-K.-o.-Turnier</option></select></label>
         <label>Legs zum Sieg<select id="legs"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select></label>
-        <label>Startpunktzahl<select id="startScore"><option selected>501</option><option>301</option></select></label>
+        <label>Spielvariante<select id="startScore"><option value="501" selected>501</option><option value="301">301</option><option value="cricket">Cricket</option></select></label>
       </div>
       <div id="groupOptions" class="group-options"><label>Anzahl Gruppen<select id="groupCount"><option selected>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label><label>Weiter pro Gruppe<select id="qualifiers"><option selected>1</option><option>2</option><option>3</option><option>4</option></select></label></div>
       <div id="swissOptions" class="group-options hidden"><label>Anzahl Runden<select id="swissRounds"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label><p class="option-help">Nach jeder abgeschlossenen Runde wird anhand der Tabelle neu gepaart. Gleiche Paarungen werden möglichst vermieden.</p></div>
@@ -391,7 +391,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="double-ko.js?v=20261005-52"></script>
-  <script src="app.js?v=20261117-101"></script>
+  <script src="app.js?v=20261117-102"></script>
   <script src="pwa.js?v=20261116-97"></script>
 </body>
 </html>
