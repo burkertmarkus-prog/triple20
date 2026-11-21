@@ -981,8 +981,15 @@ function setActiveCompetition(key){
 $('#playerForm').addEventListener('submit',e=>{e.preventDefault();const input=$('#playerName'),memberSelect=$('#memberSuggestions'),name=memberSelect?.value||input.value;if(!name){alert('Bitte ein Mitglied auswählen oder einen Namen eingeben.');return}if(addTournamentPlayer(name)){input.value='';if(memberSelect)memberSelect.value='';memberSelect?.focus()}});
 $('#playerList').addEventListener('click',e=>{const i=e.target.dataset.remove;if(i!==undefined){state.players.splice(+i,1);save();renderPlayers()}});
 $('#setupSection').addEventListener('click',e=>{const button=e.target.closest('[data-add-profile]');if(button)addTournamentPlayer(button.dataset.addProfile,button.dataset.profileId)});
-function toggleModeOptions(){const mode=$('#mode').value,lottery=mode==='doubleslottery';$('#groupOptions').classList.toggle('hidden',mode!=='roundrobin');$('#swissOptions').classList.toggle('hidden',mode!=='swiss');$('#doublesMixOptions')?.classList.toggle('hidden',mode!=='doublesmix');$('#doublesLotteryOptions')?.classList.toggle('hidden',!lottery);$('#legsField')?.classList.toggle('hidden',lottery);$('#gameVariantField')?.classList.toggle('hidden',lottery);if(lottery)$('#legs').value='1';$('#seedingOptions')?.classList.toggle('hidden',mode!=='double');renderSeedingOptions()}
-$('#mode').addEventListener('change',()=>{if($('#mode').value==='doublesmix')$('#legs').value='2';if($('#mode').value==='doubleslottery')$('#legs').value='1';toggleModeOptions()});toggleModeOptions();
+function renderDoublesLotterySeasonOptions(){
+  const select=$('#doublesLotterySeason');if(!select)return;
+  const current=select.value||state.settings?.doublesLotterySeasonId||state.scheduledSeasonId||'';
+  const seasons=sortedSeasons().filter(season=>!season.archived),known=seasons.some(season=>String(season.id)===String(current));
+  select.innerHTML=`<option value="">Keine Serie · freie Auslosung</option>${seasons.map(season=>`<option value="${esc(season.id)}">${esc(season.name)}</option>`).join('')}`;
+  select.value=known?String(current):'';
+}
+function toggleModeOptions(){const mode=$('#mode').value,lottery=mode==='doubleslottery';$('#groupOptions').classList.toggle('hidden',mode!=='roundrobin');$('#swissOptions').classList.toggle('hidden',mode!=='swiss');$('#doublesMixOptions')?.classList.toggle('hidden',mode!=='doublesmix');$('#doublesLotteryOptions')?.classList.toggle('hidden',!lottery);$('#legsField')?.classList.remove('hidden');$('#gameVariantField')?.classList.toggle('hidden',lottery);if(lottery)renderDoublesLotterySeasonOptions();$('#seedingOptions')?.classList.toggle('hidden',mode!=='double');renderSeedingOptions()}
+$('#mode').addEventListener('change',()=>{if($('#mode').value==='doublesmix')$('#legs').value='2';toggleModeOptions()});toggleModeOptions();
 
 function seedingDraft(){state.seedingDraft=state.seedingDraft||{seededPlayers:[],drawOrder:[]};return state.seedingDraft}
 function playerBySeedName(name){const normalized=normalizedPlayerName(name);return state.players.find(player=>normalizedPlayerName(player)===normalized)||''}
@@ -1065,9 +1072,38 @@ const DOUBLES_LOTTERY_GAMES=[
   {game:'301-di-do',gameLabel:'301 Double In / Double Out'},
   {game:'cricket',gameLabel:'Cricket'}
 ];
+function doublesLotteryPlayerKey(name,profileIds={}){const direct=profileIds?.[name],linked=direct||Object.entries(profileIds||{}).find(([storedName])=>normalizedPlayerName(storedName)===normalizedPlayerName(name))?.[1];return linked?`id:${linked}`:`name:${normalizedPlayerName(name)}`}
+function doublesLotteryHistoryKey(a,b,profileIds={}){return[doublesLotteryPlayerKey(a,profileIds),doublesLotteryPlayerKey(b,profileIds)].sort().join('\u0000')}
+function doublesLotteryPartnerHistory(seasonId){
+  const counts=new Map(),season=seasonStore.seasons.find(item=>String(item.id)===String(seasonId||''));
+  for(const tournament of season?.tournaments||[]){
+    if(tournament.planned||(tournament.mode||tournament.settings?.mode)!=='doubleslottery')continue;
+    const seen=new Set();
+    for(const match of tournament.matches||[])for(const team of [matchSidePlayers(match,'a'),matchSidePlayers(match,'b')])if(team.length===2)seen.add(doublesLotteryHistoryKey(team[0],team[1],tournament.playerProfileIds||{}));
+    seen.forEach(key=>counts.set(key,(counts.get(key)||0)+1));
+  }
+  return counts;
+}
+function drawDoublesLotteryTeams(players,history=new Map()){
+  const pairKey=team=>doublesLotteryHistoryKey(team[0],team[1],state.playerProfileIds||{}),score=teams=>teams.reduce((sum,team)=>sum+(history.get(pairKey(team))||0),0),names=shuffle(players);
+  if(names.length<=16){
+    const memo=new Map(),solve=list=>{
+      if(!list.length)return{teams:[],score:0};
+      const key=[...list].sort().join('\u0000');if(memo.has(key))return memo.get(key);
+      const first=list[0],rest=list.slice(1),candidates=[];
+      for(let index=0;index<rest.length;index++){const partner=rest[index],tail=solve(rest.filter((_,i)=>i!==index));candidates.push({teams:[[first,partner],...tail.teams],score:(history.get(pairKey([first,partner]))||0)+tail.score})}
+      const bestScore=Math.min(...candidates.map(candidate=>candidate.score)),best=shuffle(candidates.filter(candidate=>candidate.score===bestScore))[0];memo.set(key,best);return best;
+    };
+    return solve(names);
+  }
+  let best={teams:[],score:Infinity};const attempts=Math.max(1200,Math.min(6000,names.length*160));
+  for(let attempt=0;attempt<attempts;attempt++){const order=shuffle(names),teams=[];for(let index=0;index<order.length;index+=2)teams.push([order[index],order[index+1]]);const candidate={teams,score:score(teams)};if(candidate.score<best.score){best=candidate;if(!best.score)break}}
+  return best;
+}
 function doublesLotteryMatches(){
-  const draw=shuffle(state.players),teams=[];for(let index=0;index<draw.length;index+=2)teams.push([draw[index],draw[index+1]]);
+  const seriesId=state.settings.doublesLotterySeasonId||state.scheduledSeasonId||'',draw=drawDoublesLotteryTeams(state.players,doublesLotteryPartnerHistory(seriesId)),teams=draw.teams;
   state.settings.doublesLotteryTeams=teams.map(team=>[...team]);
+  state.settings.doublesLotteryRepeatPairs=draw.score;
   const matches=[];let rotation=[...teams];
   for(let round=1;round<=DOUBLES_LOTTERY_GAMES.length;round++){
     const format=DOUBLES_LOTTERY_GAMES[round-1];
@@ -1123,7 +1159,7 @@ $('#startBtn').addEventListener('click',event=>{if($('#mode').value==='doublesmi
 $('#startBtn').addEventListener('click',event=>{if($('#mode').value==='doubleslottery'&&(state.players.length<4||state.players.length%4!==0)){event.stopImmediatePropagation();alert('Für die Doppel-Lotterie werden 4, 8, 12, 16 … Spieler benötigt. So hat jedes feste Doppel in allen drei Spielen gleich viele Einsätze.')}},{capture:true});
 function selectedTournamentGame(mode=$('#mode')?.value){if(mode==='doubleslottery')return{game:'doubles-lottery-series',start:'301 DO · 301 DI/DO · Cricket'};const value=$('#startScore')?.value||'501';return value==='cricket'?{game:'cricket',start:'Cricket'}:{game:'x01',start:+value||501}}
 function tournamentGameLabel(settings=state.settings){if(settings?.mode==='doubleslottery'||settings?.game==='doubles-lottery-series')return'301 DO · 301 DI/DO · Cricket';return settings?.game==='cricket'||String(settings?.start||'').toLowerCase()==='cricket'?'Cricket':String(settings?.start||501)}
-$('#startBtn').addEventListener('click',async()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];state.scoreAudit=[];state.scoreUndoStack=[];delete state.endedEarly;delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;state.liveSessionId=crypto.randomUUID?.()||`${Date.now()}-${Math.random().toString(16).slice(2)}`;state.liveStartedAt=new Date().toISOString();const doubleMode=$('#mode').value==='double',draw=doubleMode?[...ensureSeedingDraw()]:[],seeds=doubleMode?[...activeSeededPlayers()]:[],seedingRankingMode=state.seedingDraft?.rankingMode==='total'?'total':'clean';state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode:$('#mode').value,legs:+$('#legs').value,...selectedTournamentGame(),groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value,doublesMixRounds:+$('#doublesMixRounds').value,doubleKoDrawOrder:draw,doubleKoSeededPlayers:seeds,doubleKoSeedingRankingMode:seedingRankingMode};state.matches=makeMatches();state.started=true;state.tvPausedCompetitions={...(state.tvPausedCompetitions||{}),[state.activeCompetition||'men']:false};delete state.seedingDraft;const other=state.competitions?.[state.activeCompetition==='men'?'women':'men'],otherHasPlayed=(other?.matches||[]).some(match=>match.b!=='Freilos'&&match.sa!==null);if(!otherHasPlayed)state.tvBoardAssignments=[];save({queueCloud:false});renderTournament();const published=await publishLiveTournament({notifyOnError:true});if(published)await PushNotifications.sendLiveTournament()});
+$('#startBtn').addEventListener('click',async()=>{state.eventName=$('#tournamentName').value.trim()||'Dartturnier';state.withdrawn=[];state.scoreAudit=[];state.scoreUndoStack=[];delete state.endedEarly;delete state.savedToHistory;delete state.seasonImportedTo;delete state.seasonTournamentId;state.liveSessionId=crypto.randomUUID?.()||`${Date.now()}-${Math.random().toString(16).slice(2)}`;state.liveStartedAt=new Date().toISOString();const mode=$('#mode').value,doubleMode=mode==='double',lotterySeriesId=mode==='doubleslottery'?$('#doublesLotterySeason')?.value||'':'',draw=doubleMode?[...ensureSeedingDraw()]:[],seeds=doubleMode?[...activeSeededPlayers()]:[],seedingRankingMode=state.seedingDraft?.rankingMode==='total'?'total':'clean';if(mode==='doubleslottery'){state.scheduledSeasonId=lotterySeriesId;state.scheduledStandalone=!lotterySeriesId}state.settings={name:competitionTitle(),eventName:state.eventName,competition:state.activeCompetition,mode,legs:+$('#legs').value,...selectedTournamentGame(),groupCount:+$('#groupCount').value,qualifiers:+$('#qualifiers').value,swissRounds:+$('#swissRounds').value,doublesMixRounds:+$('#doublesMixRounds').value,doublesLotterySeasonId:lotterySeriesId,doubleKoDrawOrder:draw,doubleKoSeededPlayers:seeds,doubleKoSeedingRankingMode:seedingRankingMode};state.matches=makeMatches();state.started=true;state.tvPausedCompetitions={...(state.tvPausedCompetitions||{}),[state.activeCompetition||'men']:false};delete state.seedingDraft;const other=state.competitions?.[state.activeCompetition==='men'?'women':'men'],otherHasPlayed=(other?.matches||[]).some(match=>match.b!=='Freilos'&&match.sa!==null);if(!otherHasPlayed)state.tvBoardAssignments=[];save({queueCloud:false});renderTournament();const published=await publishLiveTournament({notifyOnError:true});if(published)await PushNotifications.sendLiveTournament()});
 
 function playerLosses(){const losses=Object.fromEntries(state.players.map(p=>[p,0]));state.matches.filter(m=>m.sa!==null&&m.b!=='Freilos').forEach(m=>{losses[m.sa>m.sb?m.b:m.a]++});return losses}
 function standingsFor(players,matches=state.matches){return players.map(name=>{const played=matches.filter(m=>m.sa!==null&&matchPlayerSide(m,name));let w=0,lf=0,la=0;played.forEach(m=>{const side=matchPlayerSide(m,name),own=side==='a'?m.sa:m.sb,other=side==='a'?m.sb:m.sa;lf+=own;la+=other;if(own>other)w++});return{name,p:played.length,w,l:played.length-w,lf,la,pts:w*2}}).sort((a,b)=>b.pts-a.pts||b.w-a.w||(b.lf-b.la)-(a.lf-a.la)||b.lf-a.lf||a.name.localeCompare(b.name,'de'))}
@@ -1155,7 +1191,8 @@ function renderTournament(){
   const noBracket=['roundrobin','swiss','doublesmix','doubleslottery'].includes(state.settings.mode);
   $('#setupSection').classList.add('hidden');$('#tournamentSection').classList.remove('hidden');$('#bracketTab').classList.toggle('hidden',noBracket);
   if(noBracket&&$('#bracketTab').classList.contains('active')){document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelector('[data-tab="matches"]').classList.add('active');$('#matchesView').classList.remove('hidden');$('#bracketView').classList.add('hidden');$('#tableView').classList.add('hidden')}
-  $('#liveCompetitionLabel').textContent=`${competitionLabel().toUpperCase()} · LIVE-TURNIER`;$('#liveTitle').textContent=competitionEventName()||state.settings.name;$('#liveMeta').textContent=`${state.players.length} Teilnehmende · ${modeName()} · ${tournamentGameLabel()}`;
+  const lotterySeries=state.settings.mode==='doubleslottery'?seasonStore.seasons.find(season=>String(season.id)===String(state.settings.doublesLotterySeasonId||'')):null,lotteryDraw=state.settings.mode==='doubleslottery'?` · ${lotterySeries?lotterySeries.name:'freie Auslosung'} · ${state.settings.doublesLotteryRepeatPairs?`${state.settings.doublesLotteryRepeatPairs} unvermeidbare Partnerwiederholung${state.settings.doublesLotteryRepeatPairs===1?'':'en'}`:'keine Partnerwiederholung'}`:'';
+  $('#liveCompetitionLabel').textContent=`${competitionLabel().toUpperCase()} · LIVE-TURNIER`;$('#liveTitle').textContent=competitionEventName()||state.settings.name;$('#liveMeta').textContent=`${state.players.length} Teilnehmende · ${modeName()} · ${tournamentGameLabel()}${lotteryDraw}`;
   const refreshed=T20Cloud.lastSyncAt?new Date(T20Cloud.lastSyncAt).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'';$('#liveViewerStatus').textContent=refreshed?`Automatisch aktuell · zuletzt ${refreshed} Uhr`:'Automatische Aktualisierung alle 15 Sekunden';
   $('#openTvViewBtn')?.classList.toggle('hidden',!isAdmin());
   $('#openStatsStationBtn')?.classList.toggle('hidden',!isAdmin());
