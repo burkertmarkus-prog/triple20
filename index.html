@@ -355,7 +355,7 @@
       <div id="groupOptions" class="group-options"><label>Anzahl Gruppen<select id="groupCount"><option selected>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label><label>Weiter pro Gruppe<select id="qualifiers"><option selected>1</option><option>2</option><option>3</option><option>4</option></select></label></div>
       <div id="swissOptions" class="group-options hidden"><label>Anzahl Runden<select id="swissRounds"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label><p class="option-help">Nach jeder abgeschlossenen Runde wird anhand der Tabelle neu gepaart. Gleiche Paarungen werden möglichst vermieden.</p></div>
       <div id="doublesMixOptions" class="group-options hidden"><label>Anzahl Runden<select id="doublesMixRounds"><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select></label><p class="option-help">Jede Runde werden neue Zweierteams ausgelost. Partnerwiederholungen werden zuerst, Gegnerwiederholungen danach vermieden. Die Rangliste zählt jeden Spieler einzeln.</p></div>
-      <div id="doublesLotteryOptions" class="group-options hidden"><p class="option-help"><b>Feste Teams, drei Spiele:</b> 301 Double Out, 301 Double In/Double Out und Cricket. Die Gegner wechseln, die Partner bleiben zusammen. Ist oben eine Turnierserie gewählt, werden Partner aus früheren Spieltagen möglichst nicht erneut zusammengelost. Benötigt werden 4, 8, 12 … Teilnehmende.</p></div>
+      <div id="doublesLotteryOptions" class="group-options hidden"><p class="option-help"><b>Feste Teams, drei Spiele:</b> 301 Double Out, 301 Double In/Double Out und Cricket. Die Gegner wechseln, die Teams bleiben zusammen. Ist oben eine Turnierserie gewählt, werden frühere Teamkombinationen möglichst vermieden. Bei 6, 10, 14 … Teilnehmenden entstehen automatisch zwei Dreierteams; alle übrigen Teams sind Doppel.</p></div>
       <details id="seedingOptions" class="seeding-options hidden">
         <summary><span><b>Setzliste</b><small>Gesetzte Spieler möglichst weit auseinander platzieren</small></span></summary>
         <div class="seeding-body">
@@ -393,7 +393,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="double-ko.js?v=20261005-52"></script>
-  <script src="app.js?v=20261124-132"></script>
+  <script src="app.js?v=20261124-133"></script>
   <script src="pwa.js?v=20261116-97"></script>
 </body>
 </html>

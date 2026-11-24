@@ -1091,31 +1091,51 @@ function doublesLotteryPartnerHistory(seasonId){
   for(const tournament of season?.tournaments||[]){
     if(tournament.planned||(tournament.mode||tournament.settings?.mode)!=='doubleslottery')continue;
     const seen=new Set();
-    for(const match of tournament.matches||[])for(const team of [matchSidePlayers(match,'a'),matchSidePlayers(match,'b')])if(team.length===2)seen.add(doublesLotteryHistoryKey(team[0],team[1],tournament.playerProfileIds||{}));
+    for(const match of tournament.matches||[])for(const team of [matchSidePlayers(match,'a'),matchSidePlayers(match,'b')])for(let left=0;left<team.length;left++)for(let right=left+1;right<team.length;right++)seen.add(doublesLotteryHistoryKey(team[left],team[right],tournament.playerProfileIds||{}));
     seen.forEach(key=>counts.set(key,(counts.get(key)||0)+1));
   }
   return counts;
 }
+function doublesLotteryEligibility(count){if(count<4)return{valid:false,reason:'Für die Doppel-Lotterie werden mindestens vier Personen benötigt.'};if(count%2)return{valid:false,reason:`Mit ${count} Personen kann keine vollständige Teamrunde gebildet werden. Benötigt wird eine gerade Teilnehmerzahl.`};return{valid:true,reason:''}}
+function doublesLotteryTeamSizes(count){return count%4===0?Array(count/2).fill(2):[3,3,...Array((count-6)/2).fill(2)]}
+function doublesLotteryDrawMetrics(teams,history,pairKey){return teams.reduce((metrics,team)=>{for(let left=0;left<team.length;left++)for(let right=left+1;right<team.length;right++){const previous=history.get(pairKey(team[left],team[right]))||0;if(previous){metrics.repeats++;metrics.score+=previous}}return metrics},{repeats:0,score:0})}
+function betterDoublesLotteryDraw(left,right){return !right||left.repeats<right.repeats||(left.repeats===right.repeats&&left.score<right.score)}
 function drawDoublesLotteryTeams(players,history=new Map()){
-  const pairKey=team=>doublesLotteryHistoryKey(team[0],team[1],state.playerProfileIds||{}),score=teams=>teams.reduce((sum,team)=>sum+(history.get(pairKey(team))||0),0),names=shuffle(players);
+  const eligibility=doublesLotteryEligibility(players.length);if(!eligibility.valid)return{teams:[],repeats:0,score:0,error:eligibility.reason};
+  const pairKey=(a,b)=>doublesLotteryHistoryKey(a,b,state.playerProfileIds||{}),names=shuffle(players),sizes=doublesLotteryTeamSizes(names.length);
+  if(sizes.some(size=>size===3)){
+    let best=null;const attempts=Math.min(8000,Math.max(2400,names.length*320));
+    for(let attempt=0;attempt<attempts;attempt++){
+      const order=shuffle(names),teams=[];let offset=0;
+      for(const size of sizes){teams.push(order.slice(offset,offset+size));offset+=size}
+      let changed=true;
+      while(changed){changed=false;for(let left=0;left<teams.length&&!changed;left++)for(let right=left+1;right<teams.length&&!changed;right++)for(let a=0;a<teams[left].length&&!changed;a++)for(let b=0;b<teams[right].length&&!changed;b++){
+        const candidate=teams.map(team=>[...team]),current=doublesLotteryDrawMetrics(teams,history,pairKey);[candidate[left][a],candidate[right][b]]=[candidate[right][b],candidate[left][a]];const next=doublesLotteryDrawMetrics(candidate,history,pairKey);if(betterDoublesLotteryDraw(next,current)){teams.splice(0,teams.length,...candidate);changed=true}
+      }}
+      const metrics=doublesLotteryDrawMetrics(teams,history,pairKey),candidate={teams:teams.map(team=>[...team]),...metrics};if(betterDoublesLotteryDraw(candidate,best))best=candidate;if(!candidate.repeats)break;
+    }
+    return best;
+  }
   if(names.length<=16){
     const memo=new Map(),solve=list=>{
-      if(!list.length)return{teams:[],score:0};
+      if(!list.length)return{teams:[],repeats:0,score:0};
       const key=[...list].sort().join('\u0000');if(memo.has(key))return memo.get(key);
       const first=list[0],rest=list.slice(1),candidates=[];
-      for(let index=0;index<rest.length;index++){const partner=rest[index],tail=solve(rest.filter((_,i)=>i!==index));candidates.push({teams:[[first,partner],...tail.teams],score:(history.get(pairKey([first,partner]))||0)+tail.score})}
-      const bestScore=Math.min(...candidates.map(candidate=>candidate.score)),best=shuffle(candidates.filter(candidate=>candidate.score===bestScore))[0];memo.set(key,best);return best;
+      for(let index=0;index<rest.length;index++){const partner=rest[index],previous=history.get(pairKey(first,partner))||0,tail=solve(rest.filter((_,i)=>i!==index));candidates.push({teams:[[first,partner],...tail.teams],repeats:Number(previous>0)+tail.repeats,score:previous+tail.score})}
+      const ordered=candidates.sort((a,b)=>a.repeats-b.repeats||a.score-b.score),best=shuffle(ordered.filter(candidate=>candidate.repeats===ordered[0].repeats&&candidate.score===ordered[0].score))[0];memo.set(key,best);return best;
     };
     return solve(names);
   }
-  let best={teams:[],score:Infinity};const attempts=Math.max(1200,Math.min(6000,names.length*160));
-  for(let attempt=0;attempt<attempts;attempt++){const order=shuffle(names),teams=[];for(let index=0;index<order.length;index+=2)teams.push([order[index],order[index+1]]);const candidate={teams,score:score(teams)};if(candidate.score<best.score){best=candidate;if(!best.score)break}}
+  let best=null;const attempts=Math.max(1200,Math.min(6000,names.length*160));
+  for(let attempt=0;attempt<attempts;attempt++){const order=shuffle(names),teams=[];for(let index=0;index<order.length;index+=2)teams.push([order[index],order[index+1]]);const metrics=doublesLotteryDrawMetrics(teams,history,pairKey),candidate={teams,...metrics};if(betterDoublesLotteryDraw(candidate,best)){best=candidate;if(!candidate.repeats)break}}
   return best;
 }
 function doublesLotteryMatches(){
   const seriesId=state.settings.doublesLotterySeasonId||state.scheduledSeasonId||'',draw=drawDoublesLotteryTeams(state.players,doublesLotteryPartnerHistory(seriesId)),teams=draw.teams;
+  if(draw.error){state.settings.doublesLotteryDrawError=draw.error;state.settings.doublesLotteryTeams=[];state.settings.doublesLotteryRepeatPairs=0;return[]}
+  delete state.settings.doublesLotteryDrawError;
   state.settings.doublesLotteryTeams=teams.map(team=>[...team]);
-  state.settings.doublesLotteryRepeatPairs=draw.score;
+  state.settings.doublesLotteryRepeatPairs=draw.repeats;
   const matches=[];let rotation=[...teams];
   for(let round=1;round<=DOUBLES_LOTTERY_GAMES.length;round++){
     const format=DOUBLES_LOTTERY_GAMES[round-1];
@@ -1168,7 +1188,7 @@ function makeMatches(){
   return arr;
 }
 $('#startBtn').addEventListener('click',event=>{if($('#mode').value==='doublesmix'&&state.players.length<4){event.stopImmediatePropagation();alert('Für das Doppel-Mixturnier werden mindestens vier Spieler benötigt.')}},{capture:true});
-$('#startBtn').addEventListener('click',event=>{if($('#mode').value==='doubleslottery'&&(state.players.length<4||state.players.length%4!==0)){event.stopImmediatePropagation();alert('Für die Doppel-Lotterie werden 4, 8, 12, 16 … Spieler benötigt. So hat jedes feste Doppel in allen drei Spielen gleich viele Einsätze.')}},{capture:true});
+$('#startBtn').addEventListener('click',event=>{if($('#mode').value!=='doubleslottery')return;const eligibility=doublesLotteryEligibility(state.players.length);if(!eligibility.valid){event.stopImmediatePropagation();alert(eligibility.reason)}},{capture:true});
 $('#startBtn').addEventListener('click',event=>{const target=seasonStore.seasons.find(season=>String(season.id)===String($('#tournamentSeasonTarget')?.value||'')),competition=state.activeCompetition||'men',mismatch=target&&((competition==='men'&&/damen/i.test(target.name||''))||(competition==='women'&&/herren/i.test(target.name||'')));if(mismatch&&!confirm(`Achtung: Der Bewerb ist „${competitionLabel(competition)}“, die gewählte Wertung heißt „${target.name}“. Trotzdem so starten?`)){event.stopImmediatePropagation()}},{capture:true});
 function selectedTournamentGame(mode=$('#mode')?.value){if(mode==='doubleslottery')return{game:'doubles-lottery-series',start:'301 DO · 301 DI/DO · Cricket'};const value=$('#startScore')?.value||'501';return value==='cricket'?{game:'cricket',start:'Cricket'}:{game:'x01',start:+value||501}}
 function tournamentGameLabel(settings=state.settings){if(settings?.mode==='doubleslottery'||settings?.game==='doubles-lottery-series')return'301 DO · 301 DI/DO · Cricket';return settings?.game==='cricket'||String(settings?.start||'').toLowerCase()==='cricket'?'Cricket':String(settings?.start||501)}
