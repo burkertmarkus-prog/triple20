@@ -933,6 +933,18 @@ function sortBySeasonWins(players){if(!isAdmin())return [...players];const wins=
 function registeredMemberProfiles(){
   return isAdmin()?(T20Cloud.adminProfiles||[]).filter(profile=>profile.nickname?.trim()):[];
 }
+function tournamentMemberChoices(){
+  const season=setupSeason(),choices=new Map();
+  for(const profile of registeredMemberProfiles()){
+    const name=profile.nickname.trim(),profileId=profile.id||'';
+    choices.set(profileId?`id:${profileId}`:`name:${name.toLowerCase()}`,{name,profileId})
+  }
+  seasonMembers(season).forEach(storedName=>{
+    const profileId=season?.memberProfileIds?.[storedName]||memberIdForName(storedName),name=currentMemberNickname(profileId,storedName).trim();
+    if(name)choices.set(profileId?`id:${profileId}`:`name:${name.toLowerCase()}`,{name,profileId})
+  });
+  return[...choices.values()]
+}
 function setupSeason(){
   const assigned=assignedSeasonForTournament(state);if(assigned)return assigned;
   const competition=state.activeCompetition||'men',pattern=competition==='women'?/damen/i:/herren/i,active=(seasonStore.seasons||[]).filter(season=>!season.archived);
@@ -950,9 +962,8 @@ function renderRegisteredPlayerChoices(){
   let box=$('#registeredPlayerChoices');
   if(!box){box=document.createElement('div');box.id='registeredPlayerChoices';form.insertAdjacentElement('afterend',box)}
   if(!isAdmin()){box.innerHTML='';box.classList.add('hidden');return}
-  const season=setupSeason(),entered=new Set(state.players.map(player=>player.toLowerCase())),choices=new Map();
-  seasonMembers(season).forEach(storedName=>{const profileId=season?.memberProfileIds?.[storedName]||memberIdForName(storedName),name=currentMemberNickname(profileId,storedName).trim();if(name)choices.set(profileId?`id:${profileId}`:`name:${name.toLowerCase()}`,{name,profileId})});
-  const members=[...choices.values()].filter(member=>!entered.has(member.name.toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name,'de'));
+  const entered=new Set(state.players.map(player=>player.toLowerCase()));
+  const members=tournamentMemberChoices().filter(member=>!entered.has(member.name.toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name,'de'));
   box.className=`registered-player-choices ${members.length?'':'hidden'}`;
   box.innerHTML=members.length?`<div class="registered-player-title"><strong>Gespeicherte Mitglieder</strong><small>Zum Hinzufügen anklicken</small></div><div class="registered-player-grid">${members.map(member=>{const photo=member.profileId?T20Cloud.adminProfileAvatars?.[member.profileId]||memberAvatarUrl(member.profileId):'',avatar=photo?`<img src="${esc(photo)}" alt="">`:esc(member.name.charAt(0).toUpperCase());return `<button type="button" class="registered-player" data-add-profile="${esc(member.name)}" data-profile-id="${esc(member.profileId||'')}"><span class="profile-avatar">${avatar}</span><span>${esc(member.name)}</span><b>+</b></button>`}).join('')}</div>`:'';
 }
@@ -978,7 +989,7 @@ function setActiveCompetition(key){
   if(!state.started&&$('#tournamentName')?.value.trim()){state.settings=state.settings||{};state.settings.eventName=baseCompetitionEventName($('#tournamentName').value.trim());state.settings.name=`${state.settings.eventName} – ${competitionLabel(state.activeCompetition)}`}
   syncActiveCompetition();state.activeCompetition=key;loadActiveCompetition();save();renderPlayers();showTournament();
 }
-$('#playerForm').addEventListener('submit',e=>{e.preventDefault();const input=$('#playerName'),memberSelect=$('#memberSuggestions'),name=memberSelect?.value||input.value;if(!name){alert('Bitte ein Mitglied auswählen oder einen Namen eingeben.');return}if(addTournamentPlayer(name)){input.value='';if(memberSelect)memberSelect.value='';memberSelect?.focus()}});
+$('#playerForm').addEventListener('submit',e=>{e.preventDefault();const input=$('#playerName'),memberSelect=$('#memberSuggestions'),option=memberSelect?.selectedOptions?.[0],name=memberSelect?.value||input.value;if(!name){alert('Bitte ein Mitglied auswählen oder einen Namen eingeben.');return}if(addTournamentPlayer(name,option?.dataset.profileId||'')){input.value='';if(memberSelect)memberSelect.value='';memberSelect?.focus()}});
 $('#playerList').addEventListener('click',e=>{const i=e.target.dataset.remove;if(i!==undefined){state.players.splice(+i,1);save();renderPlayers()}});
 $('#setupSection').addEventListener('click',e=>{const button=e.target.closest('[data-add-profile]');if(button)addTournamentPlayer(button.dataset.addProfile,button.dataset.profileId)});
 function renderTournamentSeasonTargetOptions(){
@@ -1551,7 +1562,7 @@ function currentTournamentRecordForImport(){const archived=state.savedToHistory?
 function updateTournamentHistoryRecord(record){const history=loadTournamentHistory(),index=history.findIndex(item=>String(item.id)===String(record.id));if(index>=0)history[index]=structuredClone(record);else history.push(structuredClone(record));localStorage.setItem(TOURNAMENT_HISTORY_KEY,JSON.stringify(history))}
 function seasonMembers(season=selectedSeason()){return [...new Set((season?.members!==undefined?season.members:season?.players)||[])].sort((a,b)=>a.localeCompare(b,'de'))}
 function saveSeasonMembers(season,names){season.members=[...new Set(names.map(n=>n.trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));season.memberProfileIds=season.memberProfileIds||{};season.members.forEach(name=>{const id=season.memberProfileIds[name]||memberIdForName(name);if(id)season.memberProfileIds[name]=id});season.players=[...new Set([...(season.tournaments||[]).flatMap(t=>t.players||[]),...season.members])].sort((a,b)=>a.localeCompare(b,'de'));saveSeason(season)}
-function renderMemberSuggestions(){const list=$('#memberSuggestions'),season=setupSeason();if(!list)return;const empty='<option value="">Mitglied auswählen …</option>';if(!T20Cloud.user){list.innerHTML=empty;return}const entered=new Set(state.players.map(p=>p.toLowerCase())),seasonNames=seasonMembers(season).map(storedName=>currentMemberNickname(season?.memberProfileIds?.[storedName],storedName)),unique=[...new Map(seasonNames.filter(Boolean).map(name=>[name.toLowerCase(),name])).values()].sort((a,b)=>a.localeCompare(b,'de'));list.innerHTML=empty+unique.filter(name=>!entered.has(name.toLowerCase())).map(name=>`<option value="${esc(name)}">${esc(name)}</option>`).join('')}
+function renderMemberSuggestions(){const list=$('#memberSuggestions');if(!list)return;const empty='<option value="">Mitglied auswählen …</option>';if(!T20Cloud.user){list.innerHTML=empty;return}const entered=new Set(state.players.map(p=>p.toLowerCase())),choices=tournamentMemberChoices().filter(member=>!entered.has(member.name.toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name,'de'));list.innerHTML=empty+choices.map(member=>`<option value="${esc(member.name)}" data-profile-id="${esc(member.profileId||'')}">${esc(member.name)}</option>`).join('')}
 function addSeasonMember(name,season=selectedSeason()){if(!canManageClubData()||!season||!name.trim())return;const members=seasonMembers(season);if(members.some(p=>p.toLowerCase()===name.trim().toLowerCase())){alert('Dieses Mitglied ist bereits eingetragen.');return}saveSeasonMembers(season,[...members,name.trim()]);renderMemberSuggestions()}
 function removeSeasonMember(name,season=selectedSeason()){if(!canManageClubData()||!season)return;if(!confirm(`${name} aus der Mitgliederliste entfernen? Bereits gespeicherte Spieltage bleiben erhalten.`))return;saveSeasonMembers(season,seasonMembers(season).filter(p=>p!==name));renderMemberSuggestions()}
 function linkSeasonMemberProfile(storedName,profileId,season=selectedSeason()){
