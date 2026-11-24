@@ -1096,8 +1096,8 @@ function doublesLotteryPartnerHistory(seasonId){
   }
   return counts;
 }
-function doublesLotteryEligibility(count){if(count<4)return{valid:false,reason:'Für die Doppel-Lotterie werden mindestens vier Personen benötigt.'};if(count%2)return{valid:false,reason:`Mit ${count} Personen kann keine vollständige Teamrunde gebildet werden. Benötigt wird eine gerade Teilnehmerzahl.`};return{valid:true,reason:''}}
-function doublesLotteryTeamSizes(count){return count%4===0?Array(count/2).fill(2):[3,3,...Array((count-6)/2).fill(2)]}
+function doublesLotteryEligibility(count){if(count<4)return{valid:false,reason:'Für die Doppel-Lotterie werden mindestens vier Personen benötigt.'};if(count%2&&count!==15)return{valid:false,reason:`Mit ${count} Personen kann keine vollständige Teamrunde gebildet werden. Benötigt wird eine gerade Teilnehmerzahl oder genau 15 Personen.`};return{valid:true,reason:''}}
+function doublesLotteryTeamSizes(count){return count===15?[3,3,3,2,2,2]:count%4===0?Array(count/2).fill(2):[3,3,...Array((count-6)/2).fill(2)]}
 function doublesLotteryDrawMetrics(teams,history,pairKey){return teams.reduce((metrics,team)=>{for(let left=0;left<team.length;left++)for(let right=left+1;right<team.length;right++){const previous=history.get(pairKey(team[left],team[right]))||0;if(previous){metrics.repeats++;metrics.score+=previous}}return metrics},{repeats:0,score:0})}
 function betterDoublesLotteryDraw(left,right){return !right||left.repeats<right.repeats||(left.repeats===right.repeats&&left.score<right.score)}
 function drawDoublesLotteryTeams(players,history=new Map()){
